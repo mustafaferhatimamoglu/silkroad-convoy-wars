@@ -1,0 +1,1058 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Silkroad: Convoy Wars — 3D Açık Dünya Kervan Simülatörü</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; user-select:none; }
+    body, html { width:100%; height:100%; overflow:hidden; background:#030712; font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color:#fff; }
+    #canvas3d { width:100%; height:100%; display:block; cursor:crosshair; }
+
+    /* HUD OVERLAY */
+    #hud-overlay {
+      position: absolute; top:0; left:0; width:100%; height:100%; pointer-events:none;
+      display: flex; flex-direction: column; justify-content: space-between; padding: 20px;
+    }
+
+    /* TOP BAR */
+    .hud-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 15px; }
+    .hud-card {
+      background: rgba(10, 16, 30, 0.85); border: 1px solid rgba(0, 240, 255, 0.35);
+      padding: 12px 18px; border-radius: 8px; backdrop-filter: blur(10px);
+      box-shadow: 0 0 25px rgba(0, 240, 255, 0.15); pointer-events: auto;
+    }
+    .hud-title { font-size: 13px; font-weight: 800; letter-spacing: 2px; color: #00f0ff; margin-bottom: 4px; }
+    .bar-cont { width: 240px; height: 12px; background: #111; border-radius: 6px; overflow: hidden; border: 1px solid #333; margin-top: 4px; }
+    .bar-fill-hp { width: 100%; height: 100%; background: linear-gradient(90deg, #ff0055, #ff3366); transition: width 0.15s; }
+    .bar-fill-shield { width: 100%; height: 100%; background: linear-gradient(90deg, #00f0ff, #0077ff); transition: width 0.15s; }
+    .bar-fill-zerk { width: 0%; height: 100%; background: linear-gradient(90deg, #ffaa00, #ff0044); transition: width 0.2s; }
+
+    /* CENTER CROSSHAIR */
+    .hud-center {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      width: 32px; height: 32px; pointer-events: none;
+    }
+    .crosshair-ring {
+      width: 100%; height: 100%; border: 2px solid rgba(0, 240, 255, 0.7); border-radius: 50%;
+      box-shadow: 0 0 10px rgba(0, 240, 255, 0.5);
+    }
+    .crosshair-dot {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      width: 6px; height: 6px; background: #ff0055; border-radius: 50%;
+    }
+
+    /* BERSERKER VIGNETTE */
+    #zerkVignette {
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;
+      box-shadow: inset 0 0 120px rgba(255, 0, 60, 0); transition: box-shadow 0.3s;
+    }
+
+    /* MINIMAP RADAR */
+    #minimap-cont {
+      position: absolute; top: 20px; right: 20px; width: 170px; height: 170px;
+      background: rgba(6, 11, 22, 0.9); border: 2px solid rgba(0, 240, 255, 0.5);
+      border-radius: 50%; overflow: hidden; box-shadow: 0 0 20px rgba(0, 240, 255, 0.25);
+      pointer-events: auto;
+    }
+    #minimap-canvas { width: 100%; height: 100%; }
+
+    /* NOTIFICATION BANNER */
+    .notice-banner {
+      position: absolute; top: 90px; left: 50%; transform: translateX(-50%);
+      background: rgba(0, 240, 255, 0.2); border: 1px solid rgba(0, 240, 255, 0.6);
+      color: #00f0ff; padding: 10px 30px; border-radius: 25px; font-size: 14px;
+      font-weight: bold; letter-spacing: 1.5px; backdrop-filter: blur(8px);
+      box-shadow: 0 0 20px rgba(0, 240, 255, 0.3); text-align: center;
+      transition: opacity 0.4s, transform 0.4s; pointer-events: none;
+    }
+
+    /* SILKROAD HP/MP GLOBES */
+    .globe-cont { position: absolute; bottom: 20px; display: flex; align-items: flex-end; gap: 20px; pointer-events: auto; }
+    .globe {
+      width: 105px; height: 105px; border-radius: 50%; border: 3px solid #d4af37;
+      box-shadow: 0 0 20px rgba(0,0,0,0.9), inset 0 0 15px rgba(0,0,0,0.8);
+      position: relative; overflow: hidden; background: #111;
+    }
+    .globe-fill-hp {
+      position: absolute; bottom: 0; left: 0; width: 100%; height: 100%;
+      background: radial-gradient(circle at 35% 35%, #ff4466 20%, #cc0033 60%, #440000 100%);
+      transition: height 0.2s;
+    }
+    .globe-fill-mp {
+      position: absolute; bottom: 0; left: 0; width: 100%; height: 100%;
+      background: radial-gradient(circle at 35% 35%, #33aaff 20%, #0055cc 60%, #001144 100%);
+      transition: height 0.2s;
+    }
+    .globe-text {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      font-size: 12px; font-weight: 800; text-shadow: 0 0 5px #000;
+    }
+
+    /* BOTTOM CONTROLS & BAZAAR BUTTONS */
+    .hud-bottom { display: flex; justify-content: space-between; align-items: flex-end; width: 100%; }
+    .controls-hint {
+      background: rgba(8, 14, 28, 0.9); border: 1px solid rgba(255, 255, 255, 0.15);
+      padding: 12px 18px; border-radius: 8px; font-size: 11px; color: #a5b6d8; line-height: 1.6;
+      margin-left: 240px;
+    }
+    .controls-hint strong { color: #00f0ff; }
+    .controls-hint .gold { color: #ffaa00; font-weight: bold; }
+    .controls-hint .red { color: #ff0055; font-weight: bold; }
+
+    .action-buttons { display: flex; gap: 10px; pointer-events: auto; }
+    .btn-hud {
+      background: linear-gradient(135deg, #00f0ff, #0072ff); border: none; color: #000;
+      padding: 10px 18px; border-radius: 6px; font-weight: 800; cursor: pointer; font-size: 12px;
+      letter-spacing: 1px; box-shadow: 0 0 15px rgba(0,240,255,0.4); transition: transform 0.1s, box-shadow 0.2s;
+    }
+    .btn-hud:hover { transform: scale(1.04); box-shadow: 0 0 25px rgba(0,240,255,0.7); }
+    .btn-hud:active { transform: scale(0.96); }
+    .btn-gold {
+      background: linear-gradient(135deg, #ffcc00, #ff6600); color: #000;
+      box-shadow: 0 0 15px rgba(255, 170, 0, 0.5);
+    }
+    .btn-secondary {
+      background: linear-gradient(135deg, #ff007f, #7928ca); color: #fff;
+      box-shadow: 0 0 15px rgba(255,0,127,0.4);
+    }
+
+    /* BAZAAR & ALCHEMY MODAL */
+    #bazaarModal {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      width: 720px; background: rgba(8, 14, 28, 0.96); border: 2px solid #d4af37;
+      border-radius: 12px; box-shadow: 0 0 40px rgba(212, 175, 55, 0.4);
+      padding: 24px; z-index: 100; display: none; backdrop-filter: blur(15px);
+    }
+    .bazaar-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #d4af37; padding-bottom: 12px; margin-bottom: 16px; }
+    .bazaar-title { font-size: 18px; font-weight: bold; color: #d4af37; letter-spacing: 2px; }
+    .bazaar-close { background: none; border: none; color: #ff0055; font-size: 20px; cursor: pointer; font-weight: bold; }
+    .bazaar-tabs { display: flex; gap: 10px; margin-bottom: 16px; }
+    .tab-btn { background: #162238; border: 1px solid #354a70; color: #a0b4d6; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: bold; }
+    .tab-btn.active { background: #d4af37; color: #000; border-color: #d4af37; }
+    .trade-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+    .trade-item {
+      background: rgba(20, 32, 56, 0.7); border: 1px solid rgba(0, 240, 255, 0.2);
+      padding: 12px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center;
+    }
+    .trade-item:hover { border-color: #00f0ff; background: rgba(20, 32, 56, 0.95); }
+    .alchemy-box { text-align: center; padding: 20px; border: 1px dashed #d4af37; border-radius: 8px; background: rgba(0,0,0,0.4); }
+    .alchemy-weapon-title { font-size: 20px; font-weight: bold; color: #00f0ff; margin-bottom: 10px; }
+    .alchemy-stats { font-size: 13px; color: #8fa2c0; margin-bottom: 15px; }
+  </style>
+  <!-- Three.js 3D WebGL Library -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+  <div id="zerkVignette"></div>
+
+  <div id="hud-overlay">
+    <!-- TOP STATUS -->
+    <div class="hud-top">
+      <div class="hud-card">
+        <div class="hud-title">🛡️ SILKROAD: CONVOY WARS — ZIRHLI KERVAN</div>
+        <div style="font-size:12px; color:#8fa2c0; margin-bottom:2px;">
+          Gövde Canı: <span id="hpText" style="color:#ff3366; font-weight:bold;">4500 / 4500</span>
+        </div>
+        <div class="bar-cont"><div class="bar-fill-hp" id="hpBar"></div></div>
+
+        <div style="font-size:12px; color:#8fa2c0; margin-top:8px; margin-bottom:2px;">
+          Plazma Kalkanı: <span id="shieldText" style="color:#00f0ff; font-weight:bold;">2000 / 2000</span>
+        </div>
+        <div class="bar-cont"><div class="bar-fill-shield" id="shieldBar"></div></div>
+
+        <div style="margin-top:8px; font-size:11px; color:#00f0ff;">
+          Hız: <strong id="speedText">0</strong> km/h • Konum: X: <span id="posX">0</span>, Z: <span id="posZ">0</span>
+        </div>
+      </div>
+
+      <div class="hud-card" style="text-align:right;">
+        <div class="hud-title" style="color:#ffaa00;">⚡ BERSERKER (ZERK) KÜRESİ</div>
+        <div style="font-size:12px; color:#8fa2c0;">
+          Durum: <strong id="zerkText" style="color:#ffaa00;">%0 (Doldurmak için Korsan Avla)</strong>
+        </div>
+        <div class="bar-cont" style="margin-left:auto;"><div class="bar-fill-zerk" id="zerkBar"></div></div>
+        <div style="margin-top:8px; font-size:11px; color:#a0b2d6;">
+          Korsan Avı: <strong id="killCount" style="color:#ff0055; font-size:13px;">0</strong> |
+          Altın: <strong id="goldCount" style="color:#ffaa00; font-size:13px;">250,000</strong> G |
+          Silah: <strong id="weaponPlus" style="color:#00f0ff; font-size:13px;">+0 Dual Plasma</strong>
+        </div>
+      </div>
+    </div>
+
+    <!-- MINIMAP RADAR -->
+    <div id="minimap-cont">
+      <canvas id="minimap-canvas" width="170" height="170"></canvas>
+    </div>
+
+    <!-- NOTIFICATION -->
+    <div class="notice-banner" id="noticeBanner">
+      🎮 OYUN BAŞLADI: [W/S] Gaz/Fren, [A/D] Direksiyon, [Sol Tık] Ateş, [B] Ticaret/Simya Borsası
+    </div>
+
+    <!-- CROSSHAIR -->
+    <div class="hud-center"><div class="crosshair-ring"><div class="crosshair-dot"></div></div></div>
+
+    <!-- BOTTOM SECTION -->
+    <div class="hud-bottom">
+      <!-- SILKROAD HP/MP GLOBES -->
+      <div class="globe-cont">
+        <div class="globe">
+          <div class="globe-fill-hp" id="globeHp"></div>
+          <div class="globe-text" style="color:#ff88aa;">HP</div>
+        </div>
+        <div class="globe">
+          <div class="globe-fill-mp" id="globeMp"></div>
+          <div class="globe-text" style="color:#88ccff;">MP</div>
+        </div>
+      </div>
+
+      <div class="controls-hint">
+        <strong>[W / S]:</strong> Gaz / Fren • <strong>[A / D]:</strong> Direksiyon • <strong>[Fare]:</strong> Taret & Kamera Yönü<br>
+        <strong>[Sol Tık]:</strong> Çift Taret Lazer Ateşi • <strong>[SPACE / Z]:</strong> Berserker Zerk Modu<br>
+        <span class="gold"><strong>[B]:</strong> Şehir Borsası & Simya (+1..+12)</span> • <strong>[V]:</strong> TPS / FPS Kokpit • <strong>[F11]:</strong> Fare Kilitle
+      </div>
+
+      <div class="action-buttons">
+        <button class="btn-hud btn-gold" id="btnOpenBazaar">🏛️ Şehir Borsası [B]</button>
+        <button class="btn-hud" id="btnLockMouse">🔒 Fareyi Kilitle [F11]</button>
+        <button class="btn-hud btn-secondary" id="btnToggleCam">📷 Kamera: TPS</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- BAZAAR & ALCHEMY MODAL -->
+  <div id="bazaarModal">
+    <div class="bazaar-header">
+      <div class="bazaar-title">🏛️ İPEK YOLU ŞEHİR BORSASI & SİMYA OCAĞI</div>
+      <button class="bazaar-close" id="btnCloseBazaar">✕</button>
+    </div>
+    <div class="bazaar-tabs">
+      <button class="tab-btn active" id="tabTrade">📦 Kervan Ticareti</button>
+      <button class="tab-btn" id="tabAlchemy">✨ Simya (+1..+12 Güçlendirme)</button>
+    </div>
+
+    <!-- TRADE SECTION -->
+    <div id="sectionTrade">
+      <div class="trade-grid">
+        <div class="trade-item">
+          <div>
+            <div style="font-weight:bold; color:#00f0ff;">İpek Kumaş Balyesi</div>
+            <div style="font-size:11px; color:#8fa2c0;">Alış: 15,000 G | Donwhang Satış: 32,000 G</div>
+          </div>
+          <button class="btn-hud btn-gold" onclick="buyGood('İpek Kumaş', 15000, 32000)">Satın Al</button>
+        </div>
+        <div class="trade-item">
+          <div>
+            <div style="font-weight:bold; color:#00f0ff;">Jingdezhen Porseleni</div>
+            <div style="font-size:11px; color:#8fa2c0;">Alış: 30,000 G | Hotan Satış: 75,000 G</div>
+          </div>
+          <button class="btn-hud btn-gold" onclick="buyGood('Porselen', 30000, 75000)">Satın Al</button>
+        </div>
+        <div class="trade-item">
+          <div>
+            <div style="font-weight:bold; color:#00f0ff;">Şam Çeliği Külçesi</div>
+            <div style="font-size:11px; color:#8fa2c0;">Alış: 50,000 G | Konstantiniyye Satış: 140,000 G</div>
+          </div>
+          <button class="btn-hud btn-gold" onclick="buyGood('Şam Çeliği', 50000, 140000)">Satın Al</button>
+        </div>
+        <div class="trade-item">
+          <div>
+            <div style="font-weight:bold; color:#00f0ff;">Kervan Gövde Onarımı</div>
+            <div style="font-size:11px; color:#8fa2c0;">Maliyeti: 10,000 G | +2500 HP Yeniler</div>
+          </div>
+          <button class="btn-hud" onclick="repairConvoy()">Onar</button>
+        </div>
+      </div>
+      <div style="margin-top:16px; font-size:12px; color:#ffaa00; text-align:center;" id="tradeStatus">
+        Kervan Kargo Kapasitesi: 0 / 8 Koli Yüklü
+      </div>
+    </div>
+
+    <!-- ALCHEMY SECTION -->
+    <div id="sectionAlchemy" style="display:none;">
+      <div class="alchemy-box">
+        <div class="alchemy-weapon-title" id="alchemyWeaponName">Dual Plasma Taret (+0)</div>
+        <div class="alchemy-stats" id="alchemyWeaponStats">
+          Hasar: 120 | Atış Hızı: Normal | Işıma: Yok
+        </div>
+        <div style="margin-bottom:15px; font-size:12px; color:#ffaa00;">
+          Gerekli: 1x Silah Elixiri (15,000 G) • Şans Tozu (Lucky Powder) Opsiyonel
+        </div>
+        <div style="display:flex; justify-content:center; gap:12px;">
+          <button class="btn-hud btn-gold" onclick="tryAlchemy(false)">✨ Normal Simya Dene (15.000 G)</button>
+          <button class="btn-hud btn-secondary" onclick="tryAlchemy(true)">🍀 Lucky Powder ile Dene (30.000 G)</button>
+        </div>
+        <div style="margin-top:15px; font-size:13px; font-weight:bold; min-height:20px;" id="alchemyResult"></div>
+      </div>
+    </div>
+  </div>
+
+  <canvas id="canvas3d"></canvas>
+
+  <script>
+    // ====================================================
+    // WEBAUDIO DİNAMİK SES SENTEZLEYİCİSİ (SIFIR HARİCİ DOSYA)
+    // ====================================================
+    let audioCtx = null;
+    function initAudio() {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+
+    function playLaserSound() {
+      if (!audioCtx) return;
+      try {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = "sawtooth";
+        osc.frequency.setValueAtTime(950, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(120, audioCtx.currentTime + 0.12);
+        gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.12);
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.start(); osc.stop(audioCtx.currentTime + 0.12);
+      } catch(e) {}
+    }
+
+    function playExplosionSound() {
+      if (!audioCtx) return;
+      try {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = "triangle";
+        osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+        osc.frequency.linearRampToValueAtTime(25, audioCtx.currentTime + 0.45);
+        gain.gain.setValueAtTime(0.45, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.45);
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.start(); osc.stop(audioCtx.currentTime + 0.45);
+      } catch(e) {}
+    }
+
+    function playZerkSound() {
+      if (!audioCtx) return;
+      try {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(160, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(1100, audioCtx.currentTime + 0.7);
+        gain.gain.setValueAtTime(0.4, audioCtx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.7);
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.start(); osc.stop(audioCtx.currentTime + 0.7);
+      } catch(e) {}
+    }
+
+    function playSuccessSound() {
+      if (!audioCtx) return;
+      try {
+        const now = audioCtx.currentTime;
+        [523.25, 659.25, 783.99, 1046.50].forEach((freq, idx) => {
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.type = "sine";
+          osc.frequency.value = freq;
+          gain.gain.setValueAtTime(0.18, now + idx * 0.08);
+          gain.gain.exponentialRampToValueAtTime(0.01, now + idx * 0.08 + 0.25);
+          osc.connect(gain); gain.connect(audioCtx.destination);
+          osc.start(now + idx * 0.08); osc.stop(now + idx * 0.08 + 0.25);
+        });
+      } catch(e) {}
+    }
+
+    // ====================================================
+    // OYUN MOTORU & DURUM DEĞİŞKENLERİ
+    // ====================================================
+    let scene, camera, renderer;
+    let truckGroup, turretMesh, barrelMeshes = [], wheels = [], headlights = [];
+    let bullets = [], enemies = [], outposts = [], particles = [];
+    let isFPS = false, isLocked = false;
+    let kills = 0, gold = 250000;
+    let hp = 4500, maxHp = 4500, shield = 2000, maxShield = 2000;
+    let weaponPlus = 0;
+    let zerkPercent = 0, isZerkActive = false;
+    let loadedCargo = 0, maxCargo = 8;
+
+    // Araç Hareketi ve Fiziği
+    let vehiclePos = new THREE.Vector3(0, 0, 0);
+    let vehicleHeading = 0;
+    let currentSpeed = 0;
+    let maxSpeed = 1.15;
+    let acceleration = 0.038;
+    let friction = 0.965;
+
+    // Kamera Bakış Açıları
+    let camYaw = 0, camPitch = 0.22;
+    const PITCH_MIN = -Math.PI / 4, PITCH_MAX = Math.PI / 3;
+
+    const keys = { w: false, a: false, s: false, d: false };
+
+    window.addEventListener('keydown', e => {
+      initAudio();
+      const k = e.key.toLowerCase();
+      if (keys.hasOwnProperty(k)) keys[k] = true;
+      if (k === 'v') toggleCameraMode();
+      if (k === 'b') toggleBazaar();
+      if (k === 'z' || e.code === 'Space') {
+        if (!isLocked && e.code === 'Space') return;
+        activateZerk();
+      }
+      if (e.key === 'F11') { e.preventDefault(); togglePointerLock(); }
+    });
+
+    window.addEventListener('keyup', e => {
+      const k = e.key.toLowerCase();
+      if (keys.hasOwnProperty(k)) keys[k] = false;
+    });
+
+    // POINTER LOCK
+    const canvas = document.getElementById('canvas3d');
+    const btnLockMouse = document.getElementById('btnLockMouse');
+
+    function togglePointerLock() {
+      initAudio();
+      if (!isLocked) {
+        canvas.requestPointerLock = canvas.requestPointerLock || canvas.mozRequestPointerLock;
+        if (canvas.requestPointerLock) canvas.requestPointerLock();
+      } else {
+        if (document.exitPointerLock) document.exitPointerLock();
+      }
+    }
+
+    document.addEventListener('pointerlockchange', () => {
+      isLocked = (document.pointerLockElement === canvas);
+      btnLockMouse.innerText = isLocked ? "🔓 Kilidi Bırak [ESC/F11]" : "🔒 Fareyi Kilitle [F11]";
+    });
+
+    canvas.addEventListener('click', () => {
+      if (!isLocked) togglePointerLock();
+      else shootBullet();
+    });
+
+    btnLockMouse.addEventListener('click', togglePointerLock);
+    document.getElementById('btnToggleCam').addEventListener('click', toggleCameraMode);
+    document.getElementById('btnOpenBazaar').addEventListener('click', toggleBazaar);
+    document.getElementById('btnCloseBazaar').addEventListener('click', toggleBazaar);
+
+    document.getElementById('tabTrade').addEventListener('click', () => {
+      document.getElementById('tabTrade').classList.add('active');
+      document.getElementById('tabAlchemy').classList.remove('active');
+      document.getElementById('sectionTrade').style.display = 'block';
+      document.getElementById('sectionAlchemy').style.display = 'none';
+    });
+    document.getElementById('tabAlchemy').addEventListener('click', () => {
+      document.getElementById('tabAlchemy').classList.add('active');
+      document.getElementById('tabTrade').classList.remove('active');
+      document.getElementById('sectionTrade').style.display = 'none';
+      document.getElementById('sectionAlchemy').style.display = 'block';
+    });
+
+    // Fare ile 360° Kamera ve Taret Hedefleme
+    document.addEventListener('mousemove', e => {
+      if (!isLocked) return;
+      const sensitivity = 0.0024;
+      camYaw -= e.movementX * sensitivity;
+      camPitch -= e.movementY * sensitivity;
+      camPitch = Math.max(PITCH_MIN, Math.min(PITCH_MAX, camPitch));
+
+      if (turretMesh) turretMesh.rotation.y = camYaw - vehicleHeading;
+    });
+
+    // ====================================================
+    // BAŞLATMA & 3D SAHNE KURULUMU
+    // ====================================================
+    function init() {
+      renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, powerPreference: "high-performance" });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.shadowMap.enabled = true;
+
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x050914);
+      scene.fog = new THREE.FogExp2(0x050914, 0.0035);
+
+      camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 2500);
+
+      // Işıklandırma
+      const hemiLight = new THREE.HemisphereLight(0xfffaed, 0x112233, 0.65);
+      scene.add(hemiLight);
+
+      const sunLight = new THREE.DirectionalLight(0x00f0ff, 1.4);
+      sunLight.position.set(100, 150, 80);
+      sunLight.castShadow = true;
+      scene.add(sunLight);
+
+      const ambientAura = new THREE.DirectionalLight(0xffaa00, 0.5);
+      ambientAura.position.set(-80, 50, -80);
+      scene.add(ambientAura);
+
+      buildDesertTerrain();
+      buildArmoredCaravan();
+      buildSilkroadOutposts();
+      spawnBandits(10);
+
+      window.addEventListener('resize', onWindowResize);
+      animate();
+    }
+
+    // AÇIK DÜNYA VE ÇÖL ARAZİSİ
+    function buildDesertTerrain() {
+      const groundGeo = new THREE.PlaneGeometry(3000, 3000, 80, 80);
+      const groundMat = new THREE.MeshStandardMaterial({ color: 0x0c1424, roughness: 0.95, metalness: 0.1 });
+      const ground = new THREE.Mesh(groundGeo, groundMat);
+      ground.rotation.x = -Math.PI / 2;
+      ground.receiveShadow = true;
+      scene.add(ground);
+
+      // Neon İpek Yolu Otoyol Izgarası
+      const grid = new THREE.GridHelper(3000, 150, 0x00f0ff, 0x142035);
+      grid.position.y = 0.06;
+      scene.add(grid);
+
+      // Çöl Kayalıkları ve Fener Kuleleri
+      for (let i = 0; i < 60; i++) {
+        const x = (Math.random() - 0.5) * 2400;
+        const z = (Math.random() - 0.5) * 2400;
+        if (Math.abs(x) < 50 && Math.abs(z) < 50) continue;
+
+        if (Math.random() > 0.45) {
+          // Gözetleme Kulesi
+          const tower = new THREE.Group();
+          const base = new THREE.Mesh(new THREE.CylinderGeometry(3.5, 4.5, 26, 8), new THREE.MeshStandardMaterial({ color: 0x18263e, roughness: 0.8 }));
+          base.position.y = 13;
+          tower.add(base);
+          const beacon = new THREE.Mesh(new THREE.SphereGeometry(1.8, 12, 12), new THREE.MeshStandardMaterial({ color: 0x00f0ff, emissive: 0x00f0ff, emissiveIntensity: 1 }));
+          beacon.position.y = 27;
+          tower.add(beacon);
+          tower.position.set(x, 0, z);
+          scene.add(tower);
+        } else {
+          // Kaya
+          const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(5 + Math.random() * 7, 1), new THREE.MeshStandardMaterial({ color: 0x101a2c, roughness: 0.9 }));
+          rock.position.set(x, 3.5, z);
+          scene.add(rock);
+        }
+      }
+    }
+
+    // OYUNCU: 3D ZIRHLI KERVAN TIRI
+    function buildArmoredCaravan() {
+      truckGroup = new THREE.Group();
+
+      // Ana Zırh Gövdesi
+      const body = new THREE.Mesh(
+        new THREE.BoxGeometry(4.4, 2.7, 9.0),
+        new THREE.MeshStandardMaterial({ color: 0x16243c, metalness: 0.8, roughness: 0.3 })
+      );
+      body.position.y = 2.2;
+      truckGroup.add(body);
+
+      // Kargo Kasası (İpek Sandıkları)
+      const cargo = new THREE.Mesh(
+        new THREE.BoxGeometry(4.0, 2.5, 5.5),
+        new THREE.MeshStandardMaterial({ color: 0x0f1a2c, roughness: 0.5 })
+      );
+      cargo.position.set(0, 2.5, -1.3);
+      truckGroup.add(cargo);
+
+      // Kargo Neon Işık Çizgisi
+      const glowBar = new THREE.Mesh(
+        new THREE.BoxGeometry(4.1, 0.2, 5.3),
+        new THREE.MeshStandardMaterial({ color: 0x00f0ff, emissive: 0x00f0ff, emissiveIntensity: 0.8 })
+      );
+      glowBar.position.set(0, 2.5, -1.3);
+      truckGroup.add(glowBar);
+
+      // Kokpit Ön Cam
+      const glass = new THREE.Mesh(
+        new THREE.BoxGeometry(3.8, 1.3, 2.4),
+        new THREE.MeshStandardMaterial({ color: 0x00f0ff, transparent: true, opacity: 0.45 })
+      );
+      glass.position.set(0, 2.9, 2.6);
+      truckGroup.add(glass);
+
+      // Dönen Taret Kaidesi
+      turretMesh = new THREE.Mesh(
+        new THREE.CylinderGeometry(1.2, 1.3, 0.6, 16),
+        new THREE.MeshStandardMaterial({ color: 0x00f0ff, emissive: 0x00f0ff, emissiveIntensity: 0.4 })
+      );
+      turretMesh.position.set(0, 3.8, 1.1);
+
+      // Çift Plazma Namlu
+      barrelMeshes = [];
+      for (let bx of [-0.4, 0.4]) {
+        const bGeo = new THREE.CylinderGeometry(0.18, 0.18, 3.2, 12);
+        bGeo.rotateX(Math.PI / 2);
+        const bMat = new THREE.MeshStandardMaterial({ color: 0x222, metalness: 0.9, roughness: 0.2 });
+        const bMesh = new THREE.Mesh(bGeo, bMat);
+        bMesh.position.set(bx, 0.2, 1.6);
+        turretMesh.add(bMesh);
+        barrelMeshes.push(bMesh);
+      }
+      truckGroup.add(turretMesh);
+
+      // 6 Tekerlek
+      wheels = [];
+      const wheelGeo = new THREE.CylinderGeometry(0.9, 0.9, 0.75, 16);
+      wheelGeo.rotateZ(Math.PI / 2);
+      const wheelMat = new THREE.MeshStandardMaterial({ color: 0x0a0f1a, roughness: 0.9 });
+      for (let z of [-3.0, 0, 3.0]) {
+        for (let x of [-2.35, 2.35]) {
+          const w = new THREE.Mesh(wheelGeo, wheelMat);
+          w.position.set(x, 0.9, z);
+          truckGroup.add(w);
+          wheels.push(w);
+        }
+      }
+
+      // Farlar
+      for (let fx of [-1.5, 1.5]) {
+        const light = new THREE.SpotLight(0x00f0ff, 2.5, 70, Math.PI / 6, 0.4);
+        light.position.set(fx, 1.6, 4.5);
+        light.target.position.set(fx, 0, 30);
+        truckGroup.add(light);
+        truckGroup.add(light.target);
+        headlights.push(light);
+      }
+
+      scene.add(truckGroup);
+    }
+
+    // ŞEHİR ÇIKIŞ NOKTALARI (OUTPOSTS: JANGAN, DONWHANG, HOTAN)
+    function buildSilkroadOutposts() {
+      const posts = [
+        { name: "Jangan Kapısı", x: 0, z: -350, color: 0x00f0ff },
+        { name: "Donwhang Vahası", x: 450, z: 200, color: 0xffaa00 },
+        { name: "Hotan Kalesi", x: -500, z: 600, color: 0xff0055 }
+      ];
+
+      posts.forEach(p => {
+        const group = new THREE.Group();
+        // Ana Kapı Kemeri
+        const p1 = new THREE.Mesh(new THREE.BoxGeometry(4, 30, 4), new THREE.MeshStandardMaterial({ color: 0x223355 }));
+        p1.position.set(-15, 15, 0);
+        const p2 = new THREE.Mesh(new THREE.BoxGeometry(4, 30, 4), new THREE.MeshStandardMaterial({ color: 0x223355 }));
+        p2.position.set(15, 15, 0);
+        const top = new THREE.Mesh(new THREE.BoxGeometry(38, 5, 6), new THREE.MeshStandardMaterial({ color: p.color, emissive: p.color, emissiveIntensity: 0.6 }));
+        top.position.set(0, 30, 0);
+        group.add(p1, p2, top);
+
+        // Checkpoint Işık Alanı
+        const ring = new THREE.Mesh(
+          new THREE.RingGeometry(18, 22, 32),
+          new THREE.MeshBasicMaterial({ color: p.color, side: THREE.DoubleSide })
+        );
+        ring.rotation.x = -Math.PI / 2;
+        ring.position.y = 0.2;
+        group.add(ring);
+
+        group.position.set(p.x, 0, p.z);
+        scene.add(group);
+        outposts.push({ name: p.name, x: p.x, z: p.z, color: p.color });
+      });
+    }
+
+    // KORSAN VE HAYDUTLAR (BANDITS)
+    function spawnBandits(count = 8) {
+      for (let i = 0; i < count; i++) {
+        const group = new THREE.Group();
+        const body = new THREE.Mesh(
+          new THREE.BoxGeometry(3.2, 1.8, 5.0),
+          new THREE.MeshStandardMaterial({ color: 0xff0044, emissive: 0xff0044, emissiveIntensity: 0.35 })
+        );
+        body.position.y = 1.1;
+        group.add(body);
+
+        // Korsan taret
+        const t = new THREE.Mesh(new THREE.SphereGeometry(0.7, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffaa00 }));
+        t.position.set(0, 2.2, 0);
+        group.add(t);
+
+        const angle = Math.random() * Math.PI * 2;
+        const dist = 90 + Math.random() * 150;
+        group.position.set(vehiclePos.x + Math.cos(angle) * dist, 0, vehiclePos.z + Math.sin(angle) * dist);
+
+        scene.add(group);
+        enemies.push({
+          group: group,
+          hp: 140,
+          maxHp: 140,
+          speed: 0.42 + Math.random() * 0.22,
+          alive: true
+        });
+      }
+    }
+
+    // LAZER ATEŞİ
+    function shootBullet() {
+      playLaserSound();
+      const dmg = 45 + weaponPlus * 18;
+      const bColor = weaponPlus >= 7 ? 0x00f0ff : (weaponPlus >= 3 ? 0xfffaed : 0x00ffaa);
+
+      const bullet = new THREE.Mesh(
+        new THREE.SphereGeometry(0.4, 8, 8),
+        new THREE.MeshBasicMaterial({ color: bColor })
+      );
+
+      const shootDir = new THREE.Vector3();
+      camera.getWorldDirection(shootDir);
+
+      const spawnPos = new THREE.Vector3();
+      turretMesh.getWorldPosition(spawnPos);
+      spawnPos.y += 0.3;
+      bullet.position.copy(spawnPos);
+
+      scene.add(bullet);
+      bullets.push({
+        mesh: bullet,
+        dir: shootDir.clone(),
+        life: 90,
+        speed: 3.8,
+        damage: dmg
+      });
+    }
+
+    function toggleCameraMode() {
+      isFPS = !isFPS;
+      document.getElementById('btnToggleCam').innerText = isFPS ? "📷 Kamera: 1. Şahıs (FPS)" : "📷 Kamera: 3. Şahıs (TPS)";
+    }
+
+    // BERSERKER ZERK MODU
+    function activateZerk() {
+      if (zerkPercent < 100 && !isZerkActive) {
+        showNotice("⚡ Zerk henüz hazır değil! Korsan avlayarak %100'e ulaştırın.");
+        return;
+      }
+      if (isZerkActive) return;
+
+      playZerkSound();
+      isZerkActive = true;
+      zerkPercent = 0;
+      document.getElementById('zerkBar').style.width = '0%';
+      document.getElementById('zerkText').innerText = "⚡ BERSERKER AKTİF! (%100 HIZ & ÇİFT HASAR)";
+      document.getElementById('zerkText').style.color = "#ff0055";
+      document.getElementById('zerkVignette').style.boxShadow = "inset 0 0 140px rgba(255, 0, 50, 0.7)";
+
+      maxSpeed = 2.4;
+      currentSpeed *= 1.7;
+      showNotice("🔥 BERSERKER MODU DEVREDE! RAHATÇA EZİP GEÇİN!");
+
+      setTimeout(() => {
+        isZerkActive = false;
+        maxSpeed = 1.15;
+        document.getElementById('zerkText').innerText = "%0 (Doldurmak için Korsan Avla)";
+        document.getElementById('zerkText').style.color = "#ffaa00";
+        document.getElementById('zerkVignette').style.boxShadow = "inset 0 0 120px rgba(255, 0, 60, 0)";
+      }, 10000);
+    }
+
+    // ŞEHİR VE TİCARET BORSASI
+    function toggleBazaar() {
+      const modal = document.getElementById('bazaarModal');
+      const isVisible = (modal.style.display === 'block');
+      modal.style.display = isVisible ? 'none' : 'block';
+      if (!isVisible && isLocked) {
+        document.exitPointerLock();
+      }
+    }
+
+    function buyGood(name, buyPrice, sellEst) {
+      if (gold < buyPrice) {
+        alert("Yetersiz altın!");
+        return;
+      }
+      if (loadedCargo >= maxCargo) {
+        alert("Kervan kargo kapasitesi dolu!");
+        return;
+      }
+      gold -= buyPrice;
+      loadedCargo++;
+      document.getElementById('goldCount').innerText = gold.toLocaleString();
+      document.getElementById('tradeStatus').innerText = `Kervan Kargo Kapasitesi: ${loadedCargo} / ${maxCargo} Koli Yüklü`;
+      showNotice(`📦 ${name} yüklendi (-${buyPrice.toLocaleString()} G). Bir sonraki şehirde satın!`);
+      playSuccessSound();
+    }
+
+    function repairConvoy() {
+      if (gold < 10000) { alert("Yetersiz altın!"); return; }
+      gold -= 10000;
+      hp = Math.min(maxHp, hp + 2500);
+      shield = maxShield;
+      updateHPUI();
+      document.getElementById('goldCount').innerText = gold.toLocaleString();
+      showNotice("🛠️ Kervan gövdesi ve kalkanları onarıldı!");
+      playSuccessSound();
+    }
+
+    // SİMYA (+1 .. +12)
+    function tryAlchemy(useLucky) {
+      const cost = useLucky ? 30000 : 15000;
+      if (gold < cost) { alert("Yetersiz altın!"); return; }
+      if (weaponPlus >= 12) { alert("Silah zaten maksimum +12 seviyesinde!"); return; }
+
+      gold -= cost;
+      document.getElementById('goldCount').innerText = gold.toLocaleString();
+
+      const successRates = [1.0, 0.9, 0.8, 0.6, 0.45, 0.35, 0.25, 0.15, 0.08, 0.04, 0.02, 0.01];
+      let chance = successRates[weaponPlus] || 0.01;
+      if (useLucky) chance = Math.min(1.0, chance * 1.35);
+
+      const roll = Math.random();
+      const resEl = document.getElementById('alchemyResult');
+
+      if (roll <= chance) {
+        weaponPlus++;
+        playSuccessSound();
+        resEl.style.color = "#00f0ff";
+        resEl.innerText = `🎉 TEBRİKLER! Silah +${weaponPlus} seviyesine yükseltildi!`;
+        updateWeaponGlow();
+        showNotice(`✨ Efsanevi Simya Başarılı: +${weaponPlus} Dual Plasma!`);
+      } else {
+        playExplosionSound();
+        resEl.style.color = "#ff0055";
+        if (weaponPlus >= 4) {
+          weaponPlus = 0;
+          resEl.innerText = "💥 SİMYA BAŞARISIZ! Silah gücü sıfırlandı (+0)!";
+        } else {
+          resEl.innerText = "❌ Simya başarısız oldu!";
+        }
+        updateWeaponGlow();
+      }
+
+      document.getElementById('weaponPlus').innerText = `+${weaponPlus} Dual Plasma`;
+      document.getElementById('alchemyWeaponName').innerText = `Dual Plasma Taret (+${weaponPlus})`;
+      document.getElementById('alchemyWeaponStats').innerText = `Hasar: ${120 + weaponPlus * 35} | Seviye: +${weaponPlus}`;
+    }
+
+    function updateWeaponGlow() {
+      let glowColor = 0x222222;
+      let emissiveInt = 0.2;
+      if (weaponPlus in [3, 4]) { glowColor = 0xffffff; emissiveInt = 0.8; }
+      else if (weaponPlus in [5, 6]) { glowColor = 0xffaa00; emissiveInt = 1.0; }
+      else if (weaponPlus in [7, 8]) { glowColor = 0x00f0ff; emissiveInt = 1.2; }
+      else if (weaponPlus in [9, 10]) { glowColor = 0x00ff66; emissiveInt = 1.4; }
+      else if (weaponPlus >= 11) { glowColor = 0xff0044; emissiveInt = 1.8; }
+
+      barrelMeshes.forEach(m => {
+        m.material.color.setHex(glowColor);
+        m.material.emissive.setHex(glowColor);
+        m.material.emissiveIntensity = emissiveInt;
+      });
+    }
+
+    function showNotice(txt) {
+      const banner = document.getElementById('noticeBanner');
+      banner.innerText = txt;
+      banner.style.opacity = '1';
+      banner.style.transform = 'translateX(-50%) scale(1.05)';
+      setTimeout(() => {
+        banner.style.transform = 'translateX(-50%) scale(1)';
+      }, 150);
+      setTimeout(() => { banner.style.opacity = '0.85'; }, 4000);
+    }
+
+    function updateHPUI() {
+      document.getElementById('hpText').innerText = `${hp} / ${maxHp}`;
+      document.getElementById('hpBar').style.width = `${(hp / maxHp) * 100}%`;
+      document.getElementById('shieldText').innerText = `${shield} / ${maxShield}`;
+      document.getElementById('shieldBar').style.width = `${(shield / maxShield) * 100}%`;
+      document.getElementById('globeHp').style.height = `${(hp / maxHp) * 100}%`;
+      document.getElementById('globeMp').style.height = `${(shield / maxShield) * 100}%`;
+    }
+
+    function onWindowResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    // ====================================================
+    // ANA ANİMASYON & OYUN DÖNGÜSÜ (60 FPS)
+    // ====================================================
+    function animate() {
+      requestAnimationFrame(animate);
+
+      // Gaz, Fren ve Direksiyon
+      if (keys.w) currentSpeed = Math.min(maxSpeed, currentSpeed + acceleration);
+      else if (keys.s) currentSpeed = Math.max(-maxSpeed * 0.5, currentSpeed - acceleration);
+      else currentSpeed *= friction;
+
+      if (Math.abs(currentSpeed) > 0.01) {
+        const turnMult = currentSpeed > 0 ? 1 : -1;
+        if (keys.a) vehicleHeading += 0.034 * turnMult;
+        if (keys.d) vehicleHeading -= 0.034 * turnMult;
+      }
+
+      vehiclePos.x += Math.sin(vehicleHeading) * currentSpeed;
+      vehiclePos.z += Math.cos(vehicleHeading) * currentSpeed;
+
+      truckGroup.position.copy(vehiclePos);
+      truckGroup.rotation.y = vehicleHeading;
+
+      // Tekerlekler
+      wheels.forEach(w => w.rotation.x += currentSpeed * 0.35);
+
+      // HUD Verileri
+      document.getElementById('speedText').innerText = Math.round(Math.abs(currentSpeed) * 85);
+      document.getElementById('posX').innerText = Math.round(vehiclePos.x);
+      document.getElementById('posZ').innerText = Math.round(vehiclePos.z);
+
+      // KAMERA HESAPLAMALARI
+      if (isFPS) {
+        camera.position.set(
+          vehiclePos.x + Math.sin(vehicleHeading) * 2.1,
+          vehiclePos.y + 3.6,
+          vehiclePos.z + Math.cos(vehicleHeading) * 2.1
+        );
+        camera.rotation.set(camPitch, camYaw, 0, 'YXZ');
+      } else {
+        const camDist = 17.0;
+        const camHeight = 7.5 + Math.sin(camPitch) * 11.0;
+        const camX = vehiclePos.x - Math.sin(camYaw) * (camDist * Math.cos(camPitch));
+        const camZ = vehiclePos.z - Math.cos(camYaw) * (camDist * Math.cos(camPitch));
+        camera.position.set(camX, vehiclePos.y + camHeight, camZ);
+        camera.lookAt(vehiclePos.x, vehiclePos.y + 2.4, vehiclePos.z);
+      }
+
+      // MERMİ FİZİĞİ & ÇARPIŞMALAR
+      for (let i = bullets.length - 1; i >= 0; i--) {
+        const b = bullets[i];
+        b.mesh.position.addScaledVector(b.dir, b.speed);
+        b.life--;
+
+        for (let e of enemies) {
+          if (e.alive && b.mesh.position.distanceTo(e.group.position) < 3.4) {
+            e.hp -= b.damage * (isZerkActive ? 2.0 : 1.0);
+            b.life = 0;
+
+            if (e.hp <= 0) {
+              playExplosionSound();
+              e.alive = false;
+              scene.remove(e.group);
+              kills++;
+              gold += 4500;
+              document.getElementById('killCount').innerText = kills;
+              document.getElementById('goldCount').innerText = gold.toLocaleString();
+
+              // Zerk doldur
+              if (!isZerkActive && zerkPercent < 100) {
+                zerkPercent = Math.min(100, zerkPercent + 25);
+                document.getElementById('zerkBar').style.width = `${zerkPercent}%`;
+                if (zerkPercent >= 100) {
+                  document.getElementById('zerkText').innerText = "⚡ %100 DOLU! [SPACE] İLE BAS!";
+                  showNotice("⚡ BERSERKER ZERK DOLDU! [SPACE] TUŞUNA BASARAK AKTİFLEŞTİRİN!");
+                }
+              }
+
+              // Yeniden korsan doğur
+              setTimeout(() => {
+                const angle = Math.random() * Math.PI * 2;
+                const dist = 100 + Math.random() * 140;
+                e.group.position.set(vehiclePos.x + Math.cos(angle) * dist, 0, vehiclePos.z + Math.sin(angle) * dist);
+                e.hp = 140;
+                e.alive = true;
+                scene.add(e.group);
+              }, 4500);
+            }
+            break;
+          }
+        }
+
+        if (b.life <= 0) {
+          scene.remove(b.mesh);
+          bullets.splice(i, 1);
+        }
+      }
+
+      // KORSAN HAREKETİ VE SALDIRISI
+      enemies.forEach(e => {
+        if (!e.alive) return;
+        const dir = new THREE.Vector3().subVectors(vehiclePos, e.group.position).normalize();
+        e.group.position.addScaledVector(dir, e.speed);
+        e.group.lookAt(vehiclePos);
+
+        // Kervana Çarpışma Hasarı
+        if (e.group.position.distanceTo(vehiclePos) < 4.8) {
+          if (shield > 0) shield = Math.max(0, shield - 4);
+          else hp = Math.max(0, hp - 3);
+          updateHPUI();
+        }
+      });
+
+      // OUTPOST KONTROLÜ (ŞEHRE VARINCA OTOMATİK DUYURU)
+      outposts.forEach(p => {
+        const dist = Math.hypot(vehiclePos.x - p.x, vehiclePos.z - p.z);
+        if (dist < 35 && loadedCargo > 0) {
+          const reward = loadedCargo * 28000;
+          gold += reward;
+          showNotice(`🏛️ ${p.name} noktasına ulaşıldı! Kervan yükleri satıldı (+${reward.toLocaleString()} G).`);
+          loadedCargo = 0;
+          document.getElementById('goldCount').innerText = gold.toLocaleString();
+          document.getElementById('tradeStatus').innerText = `Kervan Kargo Kapasitesi: 0 / ${maxCargo} Koli Yüklü`;
+          playSuccessSound();
+        }
+      });
+
+      drawMinimap();
+      renderer.render(scene, camera);
+    }
+
+    // MİNİMAP (RADAR ÇİZİMİ)
+    function drawMinimap() {
+      const mapCanvas = document.getElementById('minimap-canvas');
+      const ctx = mapCanvas.getContext('2d');
+      const w = mapCanvas.width, h = mapCanvas.height;
+      const scale = 0.12;
+
+      ctx.clearRect(0, 0, w, h);
+      ctx.fillStyle = "rgba(4, 9, 20, 0.95)";
+      ctx.fillRect(0, 0, w, h);
+
+      // Radar Halkaları
+      ctx.strokeStyle = "rgba(0, 240, 255, 0.25)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(w/2, h/2, 40, 0, Math.PI * 2);
+      ctx.arc(w/2, h/2, 70, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Düşmanlar (Kırmızı Noktalar)
+      enemies.forEach(e => {
+        if (!e.alive) return;
+        const dx = (e.group.position.x - vehiclePos.x) * scale;
+        const dz = (e.group.position.z - vehiclePos.z) * scale;
+        ctx.fillStyle = "#ff0055";
+        ctx.beginPath();
+        ctx.arc(w/2 + dx, h/2 + dz, 3, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      // Şehirler (Sarı İkonlar)
+      outposts.forEach(p => {
+        const dx = (p.x - vehiclePos.x) * scale;
+        const dz = (p.z - vehiclePos.z) * scale;
+        ctx.fillStyle = "#ffcc00";
+        ctx.beginPath();
+        ctx.arc(w/2 + dx, h/2 + dz, 5, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      // Oyuncu Kervanı (Mavi Ok)
+      ctx.save();
+      ctx.translate(w/2, h/2);
+      ctx.rotate(-vehicleHeading);
+      ctx.fillStyle = "#00f0ff";
+      ctx.beginPath();
+      ctx.moveTo(0, -7);
+      ctx.lineTo(5, 6);
+      ctx.lineTo(-5, 6);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+
+    window.onload = init;
+  </script>
+</body>
+</html>
