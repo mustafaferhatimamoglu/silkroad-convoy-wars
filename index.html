@@ -4,6 +4,25 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Silkroad: Convoy Wars — 3D Açık Dünya Kervan Simülatörü</title>
+  <script>
+    window.onerror = function(msg, url, lineNo, columnNo, error) {
+      var errObj = {
+        message: msg,
+        url: url,
+        line: lineNo,
+        col: columnNo,
+        stack: error ? error.stack : ""
+      };
+      try {
+        var xhr = new XMLHttpRequest();
+        xhr.open("POST", "/report_err", false);
+        xhr.setRequestHeader("Content-Type", "application/json");
+        xhr.send(JSON.stringify(errObj));
+      } catch(e) {}
+      console.error("FATAL GAME JS ERROR:", errObj);
+      return false;
+    };
+  </script>
   <style>
     * { margin:0; padding:0; box-sizing:border-box; user-select:none; }
     body, html { width:100%; height:100%; overflow:hidden; background:#02050c; font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color:#fff; }
@@ -587,10 +606,10 @@
       raycaster = new THREE.Raycaster();
 
       // Atmosferik Işıklandırma
-      const hemi = new THREE.HemisphereLight(0xffeedd, 0x182438, 0.75);
+      const hemi = new THREE.HemisphereLight(0xfffaee, 0x24354c, 1.1);
       scene.add(hemi);
 
-      const sun = new THREE.DirectionalLight(0xfff2d4, 1.4);
+      const sun = new THREE.DirectionalLight(0xfff5e6, 1.4);
       sun.position.set(220, 300, 160);
       sun.castShadow = true;
       sun.shadow.mapSize.width = 2048;
@@ -603,14 +622,17 @@
       sun.shadow.camera.bottom = -250;
       scene.add(sun);
 
-      const ambientSandLight = new THREE.DirectionalLight(0xd4af37, 0.5);
+      const ambientSandLight = new THREE.DirectionalLight(0xd4af37, 0.6);
       ambientSandLight.position.set(-180, 80, -180);
       scene.add(ambientSandLight);
+
+      const rearFillLight = new THREE.DirectionalLight(0x7fb5ff, 0.7);
+      rearFillLight.position.set(-60, 120, -180);
+      scene.add(rearFillLight);
 
       // Harita & Dünyanın İnşası
       buildSilkroadTexturedWorld();
       buildArmoredConvoy();
-      buildSilkroadOutposts();
       spawnSilkroadMonsters();
       spawnBanditRaiders(8);
       setupInputHandlers();
@@ -873,16 +895,46 @@
       // 1. Zırhlı Gövde (Zemin açıklığı 2.4m - batma imkansız)
       const bodyMesh = new THREE.Mesh(
         new THREE.BoxGeometry(4.4, 2.4, 9.2),
-        new THREE.MeshStandardMaterial({ color: 0x14223c, metalness: 0.85, roughness: 0.25 })
+        new THREE.MeshStandardMaterial({ color: 0x1c3a63, metalness: 0.75, roughness: 0.3 })
       );
       bodyMesh.castShadow = true;
       bodyMesh.position.y = 1.35;
       truckChassis.add(bodyMesh);
 
+      // Gövde Yanı Kervan Lider Neon Şeritleri (Görünürlük ve Görsel Derinlik)
+      const stripLeft = new THREE.Mesh(
+        new THREE.BoxGeometry(0.12, 0.22, 8.8),
+        new THREE.MeshStandardMaterial({ color: 0x00f0ff, emissive: 0x00f0ff, emissiveIntensity: 0.9 })
+      );
+      stripLeft.position.set(-2.24, 1.45, 0);
+      truckChassis.add(stripLeft);
+
+      const stripRight = new THREE.Mesh(
+        new THREE.BoxGeometry(0.12, 0.22, 8.8),
+        new THREE.MeshStandardMaterial({ color: 0x00f0ff, emissive: 0x00f0ff, emissiveIntensity: 0.9 })
+      );
+      stripRight.position.set(2.24, 1.45, 0);
+      truckChassis.add(stripRight);
+
+      // Arka Fren / Stop Lambaları
+      const tailLeft = new THREE.Mesh(
+        new THREE.BoxGeometry(0.7, 0.35, 0.15),
+        new THREE.MeshStandardMaterial({ color: 0xff0044, emissive: 0xff0044, emissiveIntensity: 1.6 })
+      );
+      tailLeft.position.set(-1.7, 1.3, -4.62);
+      truckChassis.add(tailLeft);
+
+      const tailRight = new THREE.Mesh(
+        new THREE.BoxGeometry(0.7, 0.35, 0.15),
+        new THREE.MeshStandardMaterial({ color: 0xff0044, emissive: 0xff0044, emissiveIntensity: 1.6 })
+      );
+      tailRight.position.set(1.7, 1.3, -4.62);
+      truckChassis.add(tailRight);
+
       // Izgara & Tampon
       const bumper = new THREE.Mesh(
         new THREE.BoxGeometry(4.6, 1.4, 0.7),
-        new THREE.MeshStandardMaterial({ color: 0x1f242e, metalness: 0.9, roughness: 0.2 })
+        new THREE.MeshStandardMaterial({ color: 0x222a38, metalness: 0.85, roughness: 0.25 })
       );
       bumper.position.set(0, 0.85, 4.8);
       truckChassis.add(bumper);
@@ -890,7 +942,7 @@
       // Kokpit Zırhlı Camı
       const cockpit = new THREE.Mesh(
         new THREE.BoxGeometry(3.8, 1.3, 2.6),
-        new THREE.MeshStandardMaterial({ color: 0x00f0ff, transparent: true, opacity: 0.5, roughness: 0.1 })
+        new THREE.MeshStandardMaterial({ color: 0x00f0ff, transparent: true, opacity: 0.6, roughness: 0.1 })
       );
       cockpit.position.set(0, 2.0, 2.5);
       truckChassis.add(cockpit);
@@ -902,7 +954,7 @@
 
       const turretRing = new THREE.Mesh(
         new THREE.CylinderGeometry(1.4, 1.5, 0.6, 18),
-        new THREE.MeshStandardMaterial({ color: 0x00f0ff, emissive: 0x00f0ff, emissiveIntensity: 0.4 })
+        new THREE.MeshStandardMaterial({ color: 0x00f0ff, emissive: 0x00f0ff, emissiveIntensity: 0.5 })
       );
       turretBase.add(turretRing);
 
@@ -927,7 +979,11 @@
       wheelObjects = [];
       const wheelGeo = new THREE.CylinderGeometry(wheelRadius, wheelRadius, 0.85, 20);
       wheelGeo.rotateZ(Math.PI / 2);
-      const wheelMat = new THREE.MeshStandardMaterial({ color: 0x0a0e16, roughness: 0.85 });
+      const wheelMat = new THREE.MeshStandardMaterial({ color: 0x0c1018, roughness: 0.85 });
+
+      const rimGeo = new THREE.CylinderGeometry(wheelRadius * 0.52, wheelRadius * 0.52, 0.88, 12);
+      rimGeo.rotateZ(Math.PI / 2);
+      const rimMat = new THREE.MeshStandardMaterial({ color: 0x8fa5c8, metalness: 0.85, roughness: 0.25 });
 
       wheelLocalConfigs.forEach(cfg => {
         // Tekerlek grubu DOĞRUDAN truckChassis'e eklenir! (Lokal koordinat sistemi)
@@ -938,6 +994,9 @@
         const tire = new THREE.Mesh(wheelGeo, wheelMat);
         tire.castShadow = true;
         wheelGroup.add(tire);
+
+        const rim = new THREE.Mesh(rimGeo, rimMat);
+        tire.add(rim);
 
         wheelObjects.push({
           group: wheelGroup,
@@ -1110,13 +1169,14 @@
       const targetCandidates = [];
       enemies.forEach(e => { if (e.alive) targetCandidates.push(e.group); });
       monsters.forEach(m => { if (m.alive) targetCandidates.push(m.group); });
-      if (terrainMesh) targetCandidates.push(terrainMesh);
 
       const intersects = raycaster.intersectObjects(targetCandidates, true);
       if (intersects.length > 0) {
         currentAimTarget.copy(intersects[0].point);
       } else {
-        raycaster.ray.at(280, currentAimTarget);
+        raycaster.ray.at(250, currentAimTarget);
+        const gY = getTerrainElevation(currentAimTarget.x, currentAimTarget.z);
+        if (currentAimTarget.y < gY) currentAimTarget.y = gY;
       }
 
       // Taret Kaidesinin Hedefe Dönüşü (Yaw)

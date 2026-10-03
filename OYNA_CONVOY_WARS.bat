@@ -11,11 +11,12 @@ set PYTHON_EXE=C:\Users\Administrator\AppData\Local\Programs\Python\Python312\py
 
 cd /d "C:\Silkroad\Silkroad_V2"
 
+echo [BILGI] Oyun tarayicida aciliyor (http://localhost:8080/index.html)...
+start http://localhost:8080/index.html
+
 if exist "%PYTHON_EXE%" (
-    echo [BILGI] Yerel Web Sunucusu baslatiliyor (http://localhost:8080)...
     "%PYTHON_EXE%" -u "server.py"
 ) else (
-    echo [BILGI] Python bulunamadi, dogrudan varsayilan tarayicida aciliyor...
     start "" "index.html"
 )
 
