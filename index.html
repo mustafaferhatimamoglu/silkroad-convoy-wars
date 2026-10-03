@@ -225,7 +225,7 @@
 
     <!-- NOTICE BANNER -->
     <div class="notice-box" id="noticeBox">
-      🎮 KONVOY SAVAŞI: [W/S] Gaz/Fren, [A/D] Direksiyon, [Sol Tık / Basılı Tut] Ateş, [F11] Tam Ekran, [B] Borsa
+      🎮 KONVOY SAVAŞI: [W/S] Gaz/Fren, [A/D] Direksiyon, [Sol Tık / Basılı Tut] Ateş, [B] Borsa
     </div>
 
     <!-- BOTTOM SECTION -->
@@ -244,12 +244,12 @@
       <div class="controls-card">
         <strong>[W / S]:</strong> Gaz & Fren • <strong>[A / D]:</strong> 360° Direksiyon • <strong>[Fare]:</strong> Taret Yönü<br>
         <strong>[Sol Tık / Tut]:</strong> Çift Taret Seri Ateş • <strong>[SPACE]:</strong> Zerk / Ateş<br>
-        <span class="gold"><strong>[B]:</strong> Şehir Borsası & Simya</span> • <strong>[V]:</strong> TPS / Kokpit • <strong>[F11]:</strong> Tam Ekran
+        <span class="gold"><strong>[B]:</strong> Şehir Borsası & Simya</span> • <strong>[V]:</strong> TPS / Kokpit
       </div>
 
       <div class="action-group">
         <button class="btn-action btn-gold" id="btnBazaar">🏛️ Şehir Borsası [B]</button>
-        <button class="btn-action" id="btnFullscreen">🖥️ Tam Ekran [F11]</button>
+        <button class="btn-action" id="btnFullscreen">🖥️ Tam Ekran</button>
         <button class="btn-action btn-purple" id="btnCamera">📷 Kamera: TPS</button>
       </div>
     </div>
@@ -981,12 +981,6 @@
         if (keys.hasOwnProperty(k)) keys[k] = true;
         if (k === 'v') toggleCamera();
         if (k === 'b') toggleBazaar();
-
-        // F11: GERÇEK TAM EKRAN MODU
-        if (e.key === 'F11') {
-          e.preventDefault();
-          toggleFullscreen();
-        }
 
         if (e.code === 'Space') {
           if (zerkPercent >= 100) activateBerserker();
