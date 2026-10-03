@@ -1,0 +1,37 @@
+{
+  "Data.pk2": {
+    "size_bytes": 3140116480,
+    "size_mb": 2994.65,
+    "magic": "JoyMax File Manager!\n",
+    "version": "0x1000002",
+    "is_encrypted": true
+  },
+  "Map.pk2": {
+    "size_bytes": 1292865536,
+    "size_mb": 1232.97,
+    "magic": "JoyMax File Manager!\n",
+    "version": "0x1000002",
+    "is_encrypted": true
+  },
+  "Media.pk2": {
+    "size_bytes": 879476736,
+    "size_mb": 838.73,
+    "magic": "JoyMax File Manager!\n",
+    "version": "0x1000002",
+    "is_encrypted": true
+  },
+  "Music.pk2": {
+    "size_bytes": 72212480,
+    "size_mb": 68.87,
+    "magic": "JoyMax File Manager!\n",
+    "version": "0x1000002",
+    "is_encrypted": true
+  },
+  "Particles.pk2": {
+    "size_bytes": 175304704,
+    "size_mb": 167.18,
+    "magic": "JoyMax File Manager!\n",
+    "version": "0x1000002",
+    "is_encrypted": true
+  }
+}

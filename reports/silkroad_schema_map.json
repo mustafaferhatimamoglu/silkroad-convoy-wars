@@ -1,0 +1,17 @@
+{
+  "client_binaries": {
+    "sro_client.exe": {
+      "size": 18517944,
+      "architecture": "PE32 (x86 32-bit)",
+      "entry_point": "Joymax Engine Main Client Loop"
+    }
+  },
+  "pk2_structure": {},
+  "target_game_modules": [
+    "Item System (refitem.txt)",
+    "Skill System (refskill.txt)",
+    "Character & NPC System (character.txt)",
+    "Map & World Grid (world.txt)",
+    "Audio & Music Synth (music.pk2 sound banks)"
+  ]
+}

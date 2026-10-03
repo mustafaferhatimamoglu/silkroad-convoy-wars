@@ -1,0 +1,22 @@
+# Silkroad V2 .gitignore
+# Büyük İkili (Binary) ve Salt-Okunur Ham Dosyalar (GitHub 100MB limit koruması)
+extracted/
+*.exe
+*.pk2
+*.zip
+*.7z
+*.dll
+*.dat
+
+# Python ortam ve derleme çıktıları
+__pycache__/
+*.py[cod]
+*$py.class
+*.log
+.pytest_cache/
+
+# Sistem ve Geçici Dosyalar
+.system_generated/
+scratch/
+Thumbs.db
+[Ee]xtern/
