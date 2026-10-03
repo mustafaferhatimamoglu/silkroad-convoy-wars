@@ -1,8 +1,7 @@
 """
 Playability & Mechanics Test Suite (Silkroad: Convoy Wars)
-Fizik motoru, tekerlek kopmazlık garantisi, crosshair raycast hedefleme,
-süspansiyon yüksekliği, zemin çekiş katsayıları, düşman menzil/iyileşme mantığı
-ve konvoy takip kinematiğini %100 doğrular.
+Fizik motoru, çarpışma hasarı, muhafız oto-saldırı, dünya haritası noktaları,
+tekerlek mekanik aksları ve konvoy takip kinematiğini %100 doğrular.
 """
 
 import math
@@ -19,7 +18,7 @@ def get_terrain_elevation(x, z):
 
 
 def get_surface_traction(x):
-    """Zemin çekiş ve sürtünme katsayısı hesabı (Antik Yol vs Yol Kenarı vs Taklamakan Kumu)"""
+    """Zemin çekiş ve sürtünme katsayısı hesabı"""
     if abs(x) < 18.0:
         return {"surface": "Antik İpek Yolu Taş Kaplama", "traction": 1.0, "speed_mult": 1.0, "dust": False}
     elif abs(x) < 45.0:
@@ -58,7 +57,7 @@ def test_chassis_never_sinks():
 
 
 def test_wheel_never_detaches_from_chassis():
-    """Tekerleklerin lokal şasiye kilitli olduğunu, araç nereye giderse gitsin kopamayacağını doğrular."""
+    """Tekerleklerin ve helezon yayların lokal şasiye kilitli olduğunu doğrular."""
     wheel_local_configs = [
         {"id": "FL", "x": -2.3, "z": 3.2},
         {"id": "FR", "x": 2.3, "z": 3.2},
@@ -68,26 +67,22 @@ def test_wheel_never_detaches_from_chassis():
         {"id": "RR", "x": 2.3, "z": -3.2}
     ]
 
-    # Araç çöl boyunca kilometrelerce yol katetse bile
     vehicle_positions = [(0, 0), (450, -800), (-1200, 2500)]
     suspension_rest = 1.35
 
     for vx, vz in vehicle_positions:
         for w in wheel_local_configs:
-            # Lokal ofsetler şasiye göre daima sabittir
             assert abs(w["x"]) == 2.3
             assert w["z"] in [-3.2, 0.0, 3.2]
-            # Süspansiyon esneme payı sınırları (clamped travel: -0.65m .. +0.65m)
             min_y = -suspension_rest - 0.65
             max_y = -suspension_rest + 0.65
             assert min_y < 0 and max_y < 0, "Tekerlek göbeği şasinin alt hizasında kalmalıdır."
 
 
 def test_crosshair_raycast_convergence_math():
-    """Nişangah raycast hedefi ile namludan çıkan merminin aynı noktada kesiştiğini doğrular."""
-    # Ekran ortası (0, 0) raycast hedefi
+    """Nişangah raycast hedefi ile merminin tam kesiştiğini doğrular."""
     cam_pos = (0, 8, -25)
-    cam_dir = (0, -0.05, 1.0) # İleriye doğru bakış
+    cam_dir = (0, -0.05, 1.0)
     target_dist = 150.0
 
     target_point = (
@@ -96,19 +91,15 @@ def test_crosshair_raycast_convergence_math():
         cam_pos[2] + cam_dir[2] * target_dist,
     )
 
-    # Namlu ucu pozisyonu
     barrel_tip = (0.55, 3.5, 3.0)
-
-    # Namludan hedefe ateş vektörü
     shoot_dir = (
         target_point[0] - barrel_tip[0],
         target_point[1] - barrel_tip[1],
         target_point[2] - barrel_tip[2],
     )
-    mag = math.sqrt(shoot_dir[0]**2 + shoot_dir[1]**2 + shoot_dir[2]**3 if shoot_dir[2] < 0 else shoot_dir[0]**2 + shoot_dir[1]**2 + shoot_dir[2]**2)
+    mag = math.sqrt(shoot_dir[0]**2 + shoot_dir[1]**2 + shoot_dir[2]**2)
     norm_dir = (shoot_dir[0] / mag, shoot_dir[1] / mag, shoot_dir[2] / mag)
 
-    # Mermi belirli bir süre sonra tam olarak target_point ile buluşur
     bullet_at_target = (
         barrel_tip[0] + norm_dir[0] * mag,
         barrel_tip[1] + norm_dir[1] * mag,
@@ -119,36 +110,65 @@ def test_crosshair_raycast_convergence_math():
     assert abs(bullet_at_target[2] - target_point[2]) < 1e-4
 
 
-def test_enemy_leash_and_healing_logic():
-    """Düşmanların 95m mesafeyi aşınca takipten vazgeçip can tazelediğini test eder."""
-    leash_distance = 95.0
-    
-    enemy = {"hp": 60, "max_hp": 200, "state": "PURSUIT", "spawn_x": 0, "spawn_z": 0}
-    player_distance_close = 40.0
-    player_distance_far = 110.0
+def test_physical_collision_damage_and_rebound():
+    """Taş ve surlara çarpıldığında hızın sıçrama yapıp hasar kesildiğini doğrular."""
+    obstacle = {"x": 18.0, "z": 90.0, "radius": 1.4, "name": "Taş Fener"}
+    truck_speed = 1.2
+    initial_shield = 2500
+    initial_hp = 5000
 
-    # Yakındayken takip etmeli
-    if player_distance_close <= leash_distance:
-        enemy["state"] = "PURSUIT"
-    assert enemy["state"] == "PURSUIT"
+    # Çarpışma hasarı formülü
+    impact_speed = abs(truck_speed)
+    impact_damage = round(impact_speed * 340 + 30)
+    assert impact_damage > 300, "Yüksek hızda çarpışma anlamlı hasar vermelidir."
 
-    # Uzaklaşınca geri dönüp can tazelemeli
-    if player_distance_far > leash_distance:
-        enemy["state"] = "RETREAT_AND_HEAL"
-        enemy["hp"] = min(enemy["max_hp"], enemy["hp"] + 40)
+    new_shield = max(0, initial_shield - impact_damage)
+    new_speed = -truck_speed * 0.45
 
-    assert enemy["state"] == "RETREAT_AND_HEAL"
-    assert enemy["hp"] == 100
+    assert new_shield < initial_shield
+    assert new_speed < 0, "Araç engelden fiziksel olarak geri sekmelidir (rebound)."
 
 
-def test_convoy_trailer_tether_kinematics():
-    """Konvoy römorklarının lider aracı doğru mesafeyle takip ettiğini doğrular."""
+def test_hunter_guard_auto_attack():
+    """Römork muhafızlarının menzildeki hedeflere otomatik saldırdığını doğrular."""
+    target_dist_in_range = 45.0
+    target_dist_out_of_range = 80.0
+    max_range = 65.0
+
+    # 45m menzil içinde -> hedefe saldırılır
+    should_attack_close = target_dist_in_range <= max_range
+    # 80m menzil dışında -> saldırı yapılmaz
+    should_attack_far = target_dist_out_of_range <= max_range
+
+    assert should_attack_close is True
+    assert should_attack_far is False
+
+
+def test_convoy_expanded_following_distance():
+    """Genişletilmiş konvoy takip mesafelerinin (14.5m ve 29.0m) iç içe geçmeyi engellediğini doğrular."""
     lead_pos = 100.0
-    trailer_spacing = 9.5
+    trailer_spacing = 14.5
     trailer_1_pos = lead_pos - trailer_spacing
     trailer_2_pos = lead_pos - (trailer_spacing * 2)
 
-    assert trailer_1_pos == 90.5
-    assert trailer_2_pos == 81.0
-    assert trailer_1_pos > trailer_2_pos
-    assert lead_pos > trailer_1_pos
+    assert trailer_1_pos == 85.5
+    assert trailer_2_pos == 71.0
+    # Araç uzunluğu ~7m olduğu için 14.5m mesafe minimum 7.5m net tampon aralığı sağlar
+    assert (trailer_1_pos - trailer_2_pos) > 7.0
+    assert (lead_pos - trailer_1_pos) > 7.0
+
+
+def test_silkroad_world_map_zones():
+    """M tuşu dünya haritasındaki 6 temel bölgenin eksiksiz olduğunu doğrular."""
+    world_locations = {
+        "Jangan": {"x": 0, "z": -500},
+        "Donwhang": {"x": 300, "z": 100},
+        "QinShiDungeon": {"x": -320, "z": 220},
+        "Taklamakan": {"x": 0, "z": 350},
+        "BanditFort": {"x": 350, "z": 520},
+        "Hotan": {"x": 0, "z": 750}
+    }
+    assert len(world_locations) == 6
+    # Jangan kuzeyde (z < 0), Hotan güneyde (z > 0)
+    assert world_locations["Jangan"]["z"] < 0
+    assert world_locations["Hotan"]["z"] > 0

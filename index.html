@@ -65,7 +65,7 @@
     }
     #radar-canvas { width: 100%; height: 100%; }
 
-    /* RETICLE & HITMARKER (CENTRAL AIM) */
+    /* RETICLE & HITMARKER */
     .hud-center {
       position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
       width: 44px; height: 44px; pointer-events: none;
@@ -135,10 +135,10 @@
     .controls-card .gold { color: #ffaa00; font-weight: bold; }
     .controls-card .red { color: #ff0055; font-weight: bold; }
 
-    .action-group { display: flex; gap: 10px; pointer-events: auto; }
+    .action-group { display: flex; gap: 8px; pointer-events: auto; }
     .btn-action {
       background: linear-gradient(135deg, #00f0ff, #0066ff); border: none; color: #000;
-      padding: 10px 18px; border-radius: 6px; font-weight: 900; font-size: 12px;
+      padding: 9px 15px; border-radius: 6px; font-weight: 900; font-size: 11px;
       letter-spacing: 1px; cursor: pointer; box-shadow: 0 0 15px rgba(0, 240, 255, 0.35);
       transition: transform 0.1s, box-shadow 0.2s;
     }
@@ -151,6 +151,10 @@
     .btn-purple {
       background: linear-gradient(135deg, #ff0077, #7928ca); color: #fff;
       box-shadow: 0 0 15px rgba(255, 0, 119, 0.4);
+    }
+    .btn-green {
+      background: linear-gradient(135deg, #00ff88, #009944); color: #000;
+      box-shadow: 0 0 15px rgba(0, 255, 136, 0.4);
     }
 
     /* BERSERKER FLAME VIGNETTE */
@@ -192,6 +196,22 @@
     }
     .trade-box:hover { border-color: #00f0ff; background: rgba(16, 26, 46, 0.95); }
     .alchemy-zone { text-align: center; padding: 25px; border: 1px dashed #d4af37; border-radius: 8px; background: rgba(0,0,0,0.5); }
+
+    /* FULLSCREEN SILKROAD WORLD MAP MODAL [M] */
+    #worldMapWindow {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      width: 960px; height: 660px; background: rgba(6, 12, 22, 0.97); border: 2px solid #d4af37;
+      border-radius: 14px; box-shadow: 0 0 60px rgba(212, 175, 55, 0.5), inset 0 0 35px rgba(0,0,0,0.9);
+      padding: 20px; z-index: 300; display: none; backdrop-filter: blur(18px); flex-direction: column;
+    }
+    .map-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #d4af37; padding-bottom: 10px; margin-bottom: 12px; }
+    .map-title { font-size: 20px; font-weight: 900; color: #d4af37; letter-spacing: 2px; }
+    .map-close { background: none; border: none; color: #ff0055; font-size: 24px; cursor: pointer; font-weight: bold; }
+    .map-body { display: flex; gap: 16px; flex: 1; min-height: 0; }
+    #world-map-canvas { flex: 1; border: 1px solid rgba(0, 240, 255, 0.4); border-radius: 8px; background: #070e1a; }
+    .map-sidebar { width: 250px; background: rgba(14, 24, 42, 0.85); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; padding: 14px; overflow-y: auto; font-size: 11px; line-height: 1.6; }
+    .map-legend-item { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; color: #a0b2d0; }
+    .map-legend-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
   </style>
 
   <!-- YEREL 3D VE FİZİK KÜTÜPHANELERİ (0 Dış Bağımlılık) -->
@@ -220,7 +240,7 @@
 
         <div class="telemetry-row">
           <span>HIZ: <span class="telemetry-val" id="txtSpeed">0</span> km/h</span>
-          <span>ZEMİN: <span class="telemetry-val" id="txtSurface" style="color:#00ffaa;">Asfalt</span></span>
+          <span>ZEMİN: <span class="telemetry-val" id="txtSurface" style="color:#00ffaa;">Antik İpek Yolu Taş Kaplama</span></span>
           <span>ÇEKİŞ: <span class="telemetry-val" id="txtTraction" style="color:#ffd700;">%100</span></span>
           <span>RAKIM: <span class="telemetry-val" id="txtAltitude" style="color:#00f0ff;">0</span> m</span>
         </div>
@@ -258,7 +278,7 @@
 
     <!-- NOTICE BANNER -->
     <div class="notice-box" id="noticeBox">
-      🎮 SİLKROAD: [W/S] Gaz & Fren, [A/D] Direksiyon, [Fare] 360° Raycast Aim, [Sol Tık] Odaklı Ateş, [B] Şehir Borsası
+      🎮 SİLKROAD: [W/S] Gaz & Fren, [A/D] Direksiyon, [Fare] Raycast Aim, [Sol Tık] Ateş, [M] Dünya Haritası, [R] Oto-Saldırı
     </div>
 
     <!-- BOTTOM SECTION -->
@@ -275,12 +295,14 @@
       </div>
 
       <div class="controls-card">
-        <strong>[W / S]:</strong> Gaz & Fren • <strong>[A / D]:</strong> Direksiyon • <strong>[Fare]:</strong> 3D Nişan (Raycast Aim)<br>
-        <strong>[Sol Tık]:</strong> Çift Taret Odaklı Ateş • <strong>[SPACE]:</strong> Zerk / Ateş<br>
+        <strong>[W / S]:</strong> Gaz & Fren • <strong>[A / D]:</strong> Direksiyon • <strong>[Fare]:</strong> 3D Nişan<br>
+        <strong>[Sol Tık]:</strong> Çift Taret Ateş • <strong>[M]:</strong> Dünya Haritası • <strong>[R]:</strong> Oto-Saldırı<br>
         <span class="gold"><strong>[B]:</strong> Şehir Borsası & Simya</span> • <strong>[V]:</strong> TPS / Kokpit
       </div>
 
       <div class="action-group">
+        <button class="btn-action btn-gold" id="btnWorldMap">🗺️ Harita [M]</button>
+        <button class="btn-action btn-green" id="btnAutoAttack">⚔️ Oto-Saldırı: AÇIK [R]</button>
         <button class="btn-action btn-gold" id="btnBazaar">🏛️ Şehir Borsası [B]</button>
         <button class="btn-action" id="btnFullscreen">🖥️ Tam Ekran</button>
         <button class="btn-action btn-purple" id="btnCamera">📷 Kamera: TPS</button>
@@ -350,6 +372,32 @@
     </div>
   </div>
 
+  <!-- FULLSCREEN SILKROAD WORLD MAP MODAL [M] -->
+  <div id="worldMapWindow">
+    <div class="map-header">
+      <div class="map-title">🗺️ SİLKROAD DÜNYA HARİTASI & BÖLGE KEŞFİ [M]</div>
+      <button class="map-close" id="btnWorldMapClose">✕</button>
+    </div>
+    <div class="map-body">
+      <canvas id="world-map-canvas" width="650" height="560"></canvas>
+      <div class="map-sidebar">
+        <div style="font-size:13px; font-weight:bold; color:#ffd700; margin-bottom:10px;">BÖLGELER & NOKTALAR</div>
+        <div class="map-legend-item"><div class="map-legend-dot" style="background:#00f0ff;"></div><span><strong>Jangan Şehri & Surları</strong> (Z: -500)</span></div>
+        <div class="map-legend-item"><div class="map-legend-dot" style="background:#00ff88;"></div><span><strong>Donwhang & Mogao Mağaraları</strong> (X: 300, Z: 100)</span></div>
+        <div class="map-legend-item"><div class="map-legend-dot" style="background:#bd00ff;"></div><span><strong>Qin-Shi Zindanı (Dungeon)</strong> (X: -320, Z: 220)</span></div>
+        <div class="map-legend-item"><div class="map-legend-dot" style="background:#ffaa00;"></div><span><strong>Taklamakan Kanyon Labirenti</strong> (Z: 350)</span></div>
+        <div class="map-legend-item"><div class="map-legend-dot" style="background:#ff0044;"></div><span><strong>Haydut Kalesi & Mağarası</strong> (X: 350, Z: 520)</span></div>
+        <div class="map-legend-item"><div class="map-legend-dot" style="background:#e6c300;"></div><span><strong>Hotan Kalesi & Çöl Sarayı</strong> (Z: 750)</span></div>
+        <hr style="border:0; border-top:1px solid rgba(255,255,255,0.15); margin:12px 0;">
+        <div style="color:#00f0ff; font-weight:bold; margin-bottom:6px;">OTOMATİK SİSTEMLER:</div>
+        <div>🛡️ <strong>Muhafız Oto-Saldırı:</strong> Açık</div>
+        <div>💥 <strong>Fiziksel Çarpışma Hasarı:</strong> Aktif</div>
+        <div>⚙️ <strong>Diferansiyel & Süspansiyon:</strong> Aktif</div>
+        <div style="margin-top:12px; font-size:10px; color:#8fa5c8;">[M] Tuşuna basarak istediğiniz an haritayı açıp kapatabilirsiniz.</div>
+      </div>
+    </div>
+  </div>
+
   <canvas id="canvas3d"></canvas>
 
   <script>
@@ -389,6 +437,21 @@
         gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.55);
         osc.connect(gain); gain.connect(audioCtx.destination);
         osc.start(); osc.stop(audioCtx.currentTime + 0.55);
+      } catch(e) {}
+    }
+
+    function playCrashSound() {
+      if (!audioCtx) return;
+      try {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = "sawtooth";
+        osc.frequency.setValueAtTime(120, audioCtx.currentTime);
+        osc.frequency.linearRampToValueAtTime(25, audioCtx.currentTime + 0.35);
+        gain.gain.setValueAtTime(0.65, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.35);
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.start(); osc.stop(audioCtx.currentTime + 0.35);
       } catch(e) {}
     }
 
@@ -440,45 +503,51 @@
     }
 
     // ====================================================
-    // 2. PROSEDÜREL SİLKROAD DOKULARI (CANVAS)
+    // 2. FOTORREALİSTİK PROSEDÜREL DOKULAR (CANVAS)
     // ====================================================
-    function generateSandTexture() {
+    function generatePhotorealSandTexture() {
       const c = document.createElement('canvas');
       c.width = 512; c.height = 512;
       const ctx = c.getContext('2d');
-      // Çöl Kumu Altın/Sarı Temel
-      ctx.fillStyle = "#d4a359";
+
+      // 1. Zengin Çöl Kumu Katmanı (Sıcak Toprak & Altın Tonları)
+      const grad = ctx.createLinearGradient(0, 0, 512, 512);
+      grad.addColorStop(0, "#c99a53");
+      grad.addColorStop(0.5, "#bd8c44");
+      grad.addColorStop(1, "#ab7a33");
+      ctx.fillStyle = grad;
       ctx.fillRect(0, 0, 512, 512);
 
-      // Kum Dalgaları (Dune Ripples)
-      for (let y = 0; y < 512; y += 4) {
-        ctx.fillStyle = (y % 8 === 0) ? "rgba(180, 130, 60, 0.25)" : "rgba(255, 230, 160, 0.25)";
-        ctx.fillRect(0, y + Math.sin(y * 0.1) * 3, 512, 2.5);
+      // 2. Rüzgâr Kum Tepecik Dalgaları (Multi-Frequency Ripples)
+      for (let y = 0; y < 512; y += 3) {
+        const rippleFactor = Math.sin(y * 0.08 + Math.sin(y * 0.02) * 2.0);
+        ctx.fillStyle = rippleFactor > 0 ? "rgba(225, 185, 120, 0.22)" : "rgba(130, 85, 30, 0.24)";
+        ctx.fillRect(0, y + rippleFactor * 2.5, 512, 2.2);
       }
 
-      // Kum Tanecikleri (Noise)
-      for (let i = 0; i < 6000; i++) {
+      // 3. İnce Çakıl ve Kuvars Tanecikleri (Mineral Specks)
+      for (let i = 0; i < 9000; i++) {
         const rx = Math.random() * 512, ry = Math.random() * 512;
-        const bright = Math.random() > 0.5;
-        ctx.fillStyle = bright ? "rgba(255, 240, 200, 0.35)" : "rgba(120, 80, 30, 0.3)";
-        ctx.fillRect(rx, ry, 2, 2);
+        const rand = Math.random();
+        ctx.fillStyle = rand > 0.6 ? "rgba(255, 235, 180, 0.35)" : (rand > 0.25 ? "rgba(100, 65, 25, 0.3)" : "rgba(60, 40, 20, 0.45)");
+        ctx.fillRect(rx, ry, Math.random() * 2 + 1, Math.random() * 2 + 1);
       }
 
       const tex = new THREE.CanvasTexture(c);
       tex.wrapS = THREE.RepeatWrapping;
       tex.wrapT = THREE.RepeatWrapping;
-      tex.repeat.set(40, 40);
+      tex.repeat.set(45, 45);
       return tex;
     }
 
-    function generateCobblestoneTexture() {
+    function generatePhotorealRoadTexture() {
       const c = document.createElement('canvas');
       c.width = 512; c.height = 512;
       const ctx = c.getContext('2d');
-      ctx.fillStyle = "#1e2430";
+      ctx.fillStyle = "#161b24";
       ctx.fillRect(0, 0, 512, 512);
 
-      // Antik İpek Yolu Taş Blokları
+      // Antik İpek Yolu Taş Blokları ve Derz Kumları
       const rows = 16, cols = 8;
       const rh = 512 / rows, cw = 512 / cols;
       for (let r = 0; r < rows; r++) {
@@ -486,22 +555,28 @@
         for (let col = -1; col < cols + 1; col++) {
           const px = col * cw + xOff + 2;
           const py = r * rh + 2;
-          const stoneLum = 35 + Math.floor(Math.random() * 25);
-          ctx.fillStyle = `rgb(${stoneLum}, ${stoneLum + 8}, ${stoneLum + 18})`;
+          const lum = 40 + Math.floor(Math.random() * 32);
+          ctx.fillStyle = `rgb(${lum}, ${lum + 6}, ${lum + 14})`;
           ctx.fillRect(px, py, cw - 4, rh - 4);
 
-          // Taşın üst ışığı ve gölgesi
-          ctx.fillStyle = "rgba(255, 255, 255, 0.08)";
-          ctx.fillRect(px, py, cw - 4, 3);
-          ctx.fillStyle = "rgba(0, 0, 0, 0.25)";
-          ctx.fillRect(px, py + rh - 7, cw - 4, 3);
+          // Taşın Yontulmuş Kenar Işığı ve Gölgeleri
+          ctx.fillStyle = "rgba(255, 255, 255, 0.12)";
+          ctx.fillRect(px, py, cw - 4, 2.5);
+          ctx.fillRect(px, py, 2.5, rh - 4);
+          ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
+          ctx.fillRect(px, py + rh - 6.5, cw - 4, 2.5);
+          ctx.fillRect(px + cw - 6.5, py, 2.5, rh - 4);
+
+          // Derz aralarına birikmiş çöl kumu
+          ctx.fillStyle = "rgba(180, 140, 80, 0.35)";
+          ctx.fillRect(px - 1, py - 1, cw, 1.5);
         }
       }
 
       const tex = new THREE.CanvasTexture(c);
       tex.wrapS = THREE.RepeatWrapping;
       tex.wrapT = THREE.RepeatWrapping;
-      tex.repeat.set(1, 40);
+      tex.repeat.set(1, 45);
       return tex;
     }
 
@@ -513,14 +588,21 @@
     let terrainMesh, roadMesh;
     let truckRoot, truckChassis, turretBase, barrelMount, leftBarrel, rightBarrel;
     let wheelObjects = [];
+    let mechanicalUndercarriage = []; // Diferansiyel, akslar, kardan şaftı ve helezon yaylar
     let trailers = [];
-    let monsters = [], enemies = [], bullets = [], enemyBullets = [], outposts = [];
+    let towBars = []; // Araçları birbirine bağlayan çeki demirleri
+    let monsters = [], enemies = [], bullets = [], enemyBullets = [], hunterArrows = [];
+    let collisionObstacles = []; // Çarpışılabilir taş, fener, sur ve kanyonlar
+    let sparkParticles = [];
     let isFPS = false, isPointerLocked = false;
+    let isAutoAttackActive = true;
+    let lastHunterAutoShoot = 0;
     let kills = 0, gold = 300000;
     let hp = 5000, maxHp = 5000, shield = 2500, maxShield = 2500;
     let weaponPlus = 0;
     let zerkPercent = 0, isZerkActive = false;
     let loadedCargo = 0, maxCargo = 10;
+    let cameraShake = 0;
 
     // GERÇEK SÜSPANSİYON VE TAŞIT KİNEMATİĞİ
     let vehicleX = 0, vehicleZ = 0, vehicleY = 2.4;
@@ -549,7 +631,7 @@
     let camYaw = 0, camPitch = 0.18;
     const PITCH_MIN = -0.45, PITCH_MAX = 0.85;
 
-    // Nişangah Raycast Hedef Noktası (World of Tanks / Crossout style)
+    // Nişangah Raycast Hedef Noktası
     let currentAimTarget = new THREE.Vector3(0, 2, 100);
 
     const keys = { w: false, a: false, s: false, d: false };
@@ -580,12 +662,11 @@
     }
 
     // ====================================================
-    // 5. BAŞLATMA & THREE.JS / CANNON.JS SAHNESİ
+    // 5. BAŞLATMA & SAHNE İNŞASI
     // ====================================================
     const canvas = document.getElementById('canvas3d');
 
     function initGame() {
-      // Cannon.js Fizik Dünyası
       if (typeof CANNON !== "undefined") {
         cannonWorld = new CANNON.World();
         cannonWorld.gravity.set(0, -25, 0);
@@ -606,10 +687,10 @@
       raycaster = new THREE.Raycaster();
 
       // Atmosferik Işıklandırma
-      const hemi = new THREE.HemisphereLight(0xfffaee, 0x24354c, 1.1);
+      const hemi = new THREE.HemisphereLight(0xfffaee, 0x24354c, 1.15);
       scene.add(hemi);
 
-      const sun = new THREE.DirectionalLight(0xfff5e6, 1.4);
+      const sun = new THREE.DirectionalLight(0xfff5e6, 1.45);
       sun.position.set(220, 300, 160);
       sun.castShadow = true;
       sun.shadow.mapSize.width = 2048;
@@ -622,11 +703,11 @@
       sun.shadow.camera.bottom = -250;
       scene.add(sun);
 
-      const ambientSandLight = new THREE.DirectionalLight(0xd4af37, 0.6);
+      const ambientSandLight = new THREE.DirectionalLight(0xd4af37, 0.65);
       ambientSandLight.position.set(-180, 80, -180);
       scene.add(ambientSandLight);
 
-      const rearFillLight = new THREE.DirectionalLight(0x7fb5ff, 0.7);
+      const rearFillLight = new THREE.DirectionalLight(0x7fb5ff, 0.75);
       rearFillLight.position.set(-60, 120, -180);
       scene.add(rearFillLight);
 
@@ -642,11 +723,13 @@
     }
 
     // ====================================================
-    // 6. SİLKROAD HARİTASI, RENKLİ GİYDİRME & DOKULAR
+    // 6. SİLKROAD DÜNYA HARİTASI (ŞEHİRLER, DUNGEON, MAĞARALAR)
     // ====================================================
     function buildSilkroadTexturedWorld() {
+      collisionObstacles = [];
+
       // 1. Prosedürel Dokulu Çöl Tabanı
-      const sandTex = generateSandTexture();
+      const sandTex = generatePhotorealSandTexture();
       const terrainGeo = new THREE.PlaneGeometry(3800, 3800, 150, 150);
       terrainGeo.rotateX(-Math.PI / 2);
       const posAttr = terrainGeo.attributes.position;
@@ -659,15 +742,15 @@
 
       const terrainMat = new THREE.MeshStandardMaterial({
         map: sandTex,
-        roughness: 0.9,
-        metalness: 0.05
+        roughness: 0.88,
+        metalness: 0.08
       });
       terrainMesh = new THREE.Mesh(terrainGeo, terrainMat);
       terrainMesh.receiveShadow = true;
       scene.add(terrainMesh);
 
       // 2. Prosedürel Dokulu Antik İpek Yolu (Cobblestone)
-      const roadTex = generateCobblestoneTexture();
+      const roadTex = generatePhotorealRoadTexture();
       const roadGeo = new THREE.PlaneGeometry(34, 3800, 6, 150);
       roadGeo.rotateX(-Math.PI / 2);
       const roadPos = roadGeo.attributes.position;
@@ -677,36 +760,41 @@
         roadPos.setY(i, getTerrainElevation(rx, rz) + 0.16);
       }
       roadGeo.computeVertexNormals();
-      const roadMat = new THREE.MeshStandardMaterial({ map: roadTex, roughness: 0.7, metalness: 0.25 });
+      const roadMat = new THREE.MeshStandardMaterial({ map: roadTex, roughness: 0.72, metalness: 0.22 });
       roadMesh = new THREE.Mesh(roadGeo, roadMat);
       roadMesh.receiveShadow = true;
       scene.add(roadMesh);
 
-      // 3. Yol Kenarı Taş Bordürleri & Fenerleri
+      // 3. Yol Kenarı Taş Fenerler (Çarpışılabilir Engeller)
       for (let z = -1800; z < 1800; z += 90) {
         for (let side of [-18, 18]) {
           const elev = getTerrainElevation(side, z);
-          // Taş Fener
           const lantern = buildStoneLantern();
           lantern.position.set(side, elev, z);
           scene.add(lantern);
+          collisionObstacles.push({ x: side, z: z, radius: 1.4, name: "Taş Yol Feneri" });
         }
       }
 
-      // 4. Jangan Devasa Çin Pagoda Kapısı (Z = -500)
+      // 4. JANGAN İMPARATORLUK BAŞKENTİ (Z = -500)
       buildJanganImperialGate(0, -500);
 
-      // 5. Taklamakan Çöl Kanyonları ve Kayalıkları
+      // 5. DONWHANG VAHASI & MOGAO BİN BUDDHA MAĞARALARI (X = 300, Z = 100)
+      buildDonwhangAndCaves(300, 100);
+
+      // 6. QIN-SHI İMPARATORLUK ZİNDANI & DUNGEON GİRİŞİ (X = -320, Z = 220)
+      buildQinShiDungeon(-320, 220);
+
+      // 7. TAKLAMAKAN ÇÖL KANYONLARI & KAYALIKLARI
       buildTaklamakanCanyons();
 
-      // 6. Hotan Kalesi & Kervansaray (Z = 650)
-      buildHotanFortress(0, 650);
+      // 8. HAYDUT DAĞ KALESİ & EŞKIYA MAĞARALARI (X = 350, Z = 520)
+      buildBanditStronghold(350, 520);
 
-      // 7. Vaha Cenneti (Z = 120, X = 280)
-      buildOasisZone(280, 120);
+      // 9. HOTAN KALESİ & ÇÖL SARAYI (Z = 750)
+      buildHotanFortress(0, 750);
     }
 
-    // TAŞ FENER (LANTERN)
     function buildStoneLantern() {
       const g = new THREE.Group();
       const base = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.7, 1.4, 8), new THREE.MeshStandardMaterial({ color: 0x444 }));
@@ -725,12 +813,11 @@
       return g;
     }
 
-    // JANGAN İMPARATORLUK PAGODA KAPISI
     function buildJanganImperialGate(gx, gz) {
       const gateGroup = new THREE.Group();
       const elev = getTerrainElevation(gx, gz);
 
-      // Kırmızı İhtişamlı Pagoda Sütunları
+      // Pagoda Sütunları
       [-22, -8, 8, 22].forEach(px => {
         const pillar = new THREE.Mesh(
           new THREE.CylinderGeometry(1.2, 1.4, 22, 16),
@@ -739,9 +826,9 @@
         pillar.position.set(px, 11, 0);
         pillar.castShadow = true;
         gateGroup.add(pillar);
+        collisionObstacles.push({ x: gx + px, z: gz, radius: 2.2, name: "Jangan Kapı Sütunu" });
       });
 
-      // İki Katlı Pagoda Çatısı (Curved Golden Eaves)
       const roof1 = new THREE.Mesh(
         new THREE.ConeGeometry(32, 6, 4),
         new THREE.MeshStandardMaterial({ color: 0xd4af37, roughness: 0.3, metalness: 0.8 })
@@ -760,7 +847,6 @@
       roof2.castShadow = true;
       gateGroup.add(roof2);
 
-      // Jangan Tabela & Yazıtı
       const signMesh = new THREE.Mesh(
         new THREE.BoxGeometry(16, 3.2, 1.2),
         new THREE.MeshStandardMaterial({ color: 0x101828, emissive: 0x00f0ff, emissiveIntensity: 0.4 })
@@ -770,15 +856,92 @@
 
       gateGroup.position.set(gx, elev, gz);
       scene.add(gateGroup);
-      outposts.push({ name: "Jangan Şehir Kapısı", x: gx, z: gz, color: 0x00f0ff });
+    }
+
+    // DONWHANG VAHASI & MOGAO BİN BUDDHA MAĞARALARI
+    function buildDonwhangAndCaves(ox, oz) {
+      const donwhangGroup = new THREE.Group();
+      const elev = getTerrainElevation(ox, oz);
+
+      // Vaha Çimi & Turkuaz Göl
+      const grass = new THREE.Mesh(new THREE.CircleGeometry(100, 32), new THREE.MeshStandardMaterial({ color: 0x1f5c32, roughness: 0.9 }));
+      grass.rotation.x = -Math.PI / 2;
+      grass.position.y = 0.2;
+      donwhangGroup.add(grass);
+
+      const water = new THREE.Mesh(new THREE.CircleGeometry(48, 32), new THREE.MeshStandardMaterial({ color: 0x00d4ff, roughness: 0.1, metalness: 0.85, transparent: true, opacity: 0.75 }));
+      water.rotation.x = -Math.PI / 2;
+      water.position.y = 0.35;
+      donwhangGroup.add(water);
+
+      // Hurma Palmiyeleri
+      for (let i = 0; i < 10; i++) {
+        const ang = (i / 10) * Math.PI * 2;
+        const px = Math.cos(ang) * 65;
+        const pz = Math.sin(ang) * 65;
+
+        const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 1.1, 16, 8), new THREE.MeshStandardMaterial({ color: 0x5c3d28 }));
+        trunk.position.set(px, 8, pz);
+        donwhangGroup.add(trunk);
+
+        const crown = new THREE.Mesh(new THREE.ConeGeometry(7, 5, 8), new THREE.MeshStandardMaterial({ color: 0x1b8242 }));
+        crown.position.set(px, 17, pz);
+        donwhangGroup.add(crown);
+        collisionObstacles.push({ x: ox + px, z: oz + pz, radius: 2.0, name: "Vaha Palmiyesi" });
+      }
+
+      // Mogao Kayalık Tepesi ve Oyulmuş 4 Mağara Girişi
+      const cliff = new THREE.Mesh(new THREE.BoxGeometry(60, 24, 25), new THREE.MeshStandardMaterial({ color: 0x9e7b4a, roughness: 0.95 }));
+      cliff.position.set(45, 12, 0);
+      donwhangGroup.add(cliff);
+      collisionObstacles.push({ x: ox + 45, z: oz, radius: 18.0, name: "Mogao Kayalıkları" });
+
+      for (let cIdx = -1; cIdx <= 2; cIdx++) {
+        const caveArch = new THREE.Mesh(new THREE.CylinderGeometry(3.5, 3.5, 7, 12, 1, false, 0, Math.PI), new THREE.MeshStandardMaterial({ color: 0x080c14, roughness: 0.9 }));
+        caveArch.rotation.z = Math.PI / 2;
+        caveArch.position.set(32, 4.5, cIdx * 14);
+        donwhangGroup.add(caveArch);
+      }
+
+      donwhangGroup.position.set(ox, elev, oz);
+      scene.add(donwhangGroup);
+    }
+
+    // QIN-SHI ZİNDANI & YERALTI MEZARI (DUNGEON GİRİŞİ)
+    function buildQinShiDungeon(dx, dz) {
+      const dungeonGroup = new THREE.Group();
+      const elev = getTerrainElevation(dx, dz);
+
+      // Devasa Mezar Kapısı (Koyu Obsidyen & Ejderha Dikilitaşları)
+      const p1 = new THREE.Mesh(new THREE.BoxGeometry(6, 30, 6), new THREE.MeshStandardMaterial({ color: 0x121622, roughness: 0.4 }));
+      p1.position.set(-18, 15, 0);
+      const p2 = new THREE.Mesh(new THREE.BoxGeometry(6, 30, 6), new THREE.MeshStandardMaterial({ color: 0x121622, roughness: 0.4 }));
+      p2.position.set(18, 15, 0);
+      const beam = new THREE.Mesh(new THREE.BoxGeometry(42, 6, 7), new THREE.MeshStandardMaterial({ color: 0x121622, roughness: 0.4 }));
+      beam.position.set(0, 31, 0);
+
+      dungeonGroup.add(p1, p2, beam);
+      collisionObstacles.push({ x: dx - 18, z: dz, radius: 4.5, name: "Qin-Shi Zindan Sütunu" });
+      collisionObstacles.push({ x: dx + 18, z: dz, radius: 4.5, name: "Qin-Shi Zindan Sütunu" });
+
+      // Girdaplı Mor Mistisizm Zindan Portalı
+      const portal = new THREE.Mesh(
+        new THREE.RingGeometry(2, 14, 32),
+        new THREE.MeshBasicMaterial({ color: 0xbd00ff, side: THREE.DoubleSide })
+      );
+      portal.position.set(0, 14, -1);
+      dungeonGroup.add(portal);
+
+      dungeonGroup.position.set(dx, elev, dz);
+      scene.add(dungeonGroup);
     }
 
     // TAKLAMAKAN KANYONLARI & KAYALIKLARI
     function buildTaklamakanCanyons() {
       const rockGeo = new THREE.DodecahedronGeometry(1, 1);
-      const rockMat = new THREE.MeshStandardMaterial({ color: 0xb58855, roughness: 0.95 });
+      const rockMat = new THREE.MeshStandardMaterial({ color: 0xb58548, roughness: 0.95 });
 
-      for (let i = 0; i < 65; i++) {
+      for (let i = 0; i < 70; i++) {
         const side = Math.random() > 0.5 ? 1 : -1;
         const rx = side * (45 + Math.random() * 160);
         const rz = -1200 + Math.random() * 2400;
@@ -792,29 +955,56 @@
         rock.castShadow = true;
         rock.receiveShadow = true;
         scene.add(rock);
+
+        collisionObstacles.push({ x: rx, z: rz, radius: scale * 0.85, name: "Taklamakan Kanyon Kayası" });
       }
     }
 
-    // HOTAN KALESİ & KERVANSARAY
+    // HAYDUT DAĞ KALESİ & MAĞARASI
+    function buildBanditStronghold(bx, bz) {
+      const fort = new THREE.Group();
+      const elev = getTerrainElevation(bx, bz);
+
+      // Kütük Kazıklı Siper Surları
+      for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / 6) {
+        const px = Math.cos(angle) * 32;
+        const pz = Math.sin(angle) * 32;
+        const post = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.4, 14, 8), new THREE.MeshStandardMaterial({ color: 0x4a3220 }));
+        post.position.set(px, 7, pz);
+        fort.add(post);
+        collisionObstacles.push({ x: bx + px, z: bz + pz, radius: 2.2, name: "Haydut Kazıklı Suru" });
+      }
+
+      // Haydut Gözetleme Kulesi
+      const tower = new THREE.Mesh(new THREE.BoxGeometry(8, 22, 8), new THREE.MeshStandardMaterial({ color: 0x3d2716 }));
+      tower.position.set(0, 11, 0);
+      fort.add(tower);
+      collisionObstacles.push({ x: bx, z: bz, radius: 5.5, name: "Haydut Gözetleme Kulesi" });
+
+      fort.position.set(bx, elev, bz);
+      scene.add(fort);
+    }
+
+    // HOTAN KALESİ & ÇÖL SARAYI
     function buildHotanFortress(fx, fz) {
       const fortGroup = new THREE.Group();
       const elev = getTerrainElevation(fx, fz);
 
-      // Kerpiç Kale Surları
-      const wallMat = new THREE.MeshStandardMaterial({ color: 0x9e7b4a, roughness: 0.9 });
+      const wallMat = new THREE.MeshStandardMaterial({ color: 0xa88554, roughness: 0.9 });
       for (let side of [-28, 28]) {
         const wall = new THREE.Mesh(new THREE.BoxGeometry(10, 16, 60), wallMat);
         wall.position.set(side, 8, 0);
         wall.castShadow = true;
         fortGroup.add(wall);
+        collisionObstacles.push({ x: fx + side, z: fz, radius: 8.0, name: "Hotan Suru" });
 
-        // Kuleler
         const tower = new THREE.Mesh(new THREE.CylinderGeometry(5, 6, 22, 12), wallMat);
         tower.position.set(side, 11, 30);
         fortGroup.add(tower);
+        collisionObstacles.push({ x: fx + side, z: fz + 30, radius: 6.0, name: "Hotan Kalesi Kulesi" });
       }
 
-      // Kervansaray Pazar Çadırları (Renkli İpek Tenteler)
+      // Kervansaray Pazar Çadırları
       const tentColors = [0xcc0033, 0x0066cc, 0xd4af37, 0x009944];
       for (let i = 0; i < 6; i++) {
         const tx = (i % 2 === 0 ? -1 : 1) * 18;
@@ -825,74 +1015,23 @@
         );
         tent.position.set(tx, 2, tz);
         fortGroup.add(tent);
-
-        // İpek Kumaş Sandıkları
-        const box = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2), new THREE.MeshStandardMaterial({ color: 0x5a3d28 }));
-        box.position.set(tx + 2.5, 1, tz);
-        fortGroup.add(box);
       }
 
       fortGroup.position.set(fx, elev, fz);
       scene.add(fortGroup);
-      outposts.push({ name: "Hotan Kalesi & Kervansaray", x: fx, z: fz, color: 0xffaa00 });
-    }
-
-    // VAHA (OASIS)
-    function buildOasisZone(ox, oz) {
-      const oasisGroup = new THREE.Group();
-      const elev = getTerrainElevation(ox, oz);
-
-      // Vaha Çimi
-      const grass = new THREE.Mesh(
-        new THREE.CircleGeometry(90, 32),
-        new THREE.MeshStandardMaterial({ color: 0x1f5c32, roughness: 0.9 })
-      );
-      grass.rotation.x = -Math.PI / 2;
-      grass.position.y = 0.2;
-      oasisGroup.add(grass);
-
-      // Turkuaz Su Göleti
-      const water = new THREE.Mesh(
-        new THREE.CircleGeometry(45, 32),
-        new THREE.MeshStandardMaterial({ color: 0x00d4ff, roughness: 0.1, metalness: 0.85, transparent: true, opacity: 0.75 })
-      );
-      water.rotation.x = -Math.PI / 2;
-      water.position.y = 0.35;
-      oasisGroup.add(water);
-
-      // Hurma Palmiyeleri
-      for (let i = 0; i < 10; i++) {
-        const ang = (i / 10) * Math.PI * 2;
-        const px = Math.cos(ang) * 60 + (Math.random() - 0.5) * 10;
-        const pz = Math.sin(ang) * 60 + (Math.random() - 0.5) * 10;
-
-        const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 1.1, 16, 8), new THREE.MeshStandardMaterial({ color: 0x5c3d28 }));
-        trunk.position.set(px, 8, pz);
-        trunk.rotation.z = (Math.random() - 0.5) * 0.2;
-        oasisGroup.add(trunk);
-
-        const crown = new THREE.Mesh(new THREE.ConeGeometry(7, 5, 8), new THREE.MeshStandardMaterial({ color: 0x1b8242 }));
-        crown.position.set(px, 17, pz);
-        oasisGroup.add(crown);
-      }
-
-      oasisGroup.position.set(ox, elev, oz);
-      scene.add(oasisGroup);
-      outposts.push({ name: "Donwhang Vahası", x: ox, z: oz, color: 0x00ffaa });
     }
 
     // ====================================================
-    // 7. ZIRHLI LOKOMOTİF KONVOY & TEKERLEK HİYERARŞİSİ (ASLA KOPMAZ)
+    // 7. ZIRHLI LOKOMOTİF KONVOY & MEKANİK DİFERANSİYEL/SÜSPANSİYON
     // ====================================================
     function buildArmoredConvoy() {
       truckRoot = new THREE.Group();
       scene.add(truckRoot);
 
-      // Şasi (Chassis) - truckRoot'un doğrudan çocuğu
       truckChassis = new THREE.Group();
       truckRoot.add(truckChassis);
 
-      // 1. Zırhlı Gövde (Zemin açıklığı 2.4m - batma imkansız)
+      // 1. Zırhlı Gövde (Cobalt Metalik Kaplama)
       const bodyMesh = new THREE.Mesh(
         new THREE.BoxGeometry(4.4, 2.4, 9.2),
         new THREE.MeshStandardMaterial({ color: 0x1c3a63, metalness: 0.75, roughness: 0.3 })
@@ -901,7 +1040,7 @@
       bodyMesh.position.y = 1.35;
       truckChassis.add(bodyMesh);
 
-      // Gövde Yanı Kervan Lider Neon Şeritleri (Görünürlük ve Görsel Derinlik)
+      // Gövde Yanı Kervan Lider Neon Şeritleri
       const stripLeft = new THREE.Mesh(
         new THREE.BoxGeometry(0.12, 0.22, 8.8),
         new THREE.MeshStandardMaterial({ color: 0x00f0ff, emissive: 0x00f0ff, emissiveIntensity: 0.9 })
@@ -916,7 +1055,7 @@
       stripRight.position.set(2.24, 1.45, 0);
       truckChassis.add(stripRight);
 
-      // Arka Fren / Stop Lambaları
+      // Arka Stop / Fren Lambaları
       const tailLeft = new THREE.Mesh(
         new THREE.BoxGeometry(0.7, 0.35, 0.15),
         new THREE.MeshStandardMaterial({ color: 0xff0044, emissive: 0xff0044, emissiveIntensity: 1.6 })
@@ -931,7 +1070,14 @@
       tailRight.position.set(1.7, 1.3, -4.62);
       truckChassis.add(tailRight);
 
-      // Izgara & Tampon
+      // Çift Egzoz Bacaları (Dizel Dumanı Püskürten)
+      [-1.8, 1.8].forEach(ex => {
+        const stack = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.22, 3.8, 12), new THREE.MeshStandardMaterial({ color: 0x111, metalness: 0.9 }));
+        stack.position.set(ex, 3.2, -1.8);
+        truckChassis.add(stack);
+      });
+
+      // Boğa Barı & Çelik Tampon
       const bumper = new THREE.Mesh(
         new THREE.BoxGeometry(4.6, 1.4, 0.7),
         new THREE.MeshStandardMaterial({ color: 0x222a38, metalness: 0.85, roughness: 0.25 })
@@ -947,9 +1093,36 @@
       cockpit.position.set(0, 2.0, 2.5);
       truckChassis.add(cockpit);
 
-      // 2. DÖNER TARET VE NİŞAN ALMA NAMLU DÜZENEĞİ (Raycast Convergence)
+      // ==========================================
+      // GÖRÜNÜR MEKANİK ALT TAKIM: DİFERANSİYEL & AKSLAR & YAYLAR
+      // ==========================================
+      const mechMat = new THREE.MeshStandardMaterial({ color: 0x181e26, metalness: 0.88, roughness: 0.3 });
+      const springMat = new THREE.MeshStandardMaterial({ color: 0xd4af37, metalness: 0.95, roughness: 0.15 });
+
+      // 1. Kardan Şaftı (Longitudinal Drive Shaft)
+      const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 7.2, 10), mechMat);
+      shaft.position.set(0, -0.25, 0);
+      truckChassis.add(shaft);
+
+      // 2. Aks Milleri & Diferansiyel Kovanları (Ön, Orta, Arka)
+      [3.2, 0.0, -3.2].forEach((az, aIdx) => {
+        // Enine Katı Aks Mili (Transverse Solid Axle)
+        const axleBeam = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 4.3, 10), mechMat);
+        axleBeam.rotation.z = Math.PI / 2;
+        axleBeam.position.set(0, -suspensionRestLength * 0.75, az);
+        truckChassis.add(axleBeam);
+
+        // Diferansiyel Kovanı (Differential Pumpkin Gearbox)
+        if (aIdx >= 1) { // Orta ve Arka Diferansiyel
+          const diffPumpkin = new THREE.Mesh(new THREE.SphereGeometry(0.48, 12, 12), mechMat);
+          diffPumpkin.position.set(0, -suspensionRestLength * 0.75, az);
+          truckChassis.add(diffPumpkin);
+        }
+      });
+
+      // 2. DÖNER TARET VE NİŞAN ALMA NAMLU DÜZENEĞİ
       turretBase = new THREE.Group();
-      turretBase.position.set(0, 2.7, 0.6); // Şasi üstünde taret yuvası
+      turretBase.position.set(0, 2.7, 0.6);
       truckChassis.add(turretBase);
 
       const turretRing = new THREE.Mesh(
@@ -962,7 +1135,6 @@
       barrelMount.position.set(0, 0.4, 0);
       turretBase.add(barrelMount);
 
-      // Çift Plazma Namlu
       const bGeo = new THREE.CylinderGeometry(0.18, 0.18, 3.6, 12);
       bGeo.rotateX(Math.PI / 2);
       const bMat = new THREE.MeshStandardMaterial({ color: 0x111, metalness: 0.95, roughness: 0.1 });
@@ -975,7 +1147,7 @@
       rightBarrel.position.set(0.55, 0, 1.8);
       barrelMount.add(rightBarrel);
 
-      // 3. 6 TEKERLEK: TRUCKCHASSIS'İN DOĞRUDAN ÇOCUKLARI (ASLA AYRILIP GİDEMEZ)
+      // 3. 6 TEKERLEK VE BAĞIMSIZ AMORTİSÖR YAYLARI (ŞASİYE KİLİTLİ)
       wheelObjects = [];
       const wheelGeo = new THREE.CylinderGeometry(wheelRadius, wheelRadius, 0.85, 20);
       wheelGeo.rotateZ(Math.PI / 2);
@@ -986,7 +1158,6 @@
       const rimMat = new THREE.MeshStandardMaterial({ color: 0x8fa5c8, metalness: 0.85, roughness: 0.25 });
 
       wheelLocalConfigs.forEach(cfg => {
-        // Tekerlek grubu DOĞRUDAN truckChassis'e eklenir! (Lokal koordinat sistemi)
         const wheelGroup = new THREE.Group();
         wheelGroup.position.set(cfg.x, -suspensionRestLength, cfg.z);
         truckChassis.add(wheelGroup);
@@ -998,14 +1169,28 @@
         const rim = new THREE.Mesh(rimGeo, rimMat);
         tire.add(rim);
 
+        // Helezon Amortisör Yayı (Coil Spring Strut Connecting Chassis to Hub)
+        const springGroup = new THREE.Group();
+        const strut = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, suspensionRestLength, 8), mechMat);
+        strut.position.y = suspensionRestLength * 0.5;
+        springGroup.add(strut);
+
+        const coil = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, suspensionRestLength * 0.85, 10), springMat);
+        coil.position.y = suspensionRestLength * 0.5;
+        springGroup.add(coil);
+
+        springGroup.position.set(cfg.x * 0.75, -suspensionRestLength, cfg.z);
+        truckChassis.add(springGroup);
+
         wheelObjects.push({
           group: wheelGroup,
           tire: tire,
+          spring: springGroup,
           cfg: cfg
         });
       });
 
-      // B. KONVOY RÖMORK VAGONLARI (TRAILER 1 & TRAILER 2)
+      // B. KONVOY RÖMORK VAGONLARI (TRAILER 1 & TRAILER 2 - GENİŞLETİLMİŞ MESAFE)
       trailers = [];
       for (let tIdx = 1; tIdx <= 2; tIdx++) {
         const trailerGroup = new THREE.Group();
@@ -1020,7 +1205,7 @@
         box.castShadow = true;
         trailerGroup.add(box);
 
-        // Kargo Neon Göstergesi
+        // Neon Şerit
         const strip = new THREE.Mesh(
           new THREE.BoxGeometry(4.1, 0.2, 6.2),
           new THREE.MeshStandardMaterial({ color: tIdx === 1 ? 0xffaa00 : 0x00f0ff, emissive: tIdx === 1 ? 0xffaa00 : 0x00f0ff, emissiveIntensity: 0.8 })
@@ -1028,7 +1213,7 @@
         strip.position.y = 2.2;
         trailerGroup.add(strip);
 
-        // 4 Tekerlek
+        // 4 Tekerlek & Aks
         const tWheels = [];
         for (let tz of [-2.0, 2.0]) {
           for (let tx of [-2.2, 2.2]) {
@@ -1039,22 +1224,30 @@
           }
         }
 
-        // Muhafız İnsan Karakter
-        const guard = buildHumanGuard();
+        // Çeki Demiri (Tow Hitch Bar)
+        const hitch = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 4.0, 8), mechMat);
+        hitch.rotation.x = Math.PI / 2;
+        hitch.position.set(0, 1.2, 4.8);
+        trailerGroup.add(hitch);
+
+        // Muhafız İnsan Karakter (Otomatik Saldıran Avcı)
+        const guard = buildHumanGuard(tIdx);
         guard.position.set(0, 3.3, 0);
         trailerGroup.add(guard);
 
         trailers.push({
           group: trailerGroup,
+          guard: guard,
           wheels: tWheels,
-          distanceLag: tIdx * 9.5
+          distanceLag: tIdx * 14.5, // 14.5m ve 29.0m (asla birbirinin içine girmez!)
+          guardType: tIdx === 1 ? "CROSSBOW" : "MAGE"
         });
       }
     }
 
-    function buildHumanGuard() {
+    function buildHumanGuard(guardIdx) {
       const human = new THREE.Group();
-      const torso = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.2, 0.5), new THREE.MeshStandardMaterial({ color: 0x2244aa }));
+      const torso = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.2, 0.5), new THREE.MeshStandardMaterial({ color: guardIdx === 1 ? 0x2244aa : 0x882299 }));
       torso.position.y = 1.0;
       human.add(torso);
 
@@ -1062,10 +1255,10 @@
       head.position.y = 1.85;
       human.add(head);
 
-      const spear = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 2.8, 8), new THREE.MeshStandardMaterial({ color: 0xd4af37 }));
-      spear.position.set(0.6, 1.6, 0.2);
-      spear.rotation.z = -0.2;
-      human.add(spear);
+      const weapon = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 2.8, 8), new THREE.MeshStandardMaterial({ color: 0xd4af37 }));
+      weapon.position.set(0.6, 1.6, 0.2);
+      weapon.rotation.z = -0.2;
+      human.add(weapon);
 
       return human;
     }
@@ -1127,7 +1320,6 @@
         bTurret.position.set(0, 2.0, 0);
         bGroup.add(bTurret);
 
-        // Can Barı
         const hpBg = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 0.35), new THREE.MeshBasicMaterial({ color: 0x000 }));
         hpBg.position.set(0, 3.2, 0);
         bGroup.add(hpBg);
@@ -1163,7 +1355,6 @@
     // 9. NİŞANGÂH (CROSSHAIR) RAYCASTING & TARET KİLİTLENMESİ
     // ====================================================
     function updateAimConvergence() {
-      // Ekran merkezindeki (0, 0) crosshair'dan sahneye ışın fırlat
       raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
 
       const targetCandidates = [];
@@ -1179,17 +1370,14 @@
         if (currentAimTarget.y < gY) currentAimTarget.y = gY;
       }
 
-      // Taret Kaidesinin Hedefe Dönüşü (Yaw)
       if (turretBase) {
         const turretWorldPos = new THREE.Vector3();
         turretBase.getWorldPosition(turretWorldPos);
 
         const aimDirWorld = currentAimTarget.clone().sub(turretWorldPos);
         const aimAngle = Math.atan2(aimDirWorld.x, aimDirWorld.z);
-        // Şasi rotasyonuna göre lokal açı
         turretBase.rotation.y = aimAngle - vehicleHeading;
 
-        // Namluların Pitch Açısı (Yukarı/Aşağı nişan)
         if (barrelMount) {
           const horizDist = Math.hypot(aimDirWorld.x, aimDirWorld.z);
           const pitchAngle = Math.atan2(aimDirWorld.y, horizDist);
@@ -1198,7 +1386,7 @@
       }
     }
 
-    // OYUNCU ATEŞ ETME: MERMİ TAM CROSSHAIR HEDEFİNE GİDER
+    // OYUNCU ATEŞ ETME
     function shootLaser() {
       playLaserSound(false);
       lastShootTime = Date.now();
@@ -1219,7 +1407,6 @@
       activeBarrel.getWorldPosition(spawnPos);
       bullet.position.copy(spawnPos);
 
-      // MERMİ DOĞRULTUSU: Tam olarak crosshair raycast hedef noktasına (targetPoint) yönelir!
       const shootDir = currentAimTarget.clone().sub(spawnPos).normalize();
       bullet.lookAt(spawnPos.clone().add(shootDir));
 
@@ -1230,6 +1417,60 @@
         life: 80,
         speed: 5.5,
         damage: dmg
+      });
+    }
+
+    // MUHAFIZLARIN OTOMATİK SALDIRISI (AUTO-ATTACK)
+    function updateHunterAutoAttack() {
+      if (!isAutoAttackActive) return;
+      if (Date.now() - lastHunterAutoShoot < 1100) return;
+      lastHunterAutoShoot = Date.now();
+
+      trailers.forEach(tr => {
+        // En yakın düşmanı veya canavarı bul (Menzil 65m)
+        let closestTarget = null;
+        let minDist = 65.0;
+
+        const allHostiles = [...enemies.filter(e => e.alive), ...monsters.filter(m => m.alive)];
+        allHostiles.forEach(h => {
+          const d = tr.group.position.distanceTo(h.group.position);
+          if (d < minDist) {
+            minDist = d;
+            closestTarget = h;
+          }
+        });
+
+        if (closestTarget) {
+          // Muhafızı hedefe döndür
+          tr.guard.lookAt(closestTarget.group.position.x, tr.guard.position.y, closestTarget.group.position.z);
+
+          // İzli Plazma Oku / Mızrağı Ateşle
+          const arrowGeo = new THREE.CylinderGeometry(0.12, 0.12, 2.5, 6);
+          arrowGeo.rotateX(Math.PI / 2);
+          const arrowColor = tr.guardType === "CROSSBOW" ? 0x00ffaa : 0xbd00ff;
+          const arrowMesh = new THREE.Mesh(arrowGeo, new THREE.MeshBasicMaterial({ color: arrowColor }));
+
+          const startPos = new THREE.Vector3();
+          tr.guard.getWorldPosition(startPos);
+          startPos.y += 1.5;
+          arrowMesh.position.copy(startPos);
+
+          const aimPos = closestTarget.group.position.clone();
+          aimPos.y += 1.2;
+          const dir = aimPos.sub(startPos).normalize();
+          arrowMesh.lookAt(startPos.clone().add(dir));
+
+          scene.add(arrowMesh);
+          hunterArrows.push({
+            mesh: arrowMesh,
+            dir: dir,
+            life: 60,
+            speed: 4.8,
+            damage: 48
+          });
+
+          playHitSound();
+        }
       });
     }
 
@@ -1261,7 +1502,7 @@
       const container = document.getElementById('damage-container');
       const div = document.createElement('div');
       div.className = `damage-popup ${isCrit ? 'damage-crit' : ''} ${isHeal ? 'heal-popup' : ''}`;
-      div.innerText = isHeal ? `+${amount} HP` : (isCrit ? `CRIT! -${amount}` : `-${amount}`);
+      div.innerText = isHeal ? `+${amount} HP` : (isCrit ? `💥 -${amount}` : `-${amount}`);
 
       const pos = new THREE.Vector3(x, y + 2, z).project(camera);
       const sx = (pos.x * 0.5 + 0.5) * window.innerWidth;
@@ -1279,8 +1520,23 @@
       setTimeout(() => { hm.style.opacity = '0'; }, 70);
     }
 
+    function spawnSparkBurst(x, y, z) {
+      for (let i = 0; i < 18; i++) {
+        const sGeo = new THREE.SphereGeometry(0.12, 4, 4);
+        const sMat = new THREE.MeshBasicMaterial({ color: Math.random() > 0.5 ? 0xffaa00 : 0xff3300 });
+        const p = new THREE.Mesh(sGeo, sMat);
+        p.position.set(x, y, z);
+        scene.add(p);
+        sparkParticles.push({
+          mesh: p,
+          vel: new THREE.Vector3((Math.random() - 0.5) * 1.5, Math.random() * 1.2 + 0.3, (Math.random() - 0.5) * 1.5),
+          life: 25
+        });
+      }
+    }
+
     // ====================================================
-    // 10. KULLANICI GİRİŞLERİ (F11 SERBEST, DOĞAL FARE)
+    // 10. KULLANICI GİRİŞLERİ (M TUŞU HARİTA & R OTO-SALDIRI)
     // ====================================================
     function setupInputHandlers() {
       window.addEventListener('keydown', e => {
@@ -1289,6 +1545,8 @@
         if (keys.hasOwnProperty(k)) keys[k] = true;
         if (k === 'v') toggleCamera();
         if (k === 'b') toggleBazaar();
+        if (k === 'm') toggleWorldMap();
+        if (k === 'r') toggleAutoAttack();
 
         if (e.code === 'Space') {
           if (zerkPercent >= 100) activateBerserker();
@@ -1313,7 +1571,7 @@
 
       window.addEventListener('mouseup', () => { isShootingHeld = false; });
 
-      // DOĞAL FARE HAREKETİ (Mouse Up = Look Up, Mouse Down = Look Down)
+      // DOĞAL FARE HAREKETİ
       document.addEventListener('mousemove', e => {
         if (!isPointerLocked) return;
         const sens = 0.0022;
@@ -1330,6 +1588,9 @@
       document.getElementById('btnCamera').addEventListener('click', toggleCamera);
       document.getElementById('btnBazaar').addEventListener('click', toggleBazaar);
       document.getElementById('btnBazaarClose').addEventListener('click', toggleBazaar);
+      document.getElementById('btnWorldMap').addEventListener('click', toggleWorldMap);
+      document.getElementById('btnWorldMapClose').addEventListener('click', toggleWorldMap);
+      document.getElementById('btnAutoAttack').addEventListener('click', toggleAutoAttack);
 
       document.getElementById('pillTrade').addEventListener('click', () => {
         document.getElementById('pillTrade').classList.add('active');
@@ -1363,6 +1624,24 @@
       const show = (modal.style.display !== 'block');
       modal.style.display = show ? 'block' : 'none';
       if (show && isPointerLocked) document.exitPointerLock();
+    }
+
+    function toggleWorldMap() {
+      const mapModal = document.getElementById('worldMapWindow');
+      const show = (mapModal.style.display !== 'flex');
+      mapModal.style.display = show ? 'flex' : 'none';
+      if (show) {
+        if (isPointerLocked) document.exitPointerLock();
+        drawWorldMapFullscreen();
+      }
+    }
+
+    function toggleAutoAttack() {
+      isAutoAttackActive = !isAutoAttackActive;
+      const btn = document.getElementById('btnAutoAttack');
+      btn.innerText = isAutoAttackActive ? "⚔️ Oto-Saldırı: AÇIK [R]" : "⚔️ Oto-Saldırı: KAPALI [R]";
+      btn.className = isAutoAttackActive ? "btn-action btn-green" : "btn-action btn-purple";
+      showNotice(isAutoAttackActive ? "🛡️ Muhafız Otomatik Saldırı Sistemi Devrede!" : "⚠️ Muhafız Otomatik Saldırısı Kapatıldı!");
     }
 
     function activateBerserker() {
@@ -1480,7 +1759,7 @@
     }
 
     // ====================================================
-    // 11. ANA OYUN, FİZİK VE GÜNCELLEME DÖNGÜSÜ (60 FPS)
+    // 11. ANA OYUN, FİZİK, ÇARPIŞMA VE DÖNGÜ (60 FPS)
     // ====================================================
     function animateGame() {
       requestAnimationFrame(animateGame);
@@ -1491,6 +1770,9 @@
       if (isShootingHeld && Date.now() - lastShootTime > (isZerkActive ? 80 : 130)) {
         shootLaser();
       }
+
+      // Muhafızların Otomatik Saldırısı
+      updateHunterAutoAttack();
 
       // ZEMİN ÇEKİŞİ & SÜRTÜNME HESABI
       const surface = getSurfacePhysics(vehicleX);
@@ -1512,6 +1794,42 @@
         vehicleHeading += steerAngle * 0.07 * turnDir * surface.traction;
       }
 
+      // ==========================================
+      // FİZİKSEL ÇARPIŞMA VE HASAR KONTROLÜ
+      // ==========================================
+      const nextX = vehicleX + Math.sin(vehicleHeading) * vehicleSpeed;
+      const nextZ = vehicleZ + Math.cos(vehicleHeading) * vehicleSpeed;
+
+      for (let obs of collisionObstacles) {
+        const dist = Math.hypot(nextX - obs.x, nextZ - obs.z);
+        const colRadius = 3.2 + obs.radius;
+
+        if (dist < colRadius) {
+          const impactSpeed = Math.abs(vehicleSpeed);
+          if (impactSpeed > 0.08) {
+            playCrashSound();
+            const impactDmg = Math.round(impactSpeed * 340 + 30);
+
+            if (shield > 0) shield = Math.max(0, shield - impactDmg);
+            else hp = Math.max(0, hp - impactDmg);
+            updateHudBars();
+
+            cameraShake = Math.min(1.4, impactSpeed * 0.9 + 0.2);
+            createDamagePopup(vehicleX, vehicleY + 2.5, vehicleZ, impactDmg, true);
+            spawnSparkBurst(vehicleX, vehicleY + 1.2, vehicleZ);
+            showNotice(`💥 ÇARPIŞMA: ${obs.name}! (-${impactDmg} Hasar)`);
+
+            // Geri Tepme / Fiziksel İtme (Rebound)
+            vehicleSpeed = -vehicleSpeed * 0.45;
+            const nx = (vehicleX - obs.x) / (dist || 1);
+            const nz = (vehicleZ - obs.z) / (dist || 1);
+            vehicleX = obs.x + nx * (colRadius + 0.2);
+            vehicleZ = obs.z + nz * (colRadius + 0.2);
+          }
+          break;
+        }
+      }
+
       vehicleX += Math.sin(vehicleHeading) * vehicleSpeed;
       vehicleZ += Math.cos(vehicleHeading) * vehicleSpeed;
 
@@ -1523,27 +1841,24 @@
       const sinH = Math.sin(vehicleHeading);
 
       wheelObjects.forEach(w => {
-        // Tekerleğin dünyadaki zemin yüksekliğini bul
         const wx = vehicleX + (w.cfg.x * cosH + w.cfg.z * sinH);
         const wz = vehicleZ + (-w.cfg.x * sinH + w.cfg.z * cosH);
         const groundElev = getTerrainElevation(wx, wz);
         totalElev += groundElev;
 
-        // Süspansiyon sıkışması / açılması
         const suspensionDelta = (groundElev + wheelRadius) - vehicleY;
         const clampedTravel = Math.max(-0.65, Math.min(0.65, suspensionDelta));
 
-        // LOKAL POZİSYON: Tekerlek truckChassis'e kesinlikle bağlı kalır!
+        // LOKAL POZİSYON: Tekerlek ve Helezon Yay Şasiye Kilitli
         w.group.position.set(w.cfg.x, -suspensionRestLength + clampedTravel, w.cfg.z);
+        w.spring.position.set(w.cfg.x * 0.75, -suspensionRestLength + clampedTravel * 0.5, w.cfg.z);
 
-        // Ön tekerlekler direksiyonla döner
         if (w.cfg.isFront) {
           w.group.rotation.y = steerAngle;
         } else {
           w.group.rotation.y = 0;
         }
 
-        // Tekerlek kendi aksında döner (Roll)
         w.tire.rotation.x += vehicleSpeed * 0.4;
 
         if (w.cfg.z > 0) frontH += groundElev;
@@ -1553,7 +1868,6 @@
         else if (w.cfg.x > 0) rightH += groundElev;
       });
 
-      // Şasi ortalama zemin yüksekliği + süspansiyon dinlenme mesafesi
       const avgElevation = totalElev / 6.0;
       const targetChassisY = avgElevation + suspensionRestLength + 0.3;
       vehicleY = THREE.MathUtils.lerp(vehicleY, targetChassisY, 0.22);
@@ -1569,12 +1883,12 @@
       document.getElementById('txtSpeed').innerText = Math.round(Math.abs(vehicleSpeed) * 88);
       document.getElementById('txtAltitude').innerText = Math.round(vehicleY);
 
-      // KONVOY TAKİP KİNEMATİĞİ (Breadcrumbs)
+      // KONVOY TAKİP KİNEMATİĞİ (Genişletilmiş Takip Mesafesi - Asla İçe Girmez)
       convoyPathHistory.unshift({ x: vehicleX, y: vehicleY, z: vehicleZ, heading: vehicleHeading });
-      if (convoyPathHistory.length > 120) convoyPathHistory.pop();
+      if (convoyPathHistory.length > 250) convoyPathHistory.pop();
 
       trailers.forEach(tr => {
-        const historyIdx = Math.min(convoyPathHistory.length - 1, Math.round(tr.distanceLag * 2.2));
+        const historyIdx = Math.min(convoyPathHistory.length - 1, Math.round(tr.distanceLag * 2.8));
         const trailPoint = convoyPathHistory[historyIdx] || { x: vehicleX, y: vehicleY, z: vehicleZ, heading: vehicleHeading };
 
         tr.group.position.set(trailPoint.x, trailPoint.y, trailPoint.z);
@@ -1582,26 +1896,32 @@
         tr.wheels.forEach(tw => tw.rotation.x += vehicleSpeed * 0.4);
       });
 
-      // KAMERA TAKİBİ (TPS ORBIT - Tam Crosshair Hizalı)
+      // KAMERA TAKİBİ & ÇARPIŞMA TİTREMESİ (Camera Shake)
+      let shakeX = 0, shakeY = 0;
+      if (cameraShake > 0.01) {
+        shakeX = (Math.random() - 0.5) * cameraShake;
+        shakeY = (Math.random() - 0.5) * cameraShake;
+        cameraShake *= 0.88;
+      }
+
       if (isFPS) {
         camera.position.set(
-          vehicleX + Math.sin(vehicleHeading) * 2.2,
-          vehicleY + 4.2,
+          vehicleX + Math.sin(vehicleHeading) * 2.2 + shakeX,
+          vehicleY + 4.2 + shakeY,
           vehicleZ + Math.cos(vehicleHeading) * 2.2
         );
         camera.rotation.set(-camPitch, camYaw, 0, 'YXZ');
       } else {
-        const camDist = 26.0;
+        const camDist = 28.0;
         const camHoriz = camDist * Math.cos(camPitch);
-        const camVert = camDist * Math.sin(camPitch) + 5.0;
+        const camVert = camDist * Math.sin(camPitch) + 5.5;
 
-        const camX = vehicleX - Math.sin(camYaw) * camHoriz;
+        const camX = vehicleX - Math.sin(camYaw) * camHoriz + shakeX;
         const camZ = vehicleZ - Math.cos(camYaw) * camHoriz;
-        const camY = vehicleY + camVert;
+        const camY = vehicleY + camVert + shakeY;
 
         camera.position.set(camX, camY, camZ);
 
-        // Kamera tam crosshair merkezine bakar (aracın tavanına değil!)
         const lookAheadDist = 80.0;
         const lookTarget = new THREE.Vector3(
           vehicleX + Math.sin(camYaw) * lookAheadDist,
@@ -1613,6 +1933,18 @@
 
       // RAYCAST İLE NİŞANGÂH VE TARET KİLİTLENMESİ
       updateAimConvergence();
+
+      // PARÇACIK EFEKTLERİ (Kıvılcımlar)
+      for (let sIdx = sparkParticles.length - 1; sIdx >= 0; sIdx--) {
+        const sp = sparkParticles[sIdx];
+        sp.mesh.position.add(sp.vel);
+        sp.vel.y -= 0.05; // Yerçekimi
+        sp.life--;
+        if (sp.life <= 0) {
+          scene.remove(sp.mesh);
+          sparkParticles.splice(sIdx, 1);
+        }
+      }
 
       // OYUNCU MERMİLERİ VE ÇARPIŞMALAR
       for (let i = bullets.length - 1; i >= 0; i--) {
@@ -1694,6 +2026,57 @@
         }
       }
 
+      // MUHAFIZ OKLARI / PLAZMA MERMİLERİ (AUTO-ATTACK)
+      for (let aIdx = hunterArrows.length - 1; aIdx >= 0; aIdx--) {
+        const ar = hunterArrows[aIdx];
+        ar.mesh.position.addScaledVector(ar.dir, ar.speed);
+        ar.life--;
+
+        // Haydutlara isabet
+        for (let e of enemies) {
+          if (e.alive && ar.mesh.position.distanceTo(e.group.position) < 3.8) {
+            e.hp -= ar.damage;
+            createDamagePopup(e.group.position.x, e.group.position.y + 1, e.group.position.z, ar.damage);
+            e.hpBar.scale.x = Math.max(0, e.hp / e.maxHp);
+            ar.life = 0;
+            if (e.hp <= 0) {
+              playExplosionSound();
+              e.alive = false;
+              scene.remove(e.group);
+              kills++;
+              gold += 6000;
+              document.getElementById('txtKills').innerText = kills;
+              document.getElementById('txtGold').innerText = gold.toLocaleString();
+            }
+            break;
+          }
+        }
+
+        // Canavarlara isabet
+        for (let m of monsters) {
+          if (m.alive && ar.mesh.position.distanceTo(m.group.position) < 3.0) {
+            m.hp -= ar.damage;
+            createDamagePopup(m.group.position.x, m.group.position.y + 1, m.group.position.z, ar.damage);
+            ar.life = 0;
+            if (m.hp <= 0) {
+              playExplosionSound();
+              m.alive = false;
+              scene.remove(m.group);
+              kills++;
+              gold += 2500;
+              document.getElementById('txtKills').innerText = kills;
+              document.getElementById('txtGold').innerText = gold.toLocaleString();
+            }
+            break;
+          }
+        }
+
+        if (ar.life <= 0) {
+          scene.remove(ar.mesh);
+          hunterArrows.splice(aIdx, 1);
+        }
+      }
+
       // DÜŞMAN MERMİLERİ
       for (let j = enemyBullets.length - 1; j >= 0; j--) {
         const eb = enemyBullets[j];
@@ -1714,7 +2097,7 @@
         }
       }
 
-      // HAYDUT YAPAY ZEKASI (Ateş Etme & 95m Menzil Aşımı İyileşme)
+      // HAYDUT YAPAY ZEKASI
       enemies.forEach(e => {
         if (!e.alive) return;
         const distToTruck = e.group.position.distanceTo(new THREE.Vector3(vehicleX, vehicleY, vehicleZ));
@@ -1771,8 +2154,14 @@
         }
       });
 
-      // ŞEHİR VARIŞ KONTROLÜ
-      outposts.forEach(p => {
+      // ŞEHRE VARIŞ KONTROLÜ
+      const outpostsLocations = [
+        { name: "Jangan Şehir Kapısı", x: 0, z: -500 },
+        { name: "Donwhang Vahası", x: 300, z: 100 },
+        { name: "Hotan Kalesi", x: 0, z: 750 }
+      ];
+
+      outpostsLocations.forEach(p => {
         const dist = Math.hypot(vehicleX - p.x, vehicleZ - p.z);
         if (dist < 38 && loadedCargo > 0) {
           const reward = loadedCargo * 35000;
@@ -1786,6 +2175,10 @@
       });
 
       drawRadar();
+      if (document.getElementById('worldMapWindow').style.display === 'flex') {
+        drawWorldMapFullscreen();
+      }
+
       renderer.render(scene, camera);
     }
 
@@ -1809,7 +2202,7 @@
       ctx.arc(w/2, h/2, 75, 0, Math.PI * 2);
       ctx.stroke();
 
-      // Haydutlar (Kırmızı / Yeşil İyileşen)
+      // Haydutlar
       enemies.forEach(e => {
         if (!e.alive) return;
         const dx = (e.group.position.x - vehicleX) * radarScale;
@@ -1820,7 +2213,7 @@
         ctx.fill();
       });
 
-      // Canavarlar (Mor)
+      // Canavarlar
       monsters.forEach(m => {
         if (!m.alive) return;
         const dx = (m.group.position.x - vehicleX) * radarScale;
@@ -1831,8 +2224,13 @@
         ctx.fill();
       });
 
-      // Şehirler (Altın Sarı)
-      outposts.forEach(p => {
+      // Şehirler
+      const keyPoints = [
+        { x: 0, z: -500 },
+        { x: 300, z: 100 },
+        { x: 0, z: 750 }
+      ];
+      keyPoints.forEach(p => {
         const dx = (p.x - vehicleX) * radarScale;
         const dz = (p.z - vehicleZ) * radarScale;
         ctx.fillStyle = "#ffcc00";
@@ -1841,7 +2239,7 @@
         ctx.fill();
       });
 
-      // Konvoy Lideri (Mavi Ok)
+      // Konvoy Lideri
       ctx.save();
       ctx.translate(w/2, h/2);
       ctx.rotate(-vehicleHeading);
@@ -1855,7 +2253,124 @@
       ctx.restore();
     }
 
-    window.onload = initGame;
+    // ====================================================
+    // 13. SİLKROAD DÜNYA HARİTASI [M] ÇİZİMİ
+    // ====================================================
+    function drawWorldMapFullscreen() {
+      const c = document.getElementById('world-map-canvas');
+      const ctx = c.getContext('2d');
+      const cw = c.width, ch = c.height;
+
+      ctx.clearRect(0, 0, cw, ch);
+
+      // Antik İpek Yolu Parşömen Teması
+      ctx.fillStyle = "#0b1524";
+      ctx.fillRect(0, 0, cw, ch);
+
+      // Koordinat Grid Çizgileri
+      ctx.strokeStyle = "rgba(0, 240, 255, 0.12)";
+      ctx.lineWidth = 1;
+      for (let x = 0; x < cw; x += 50) {
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, ch); ctx.stroke();
+      }
+      for (let y = 0; y < ch; y += 50) {
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(cw, y); ctx.stroke();
+      }
+
+      // Dünya Koordinat Dönüşüm Fonksiyonu (Center = 0, 0)
+      const scale = 0.26;
+      function worldToMap(wx, wz) {
+        return {
+          mx: cw / 2 + wx * scale,
+          my: ch / 2 + wz * scale
+        };
+      }
+
+      // Antik İpek Yolu Otoyolu Çizgisi
+      ctx.strokeStyle = "rgba(212, 175, 55, 0.6)";
+      ctx.lineWidth = 4;
+      ctx.setLineDash([8, 6]);
+      ctx.beginPath();
+      const pStart = worldToMap(0, -800);
+      const pEnd = worldToMap(0, 950);
+      ctx.moveTo(pStart.mx, pStart.my);
+      ctx.lineTo(pEnd.mx, pEnd.my);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Bölgeler ve Kaleler
+      const worldLocations = [
+        { name: "🏯 Jangan İmparatorluk Başkenti", x: 0, z: -500, color: "#00f0ff", type: "CITY" },
+        { name: "🏝️ Donwhang & Mogao Mağaraları", x: 300, z: 100, color: "#00ff88", type: "CAVE" },
+        { name: "💀 Qin-Shi Zindanı (Dungeon)", x: -320, z: 220, color: "#bd00ff", type: "DUNGEON" },
+        { name: "🏜️ Taklamakan Kanyon Labirenti", x: 0, z: 350, color: "#ffaa00", type: "CANYON" },
+        { name: "⚔️ Haydut Dağ Kalesi & Eşkıya Mağarası", x: 350, z: 520, color: "#ff0044", type: "STRONGHOLD" },
+        { name: "👑 Hotan Kalesi & Çöl Sarayı", x: 0, z: 750, color: "#ffd700", type: "CITY" }
+      ];
+
+      worldLocations.forEach(loc => {
+        const mp = worldToMap(loc.x, loc.z);
+        ctx.fillStyle = loc.color;
+        ctx.shadowColor = loc.color;
+        ctx.shadowBlur = 10;
+        ctx.beginPath();
+        ctx.arc(mp.mx, mp.my, 8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        ctx.font = "bold 11px Segoe UI, sans-serif";
+        ctx.fillStyle = "#ffffff";
+        ctx.fillText(loc.name, mp.mx + 12, mp.my + 4);
+      });
+
+      // Haydutlar (Kırmızı Noktalar)
+      enemies.forEach(e => {
+        if (!e.alive) return;
+        const mp = worldToMap(e.group.position.x, e.group.position.z);
+        ctx.fillStyle = "#ff0044";
+        ctx.beginPath();
+        ctx.arc(mp.mx, mp.my, 3.5, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      // Canavarlar (Mor Noktalar)
+      monsters.forEach(m => {
+        if (!m.alive) return;
+        const mp = worldToMap(m.group.position.x, m.group.position.z);
+        ctx.fillStyle = "#bd00ff";
+        ctx.beginPath();
+        ctx.arc(mp.mx, mp.my, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      // Oyuncu ve Konvoy Konumu (Mavi Işıklı Ok)
+      const pPos = worldToMap(vehicleX, vehicleZ);
+      ctx.save();
+      ctx.translate(pPos.mx, pPos.my);
+      ctx.rotate(-vehicleHeading);
+      ctx.shadowColor = "#00f0ff";
+      ctx.shadowBlur = 14;
+      ctx.fillStyle = "#00f0ff";
+      ctx.beginPath();
+      ctx.moveTo(0, -11);
+      ctx.lineTo(8, 9);
+      ctx.lineTo(-8, 9);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+
+      // Harita İçi Canlı Konum Bilgisi
+      ctx.fillStyle = "rgba(0, 240, 255, 0.9)";
+      ctx.font = "bold 12px Segoe UI, sans-serif";
+      ctx.fillText(`KONUM: X: ${Math.round(vehicleX)} m | Z: ${Math.round(vehicleZ)} m | RAKIM: ${Math.round(vehicleY)} m`, 15, ch - 15);
+    }
+
+    window.onload = function() {
+      initGame();
+      if (window.location.search.includes('map=1')) {
+        setTimeout(toggleWorldMap, 200);
+      }
+    };
   </script>
 </body>
 </html>
