@@ -1,11 +1,12 @@
 {
   "project": "Silkroad Online V2 - Modern 3D Game Engine",
-  "progress_percent": 57,
+  "progress_percent": 71,
   "completed_modules": [
     "guard",
     "character",
     "alchemy",
-    "caravan"
+    "caravan",
+    "combat"
   ],
   "current_module_index": 0,
   "created_at": "2026-10-03 02:52:57",
