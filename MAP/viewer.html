@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<title>Silkroad Online 3D Dunya & Zindan Goruntuleyici</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0b1220; font-family: Segoe UI, sans-serif; color: #dfe8f5; user-select: none; }
+  #c { display: block; width: 100%; height: 100%; }
+  
+  #hud { position: absolute; top: 12px; left: 12px; background: rgba(8, 14, 28, .88); padding: 12px 16px; border-radius: 8px; font-size: 13px; line-height: 1.6; min-width: 280px; box-shadow: 0 4px 16px rgba(0,0,0,.5); border: 1px solid #1f3050; }
+  #hud b { color: #ffd479; }
+  #hud select, #hud input[type=number] { background: #121c33; color: #fff; border: 1px solid #2c3d63; border-radius: 4px; padding: 3px 6px; font-size: 12px; }
+  #hud button { background: #1f4fa0; color: #fff; border: 0; border-radius: 4px; padding: 4px 12px; cursor: pointer; font-weight: bold; }
+  #hud button:hover { background: #2c68cf; }
+  
+  .hud-row { margin-top: 6px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  
+  #minimap-container { position: absolute; right: 12px; bottom: 12px; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+  #mini { border: 2px solid #2c3d63; border-radius: 6px; cursor: crosshair; image-rendering: pixelated; background: #000; box-shadow: 0 4px 12px rgba(0,0,0,.6); }
+  #local-mini { width: 128px; height: 128px; border: 2px solid #ffd479; border-radius: 6px; background: #000; object-fit: cover; }
+  
+  #music-bar { position: absolute; bottom: 12px; left: 12px; background: rgba(8, 14, 28, .85); padding: 8px 14px; border-radius: 8px; font-size: 12px; display: flex; align-items: center; gap: 10px; border: 1px solid #1f3050; }
+  #music-bar span { color: #4ade80; font-weight: bold; }
+  
+  #help { position: absolute; top: 12px; right: 12px; background: rgba(8, 14, 28, .75); padding: 6px 12px; border-radius: 6px; font-size: 11px; opacity: .8; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="hud">
+  <div><b>Silkroad Dunyasi & Zindanlari</b> — <span id="stat">Yukleniyor…</span></div>
+  <div>Bolge: <span id="reg">-</span> &nbsp; Yukseklik: <span id="hgt">-</span>m</div>
+  <div>Yuklu Bolgeler: <span id="cnt">0</span></div>
+  
+  <div class="hud-row">
+    <span>Hizli Sehir:</span>
+    <select id="sel-city">
+      <option value="168,97" selected>Jangan (Çin Başkenti)</option>
+      <option value="168,98">Jangan Sarayı (İmparatorluk Sarayı)</option>
+      <option value="157,98">Donwhang (Vaha Şehri)</option>
+      <option value="135,92">Hotan (Vaha Kalesi & Şehir Merkezi)</option>
+      <option value="107,107">Samarkand (Orta Asya)</option>
+      <option value="78,106">Constantinople (Avrupa Başkenti)</option>
+      <option value="53,90">Alexandria (Mısır Limanı)</option>
+      <option value="110,86">Roc Dağı (Zirve)</option>
+    </select>
+  </div>
+
+  <div class="hud-row">
+    <span>Zindan:</span>
+    <select id="sel-dungeon">
+      <option value="">-- Zindan Secin --</option>
+    </select>
+    <button id="btn-enter-dungeon">Gir</button>
+  </div>
+
+  <div class="hud-row">
+    <span>Koor:</span>
+    X <input id="gx" type="number" value="168">
+    Z <input id="gz" type="number" value="97">
+    <button id="go">Git</button>
+  </div>
+
+  <div class="hud-row" style="margin-top: 8px;">
+    <label><input id="real-models" type="checkbox" checked> Gercek 3D</label>
+    <label><input id="objs" type="checkbox" checked> Objeler</label>
+    <label><input id="events" type="checkbox"> Etkinlikler</label>
+    <label><input id="wire" type="checkbox"> Cizgi</label>
+  </div>
+</div>
+
+<div id="music-bar">
+  <span>🎵 BGM:</span>
+  <span id="bgm-title">jangan_town.ogg</span>
+  <input id="vol" type="range" min="0" max="1" step="0.05" value="0.4" style="width: 70px;">
+  <button id="btn-mute" style="padding: 2px 6px; font-size: 11px;">Sessiz</button>
+</div>
+
+<div id="minimap-container">
+  <img id="local-mini" src="../MINIMAP/world/97_168.jpg" alt="Bolge Mini Haritasi" title="Mevcut Bolge">
+  <canvas id="mini"></canvas>
+</div>
+
+<div id="help">Sol Tik: Dondur · Sag Tik: Kaydir · Tekerlek: Yakinlas · WASD: Hareket · Mini Harita: Tikla Isinlan</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="SilkroadMap.js?v=7"></script>
+<script>
+(async function () {
+  const canvas = document.getElementById('c');
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.15;
+
+  const scene = new THREE.Scene();
+  const skyColor = 0xb6d6f0;
+  scene.background = new THREE.Color(skyColor);
+  scene.fog = new THREE.Fog(skyColor, 1000, 3200);
+
+  const camera = new THREE.PerspectiveCamera(60, 1, 0.5, 6000);
+  
+  // Gelismis uc noktali aydinlatma
+  const hemi = new THREE.HemisphereLight(0xeef6ff, 0x544738, 0.75);
+  scene.add(hemi);
+
+  const sun = new THREE.DirectionalLight(0xfff5e4, 1.25);
+  sun.position.set(-400, 750, 350);
+  scene.add(sun);
+
+  const fillLight = new THREE.DirectionalLight(0xb0d0eb, 0.35);
+  fillLight.position.set(400, 350, -350);
+  scene.add(fillLight);
+
+  const controls = new THREE.OrbitControls(camera, canvas);
+  controls.enableDamping = true;
+  controls.maxPolarAngle = Math.PI * 0.49;
+
+  const map = new SilkroadMap(scene, {
+    baseUrl: './',
+    modelsUrl: '../MODELS/',
+    musicUrl: '../MUSIC/',
+    minimapUrl: '../MINIMAP/',
+    scale: 0.1,
+    viewRadius: 3,
+    keepRadius: 4,
+    realModels: true
+  });
+  window.scene = scene;
+  window.camera = camera;
+  window.controls = controls;
+  window.map = map;
+  await map.init();
+
+  const W = map.world;
+  document.getElementById('stat').textContent = `${W.regions.length} bolge, ${map.dungeons.length} zindan`;
+
+  // Zindan listesini doldur
+  const selDungeon = document.getElementById('sel-dungeon');
+  map.dungeons.forEach(d => {
+    const opt = document.createElement('option');
+    opt.value = d.id;
+    opt.textContent = `${d.id}. ${d.name} (${d.blocks} blok)`;
+    selDungeon.appendChild(opt);
+  });
+
+  // ---- Mini harita
+  const mini = document.getElementById('mini');
+  const localMini = document.getElementById('local-mini');
+  const img = new Image();
+  img.src = W.preview.color;
+  const B = W.bounds;
+  const MW = 320, MH = Math.round(MW * (B.maxZ - B.minZ + 1) / (B.maxX - B.minX + 1));
+  mini.width = MW; mini.height = MH;
+  const mctx = mini.getContext('2d');
+
+  mini.addEventListener('click', e => {
+    const r = mini.getBoundingClientRect();
+    const rx = B.minX + Math.floor((e.clientX - r.left) / MW * (B.maxX - B.minX + 1));
+    const rz = B.maxZ - Math.floor((e.clientY - r.top) / MH * (B.maxZ - B.minZ + 1));
+    teleport(rx, rz);
+  });
+
+  // Teleport
+  function teleport(rx, rz) {
+    if (!map.hasRegion(rx, rz)) {
+      document.getElementById('stat').textContent = `(${rx},${rz}) bolgesi yok`;
+      return;
+    }
+    const R = map.cs.regionSize;
+    const info = map.index.get(`${rz}_${rx}`);
+    const c = map.toThree(rx, rz, R / 2, (info.minH + info.maxH) / 2, R / 2);
+    controls.target.copy(c);
+    camera.position.set(c.x - 70, c.y + 130, c.z + 180);
+    document.getElementById('gx').value = rx;
+    document.getElementById('gz').value = rz;
+    map.update(c);
+
+    // Bolge mini haritasini guncelle
+    localMini.src = `../MINIMAP/world/${rz}_${rx}.jpg`;
+
+    // Bolge muzigi
+    playRegionMusic(rx, rz);
+  }
+
+  function playRegionMusic(rx, rz) {
+    let track = "jangan_field.ogg";
+    if (rx >= 160 && rx <= 175 && rz >= 90 && rz <= 105) track = "jangan_town.ogg";
+    else if (rx >= 150 && rx <= 165 && rz >= 94 && rz <= 104) track = "donwhang_town.ogg";
+    else if (rx >= 130 && rx <= 145 && rz >= 85 && rz <= 98) track = "hotan_field.ogg";
+    else if (rx >= 105 && rx <= 120 && rz >= 80 && rz <= 95) track = "mtrok_field.ogg";
+    else if (rx >= 100 && rx <= 115 && rz >= 100 && rz <= 115) track = "centralasia_town.ogg";
+    else if (rx >= 70 && rx <= 85 && rz >= 100 && rz <= 115) track = "easterneurope_town.ogg";
+    else if (rx >= 45 && rx <= 60 && rz >= 85 && rz <= 98) track = "egypt_town_alexandria1.ogg";
+    map.playBGM(track);
+    document.getElementById('bgm-title').textContent = track;
+  }
+
+  // Zindana Gir
+  document.getElementById('btn-enter-dungeon').onclick = async () => {
+    const did = parseInt(selDungeon.value);
+    if (!did) return;
+    document.getElementById('stat').textContent = 'Zindan yukleniyor…';
+    const res = await map.loadDungeon(did);
+    if (res) {
+      controls.target.copy(res.center);
+      camera.position.set(res.center.x - 50, res.center.y + 80, res.center.z + 100);
+      document.getElementById('stat').textContent = `Zindan: ${res.dungeon.name} (${res.dungeon.objectCount} obje)`;
+      document.getElementById('bgm-title').textContent = res.dungeon.bgm;
+    }
+  };
+
+  // Sehir Secimi
+  document.getElementById('sel-city').onchange = e => {
+    const [x, z] = e.target.value.split(',').map(Number);
+    teleport(x, z);
+  };
+
+  document.getElementById('go').onclick = () => teleport(+document.getElementById('gx').value, +document.getElementById('gz').value);
+  document.getElementById('wire').onchange = e => map.group.traverse(o => { if (o.isMesh && o.name.startsWith('terrain')) o.material.wireframe = e.target.checked; });
+  document.getElementById('objs').onchange = e => {
+    map.group.traverse(o => { if (o.name.startsWith('objects_')) o.visible = e.target.checked; });
+    map.dungeonGroup.visible = e.target.checked;
+  };
+  document.getElementById('real-models').onchange = e => {
+    map.opts.realModels = e.target.checked;
+    map.regions.clear();
+    map.update(controls.target);
+  };
+  document.getElementById('events').onchange = e => {
+    map.opts.seasonalEvents = e.target.checked;
+    for (const [k, reg] of map.regions) map.unloadRegion(k);
+    map.update(controls.target);
+  };
+
+  // Muzik Kontrolleri
+  const volSlider = document.getElementById('vol');
+  volSlider.oninput = e => map.setBGMVolume(+e.target.value);
+  let muted = false;
+  document.getElementById('btn-mute').onclick = e => {
+    muted = !muted;
+    map.setBGMVolume(muted ? 0 : +volSlider.value);
+    e.target.textContent = muted ? 'Ac' : 'Sessiz';
+  };
+
+  // ---- WASD Klavye
+  const keys = {};
+  addEventListener('keydown', e => {
+    keys[e.code] = true;
+    // Kullanici ilk tusta muzigi baslatabilsin
+    if (map.audio && map.audio.paused) map.audio.play().catch(() => {});
+  });
+  addEventListener('keyup', e => keys[e.code] = false);
+
+  function resize() {
+    renderer.setSize(innerWidth, innerHeight, false);
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+  }
+  addEventListener('resize', resize);
+  resize();
+
+  // Baslangic
+  const urlParams = new URLSearchParams(window.location.search);
+  const qx = urlParams.get('x'), qz = urlParams.get('z');
+  const startX = qx !== null ? parseInt(qx) : W.coordinateSystem.suggestedOrigin.x;
+  const startZ = qz !== null ? parseInt(qz) : W.coordinateSystem.suggestedOrigin.z;
+  teleport(startX, startZ);
+
+  let last = performance.now(), acc = 0;
+  const fwd = new THREE.Vector3(), right = new THREE.Vector3();
+
+  function loop(t) {
+    const dt = Math.min((t - last) / 1000, 0.1);
+    last = t;
+
+    map.updateWater(t);
+
+    // WASD
+    camera.getWorldDirection(fwd);
+    fwd.y = 0;
+    fwd.normalize();
+    right.crossVectors(fwd, camera.up);
+
+    const sp = (keys.ShiftLeft ? 450 : 130) * dt;
+    const mv = new THREE.Vector3();
+    if (keys.KeyW) mv.add(fwd);
+    if (keys.KeyS) mv.sub(fwd);
+    if (keys.KeyD) mv.add(right);
+    if (keys.KeyA) mv.sub(right);
+
+    if (mv.lengthSq()) {
+      mv.normalize().multiplyScalar(sp);
+      camera.position.add(mv);
+      controls.target.add(mv);
+    }
+
+    // Hedefi zemine oturt
+    const h = map.getHeightAt(controls.target.x, controls.target.z);
+    if (h !== null && map.dungeonGroup.children.length === 0) {
+      const d = h - controls.target.y;
+      controls.target.y += d;
+      camera.position.y += d;
+    }
+    controls.update();
+
+    acc += dt;
+    if (acc > 0.25) {
+      acc = 0;
+      map.update(controls.target);
+      const p = map.fromThree(controls.target.x, controls.target.z);
+      document.getElementById('reg').textContent = `${p.rx}, ${p.rz} (id ${(p.rz << 8) | p.rx})`;
+      document.getElementById('hgt').textContent = h !== null ? (h / map.opts.scale).toFixed(1) : '-';
+      document.getElementById('cnt').textContent = map.regions.size;
+
+      if (img.complete) {
+        mctx.drawImage(img, 0, 0, MW, MH);
+        const px = (p.rx - B.minX + p.lx / map.cs.regionSize) / (B.maxX - B.minX + 1) * MW;
+        const py = (B.maxZ - p.rz + 1 - p.lz / map.cs.regionSize) / (B.maxZ - B.minZ + 1) * MH;
+        mctx.fillStyle = '#ff2d55';
+        mctx.beginPath();
+        mctx.arc(px, py, 4, 0, 7);
+        mctx.fill();
+      }
+    }
+
+    renderer.render(scene, camera);
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

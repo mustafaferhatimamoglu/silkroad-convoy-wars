@@ -1,0 +1,590 @@
+[
+  {
+    "id": 1,
+    "name": "Donwhang Stone Cave",
+    "regionId": 32769,
+    "file": "dungeons/01_dunhwang_cv.json",
+    "blocks": 151,
+    "objects": 1188,
+    "bgm": "donwhang_dungeon.ogg",
+    "bounds": [
+      [
+        -1003.11,
+        -51.703,
+        -2606.245
+      ],
+      [
+        2983.1,
+        591.929,
+        879.118
+      ]
+    ]
+  },
+  {
+    "id": 2,
+    "name": "Qin-Shi Tomb (Floor 6)",
+    "regionId": 32770,
+    "file": "dungeons/02_jinsi_floor06.json",
+    "blocks": 5,
+    "objects": 14,
+    "bgm": "jinsi_dungeon.ogg",
+    "bounds": [
+      [
+        -9560.564,
+        -399.75,
+        -9558.385
+      ],
+      [
+        9556.205,
+        4040.318,
+        9558.386
+      ]
+    ]
+  },
+  {
+    "id": 3,
+    "name": "Qin-Shi Tomb (Floor 5)",
+    "regionId": 32771,
+    "file": "dungeons/03_jinsi_floor05.json",
+    "blocks": 23,
+    "objects": 28,
+    "bgm": "jinsi_dungeon.ogg",
+    "bounds": [
+      [
+        -16886.016,
+        -262.743,
+        -17619.01
+      ],
+      [
+        17888.49,
+        1449.094,
+        17627.988
+      ]
+    ]
+  },
+  {
+    "id": 4,
+    "name": "Qin-Shi Tomb (Floor 4)",
+    "regionId": 32772,
+    "file": "dungeons/04_jinsi_floor04.json",
+    "blocks": 87,
+    "objects": 93,
+    "bgm": "jinsi_dungeon.ogg",
+    "bounds": [
+      [
+        -18705.041,
+        -262.743,
+        -20636.797
+      ],
+      [
+        19124.613,
+        1543.145,
+        20645.754
+      ]
+    ]
+  },
+  {
+    "id": 5,
+    "name": "Qin-Shi Tomb (Floor 3)",
+    "regionId": 32773,
+    "file": "dungeons/05_jinsi_floor03.json",
+    "blocks": 89,
+    "objects": 110,
+    "bgm": "jinsi_dungeon.ogg",
+    "bounds": [
+      [
+        -22005.312,
+        -16.993,
+        -22466.25
+      ],
+      [
+        22151.186,
+        2781.395,
+        22097.883
+      ]
+    ]
+  },
+  {
+    "id": 6,
+    "name": "Qin-Shi Tomb (Floor 2)",
+    "regionId": 32774,
+    "file": "dungeons/06_jinsi_floor02.json",
+    "blocks": 20,
+    "objects": 2084,
+    "bgm": "jinsi_dungeon.ogg",
+    "bounds": [
+      [
+        -20176.639,
+        -56.814,
+        -8585.419
+      ],
+      [
+        20119.443,
+        1123.574,
+        8188.477
+      ]
+    ]
+  },
+  {
+    "id": 7,
+    "name": "Qin-Shi Tomb (Floor 1)",
+    "regionId": 32775,
+    "file": "dungeons/07_jinsi_floor01.json",
+    "blocks": 1,
+    "objects": 85,
+    "bgm": "jinsi_dungeon.ogg",
+    "bounds": [
+      [
+        -3351.474,
+        -1031.98,
+        -3866.652
+      ],
+      [
+        3325.302,
+        1913.925,
+        8024.693
+      ]
+    ]
+  },
+  {
+    "id": 8,
+    "name": "Donwhang Cave Deep",
+    "regionId": 32769,
+    "file": "dungeons/08_gngwc.json",
+    "blocks": 151,
+    "objects": 1192,
+    "bgm": "donwhang_dungeon.ogg",
+    "bounds": [
+      [
+        -1003.11,
+        -51.703,
+        -2606.245
+      ],
+      [
+        2983.1,
+        591.929,
+        879.118
+      ]
+    ]
+  },
+  {
+    "id": 9,
+    "name": "Special Event Dungeon",
+    "regionId": 32777,
+    "file": "dungeons/09_event.json",
+    "blocks": 13,
+    "objects": 100,
+    "bgm": "event_festival.ogg",
+    "bounds": [
+      [
+        -410.18,
+        -9.986,
+        -388.251
+      ],
+      [
+        2329.48,
+        139.958,
+        575.492
+      ]
+    ]
+  },
+  {
+    "id": 10,
+    "name": "Pharaoh Tomb (Selkis)",
+    "regionId": 32778,
+    "file": "dungeons/10_pha_cv_selkis.json",
+    "blocks": 1,
+    "objects": 135,
+    "bgm": "egypt_dungeon_temple.ogg",
+    "bounds": [
+      [
+        -8893.104,
+        -8.324,
+        1894.247
+      ],
+      [
+        -7227.716,
+        773.321,
+        4720.062
+      ]
+    ]
+  },
+  {
+    "id": 11,
+    "name": "Pharaoh Tomb (Neith)",
+    "regionId": 32779,
+    "file": "dungeons/11_pha_cv_neith.json",
+    "blocks": 1,
+    "objects": 129,
+    "bgm": "egypt_dungeon_temple.ogg",
+    "bounds": [
+      [
+        -5913.823,
+        17.941,
+        2651.625
+      ],
+      [
+        -3155.633,
+        799.586,
+        4317.013
+      ]
+    ]
+  },
+  {
+    "id": 12,
+    "name": "Pharaoh Tomb (Anubis)",
+    "regionId": 32780,
+    "file": "dungeons/12_pha_cv_anubis.json",
+    "blocks": 1,
+    "objects": 117,
+    "bgm": "egypt_dungeon_pharaoh.ogg",
+    "bounds": [
+      [
+        -646.921,
+        14.231,
+        -4057.299
+      ],
+      [
+        1229.853,
+        772.265,
+        -2047.261
+      ]
+    ]
+  },
+  {
+    "id": 13,
+    "name": "Pharaoh Tomb (Isis)",
+    "regionId": 32781,
+    "file": "dungeons/13_pha_cv_isis.json",
+    "blocks": 1,
+    "objects": 117,
+    "bgm": "egypt_dungeon_pharaoh.ogg",
+    "bounds": [
+      [
+        1505.481,
+        14.431,
+        -1958.443
+      ],
+      [
+        3516.342,
+        772.465,
+        51.595
+      ]
+    ]
+  },
+  {
+    "id": 14,
+    "name": "Pharaoh Tomb (Haroeris)",
+    "regionId": 32782,
+    "file": "dungeons/14_pha_cv_haro.json",
+    "blocks": 1,
+    "objects": 97,
+    "bgm": "egypt_dungeon_temple.ogg",
+    "bounds": [
+      [
+        7802.694,
+        -462.368,
+        -806.191
+      ],
+      [
+        10564.122,
+        843.039,
+        859.194
+      ]
+    ]
+  },
+  {
+    "id": 15,
+    "name": "Seth Temple",
+    "regionId": 32783,
+    "file": "dungeons/15_st_seth.json",
+    "blocks": 1,
+    "objects": 47,
+    "bgm": "egypt_dungeon_pharaoh.ogg",
+    "bounds": [
+      [
+        -1349.686,
+        -1187.324,
+        -1106.133
+      ],
+      [
+        1350.759,
+        1622.146,
+        1134.982
+      ]
+    ]
+  },
+  {
+    "id": 16,
+    "name": "Pharaoh Main Cave",
+    "regionId": 32784,
+    "file": "dungeons/16_pha_cv.json",
+    "blocks": 35,
+    "objects": 1681,
+    "bgm": "egypt_dungeon_temple.ogg",
+    "bounds": [
+      [
+        -8893.104,
+        -474.449,
+        -4191.677
+      ],
+      [
+        10564.122,
+        872.728,
+        5148.56
+      ]
+    ]
+  },
+  {
+    "id": 17,
+    "name": "Fortress Dungeon",
+    "regionId": 32785,
+    "file": "dungeons/17_fortress_dungeon.json",
+    "blocks": 29,
+    "objects": 255,
+    "bgm": "fortress_war.ogg",
+    "bounds": [
+      [
+        -1000.859,
+        -10.044,
+        -2302.618
+      ],
+      [
+        2980.848,
+        140.26,
+        575.492
+      ]
+    ]
+  },
+  {
+    "id": 18,
+    "name": "Flame Mountain Dungeon",
+    "regionId": 32786,
+    "file": "dungeons/18_flame.json",
+    "blocks": 45,
+    "objects": 430,
+    "bgm": "forgotten_flame.ogg",
+    "bounds": [
+      [
+        -12129.471,
+        -367.828,
+        -14270.959
+      ],
+      [
+        11985.711,
+        1474.795,
+        12839.825
+      ]
+    ]
+  },
+  {
+    "id": 19,
+    "name": "Jupiter Temple (Di Boss)",
+    "regionId": 32787,
+    "file": "dungeons/19_piety_boss_di.json",
+    "blocks": 1,
+    "objects": 1,
+    "bgm": "jupiter_a_boss.ogg",
+    "bounds": [
+      [
+        629.594,
+        -151.923,
+        586.625
+      ],
+      [
+        1287.043,
+        134.909,
+        1337.109
+      ]
+    ]
+  },
+  {
+    "id": 20,
+    "name": "Jupiter Temple (Uno Boss)",
+    "regionId": 32788,
+    "file": "dungeons/20_piety_boss_uno.json",
+    "blocks": 1,
+    "objects": 1,
+    "bgm": "jupiter_a_boss.ogg",
+    "bounds": [
+      [
+        629.594,
+        -151.923,
+        586.625
+      ],
+      [
+        1287.043,
+        134.909,
+        1337.109
+      ]
+    ]
+  },
+  {
+    "id": 21,
+    "name": "Jupiter Temple (Upi Boss)",
+    "regionId": 32789,
+    "file": "dungeons/21_piety_boss_upi.json",
+    "blocks": 1,
+    "objects": 1,
+    "bgm": "jupiter_a_boss.ogg",
+    "bounds": [
+      [
+        629.594,
+        -151.923,
+        586.625
+      ],
+      [
+        1287.043,
+        134.909,
+        1337.109
+      ]
+    ]
+  },
+  {
+    "id": 22,
+    "name": "Jupiter Hideout",
+    "regionId": 32790,
+    "file": "dungeons/22_hide.json",
+    "blocks": 22,
+    "objects": 551,
+    "bgm": "jupiter_a.ogg",
+    "bounds": [
+      [
+        -2749.001,
+        -67.452,
+        -3171.137
+      ],
+      [
+        2747.696,
+        338.385,
+        2324.406
+      ]
+    ]
+  },
+  {
+    "id": 23,
+    "name": "GM Event Dungeon",
+    "regionId": 32774,
+    "file": "dungeons/23_gm_event.json",
+    "blocks": 1,
+    "objects": 101,
+    "bgm": "event_festival.ogg",
+    "bounds": [
+      [
+        -2516.425,
+        -54.094,
+        -2538.58
+      ],
+      [
+        2500.724,
+        1123.574,
+        2493.954
+      ]
+    ]
+  },
+  {
+    "id": 24,
+    "name": "Silkroad Prison",
+    "regionId": 32786,
+    "file": "dungeons/24_prison.json",
+    "blocks": 1,
+    "objects": 16,
+    "bgm": "forgotten_ghost.ogg",
+    "bounds": [
+      [
+        -1144.253,
+        -12.384,
+        -1419.417
+      ],
+      [
+        1120.104,
+        576.776,
+        1394.043
+      ]
+    ]
+  },
+  {
+    "id": 25,
+    "name": "Baghdad Underground Cave",
+    "regionId": 32793,
+    "file": "dungeons/25_bagh_mong_boss.json",
+    "blocks": 1,
+    "objects": 1,
+    "bgm": "ARABIA_DUNGEON.ogg",
+    "bounds": [
+      [
+        -768.452,
+        -3.791,
+        -705.361
+      ],
+      [
+        768.452,
+        622.87,
+        799.555
+      ]
+    ]
+  },
+  {
+    "id": 26,
+    "name": "Boss Challenge Dungeon",
+    "regionId": 32794,
+    "file": "dungeons/26_boss_dungeon.json",
+    "blocks": 1,
+    "objects": 1,
+    "bgm": "ARABIA_THIEF_BOSS.ogg",
+    "bounds": [
+      [
+        -201.683,
+        -151.923,
+        -195.608
+      ],
+      [
+        1287.043,
+        134.909,
+        1337.109
+      ]
+    ]
+  },
+  {
+    "id": 27,
+    "name": "Secret Tomb (Top Level)",
+    "regionId": 32796,
+    "file": "dungeons/27_secret_tomb_top.json",
+    "blocks": 1,
+    "objects": 1,
+    "bgm": "forgotten_togui.ogg",
+    "bounds": [
+      [
+        -201.683,
+        -151.923,
+        -195.608
+      ],
+      [
+        1287.043,
+        134.909,
+        1337.109
+      ]
+    ]
+  },
+  {
+    "id": 28,
+    "name": "Secret Tomb (Bottom Level)",
+    "regionId": 32796,
+    "file": "dungeons/28_secret_tomb_bottom.json",
+    "blocks": 1,
+    "objects": 1,
+    "bgm": "forgotten_togui.ogg",
+    "bounds": [
+      [
+        -201.683,
+        -151.923,
+        -195.608
+      ],
+      [
+        1287.043,
+        134.909,
+        1337.109
+      ]
+    ]
+  }
+]

@@ -1,0 +1,331 @@
+[
+  {
+    "id": "ARABIA_DESERT",
+    "title": "Arabian Desert",
+    "filename": "ARABIA_DESERT.ogg",
+    "size": 2057764,
+    "url": "MUSIC/ARABIA_DESERT.ogg"
+  },
+  {
+    "id": "ARABIA_DUNGEON",
+    "title": "Arabian Underground Dungeon",
+    "filename": "ARABIA_DUNGEON.ogg",
+    "size": 1880036,
+    "url": "MUSIC/ARABIA_DUNGEON.ogg"
+  },
+  {
+    "id": "ARABIA_FIELD",
+    "title": "Arabian Coast",
+    "filename": "ARABIA_FIELD.ogg",
+    "size": 2513198,
+    "url": "MUSIC/ARABIA_FIELD.ogg"
+  },
+  {
+    "id": "arabia_login",
+    "title": "Arabia Login Screen",
+    "filename": "arabia_login.ogg",
+    "size": 1899599,
+    "url": "MUSIC/arabia_login.ogg"
+  },
+  {
+    "id": "ARABIA_THIEF_BOSS",
+    "title": "Arabian Thief Boss Battle",
+    "filename": "ARABIA_THIEF_BOSS.ogg",
+    "size": 2011972,
+    "url": "MUSIC/ARABIA_THIEF_BOSS.ogg"
+  },
+  {
+    "id": "ARABIA_TOWN",
+    "title": "Baghdad City",
+    "filename": "ARABIA_TOWN.ogg",
+    "size": 2686186,
+    "url": "MUSIC/ARABIA_TOWN.ogg"
+  },
+  {
+    "id": "asiaminor_field",
+    "title": "Asia Minor",
+    "filename": "asiaminor_field.ogg",
+    "size": 974962,
+    "url": "MUSIC/asiaminor_field.ogg"
+  },
+  {
+    "id": "battlearena_1",
+    "title": "Battle Arena PVP",
+    "filename": "battlearena_1.ogg",
+    "size": 955091,
+    "url": "MUSIC/battlearena_1.ogg"
+  },
+  {
+    "id": "centralasia_field",
+    "title": "Central Asia (Samarkand Outskirts)",
+    "filename": "centralasia_field.ogg",
+    "size": 1187957,
+    "url": "MUSIC/centralasia_field.ogg"
+  },
+  {
+    "id": "centralasia_town",
+    "title": "Samarkand Town",
+    "filename": "centralasia_town.ogg",
+    "size": 1466548,
+    "url": "MUSIC/centralasia_town.ogg"
+  },
+  {
+    "id": "donwhang_dungeon",
+    "title": "Donwhang Stone Cave Dungeon",
+    "filename": "donwhang_dungeon.ogg",
+    "size": 1854124,
+    "url": "MUSIC/donwhang_dungeon.ogg"
+  },
+  {
+    "id": "donwhang_field",
+    "title": "Donwhang Field / Oasis",
+    "filename": "donwhang_field.ogg",
+    "size": 417420,
+    "url": "MUSIC/donwhang_field.ogg"
+  },
+  {
+    "id": "donwhang_town",
+    "title": "Donwhang City",
+    "filename": "donwhang_town.ogg",
+    "size": 381829,
+    "url": "MUSIC/donwhang_town.ogg"
+  },
+  {
+    "id": "easterneurope_field",
+    "title": "East Europe Plain",
+    "filename": "easterneurope_field.ogg",
+    "size": 950063,
+    "url": "MUSIC/easterneurope_field.ogg"
+  },
+  {
+    "id": "easterneurope_town",
+    "title": "Constantinople",
+    "filename": "easterneurope_town.ogg",
+    "size": 1777382,
+    "url": "MUSIC/easterneurope_town.ogg"
+  },
+  {
+    "id": "egypt_dungeon_pharaoh",
+    "title": "Pharaoh Tomb Dungeon",
+    "filename": "egypt_dungeon_pharaoh.ogg",
+    "size": 1798091,
+    "url": "MUSIC/egypt_dungeon_pharaoh.ogg"
+  },
+  {
+    "id": "egypt_dungeon_temple",
+    "title": "Pharaoh Temple Dungeon",
+    "filename": "egypt_dungeon_temple.ogg",
+    "size": 1962708,
+    "url": "MUSIC/egypt_dungeon_temple.ogg"
+  },
+  {
+    "id": "egypt_field_delta",
+    "title": "Delta Field",
+    "filename": "egypt_field_delta.ogg",
+    "size": 1622692,
+    "url": "MUSIC/egypt_field_delta.ogg"
+  },
+  {
+    "id": "egypt_field_kingsvalley",
+    "title": "Valley of Kings",
+    "filename": "egypt_field_kingsvalley.ogg",
+    "size": 1327605,
+    "url": "MUSIC/egypt_field_kingsvalley.ogg"
+  },
+  {
+    "id": "egypt_field_stormdesert",
+    "title": "Storm and Cloud Desert",
+    "filename": "egypt_field_stormdesert.ogg",
+    "size": 1406819,
+    "url": "MUSIC/egypt_field_stormdesert.ogg"
+  },
+  {
+    "id": "egypt_town_alexandria1",
+    "title": "Alexandria Harbor",
+    "filename": "egypt_town_alexandria1.ogg",
+    "size": 2202685,
+    "url": "MUSIC/egypt_town_alexandria1.ogg"
+  },
+  {
+    "id": "egypt_town_alexandria2",
+    "title": "Alexandria City",
+    "filename": "egypt_town_alexandria2.ogg",
+    "size": 2209906,
+    "url": "MUSIC/egypt_town_alexandria2.ogg"
+  },
+  {
+    "id": "event_carol_01",
+    "title": "Winter Carol 1",
+    "filename": "event_carol_01.ogg",
+    "size": 1642342,
+    "url": "MUSIC/event_carol_01.ogg"
+  },
+  {
+    "id": "event_carol_02",
+    "title": "Winter Carol 2",
+    "filename": "event_carol_02.ogg",
+    "size": 1557935,
+    "url": "MUSIC/event_carol_02.ogg"
+  },
+  {
+    "id": "event_carol_03",
+    "title": "Winter Carol 3",
+    "filename": "event_carol_03.ogg",
+    "size": 1554931,
+    "url": "MUSIC/event_carol_03.ogg"
+  },
+  {
+    "id": "event_carol_04",
+    "title": "Winter Carol 4",
+    "filename": "event_carol_04.ogg",
+    "size": 1288019,
+    "url": "MUSIC/event_carol_04.ogg"
+  },
+  {
+    "id": "event_festival",
+    "title": "Silkroad Festival Event",
+    "filename": "event_festival.ogg",
+    "size": 1400651,
+    "url": "MUSIC/event_festival.ogg"
+  },
+  {
+    "id": "event_ghost",
+    "title": "Halloween Event",
+    "filename": "event_ghost.ogg",
+    "size": 1414128,
+    "url": "MUSIC/event_ghost.ogg"
+  },
+  {
+    "id": "forgotten_flame",
+    "title": "Flame Mountain",
+    "filename": "forgotten_flame.ogg",
+    "size": 1779786,
+    "url": "MUSIC/forgotten_flame.ogg"
+  },
+  {
+    "id": "forgotten_ghost",
+    "title": "Ghost Ship / Wreckage",
+    "filename": "forgotten_ghost.ogg",
+    "size": 1685048,
+    "url": "MUSIC/forgotten_ghost.ogg"
+  },
+  {
+    "id": "forgotten_togui",
+    "title": "Togui Village",
+    "filename": "forgotten_togui.ogg",
+    "size": 2053477,
+    "url": "MUSIC/forgotten_togui.ogg"
+  },
+  {
+    "id": "fortress_war",
+    "title": "Fortress Siege War",
+    "filename": "fortress_war.ogg",
+    "size": 1221566,
+    "url": "MUSIC/fortress_war.ogg"
+  },
+  {
+    "id": "hotan_field",
+    "title": "Hotan Field / Tarim Basin",
+    "filename": "hotan_field.ogg",
+    "size": 1560205,
+    "url": "MUSIC/hotan_field.ogg"
+  },
+  {
+    "id": "jangan_field",
+    "title": "Jangan Outskirts / Bicheon Plain",
+    "filename": "jangan_field.ogg",
+    "size": 475571,
+    "url": "MUSIC/jangan_field.ogg"
+  },
+  {
+    "id": "jangan_town",
+    "title": "Jangan Town",
+    "filename": "jangan_town.ogg",
+    "size": 470512,
+    "url": "MUSIC/jangan_town.ogg"
+  },
+  {
+    "id": "jinsi_dungeon",
+    "title": "Qin-Shi Emperor Tomb Dungeon",
+    "filename": "jinsi_dungeon.ogg",
+    "size": 1000930,
+    "url": "MUSIC/jinsi_dungeon.ogg"
+  },
+  {
+    "id": "jupiter_a",
+    "title": "Jupiter Hall",
+    "filename": "jupiter_a.ogg",
+    "size": 2011198,
+    "url": "MUSIC/jupiter_a.ogg"
+  },
+  {
+    "id": "jupiter_a_boss",
+    "title": "Jupiter Boss Encounter",
+    "filename": "jupiter_a_boss.ogg",
+    "size": 1691532,
+    "url": "MUSIC/jupiter_a_boss.ogg"
+  },
+  {
+    "id": "jupiter_field",
+    "title": "Temple of Jupiter",
+    "filename": "jupiter_field.ogg",
+    "size": 1798971,
+    "url": "MUSIC/jupiter_field.ogg"
+  },
+  {
+    "id": "karakoram_field",
+    "title": "Karakoram Icefield",
+    "filename": "karakoram_field.ogg",
+    "size": 1258985,
+    "url": "MUSIC/karakoram_field.ogg"
+  },
+  {
+    "id": "maintheme_cut",
+    "title": "Main Title Theme",
+    "filename": "maintheme_cut.ogg",
+    "size": 814029,
+    "url": "MUSIC/maintheme_cut.ogg"
+  },
+  {
+    "id": "mtrok_field",
+    "title": "Roc Mountain",
+    "filename": "mtrok_field.ogg",
+    "size": 1427903,
+    "url": "MUSIC/mtrok_field.ogg"
+  },
+  {
+    "id": "roc_battle",
+    "title": "Roc Boss Battle",
+    "filename": "roc_battle.ogg",
+    "size": 1357266,
+    "url": "MUSIC/roc_battle.ogg"
+  },
+  {
+    "id": "roc_bgm_total",
+    "title": "Roc Peak Theme",
+    "filename": "roc_bgm_total.ogg",
+    "size": 772834,
+    "url": "MUSIC/roc_bgm_total.ogg"
+  },
+  {
+    "id": "roc_entrance",
+    "title": "Gate to Roc Mountain",
+    "filename": "roc_entrance.ogg",
+    "size": 557673,
+    "url": "MUSIC/roc_entrance.ogg"
+  },
+  {
+    "id": "shiningstar",
+    "title": "Silkroad Theme Song (Shining Star)",
+    "filename": "shiningstar.ogg",
+    "size": 4454280,
+    "url": "MUSIC/shiningstar.ogg"
+  },
+  {
+    "id": "taklamakan_field",
+    "title": "Taklamakan Desert",
+    "filename": "taklamakan_field.ogg",
+    "size": 1407306,
+    "url": "MUSIC/taklamakan_field.ogg"
+  }
+]
