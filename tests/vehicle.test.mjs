@@ -186,3 +186,22 @@ test('duvara carpma: geri seker, hasar alir, icine girmez', () => {
   assert.ok(car.health < 100, 'hasar almali');
   assert.ok(finite(car));
 });
+
+test('100 km/s tam direksiyon: sonumlu tepki, salinim yok (klavye yardimi)', () => {
+  const g = planeGround();
+  const car = makeCar(g);
+  run(car, g, 40, { accel: 1 }, (t, c) => kmh(c) < 100);
+  run(car, g, 1, (t, c) => ({ accel: kmh(c) < 100 ? 0.6 : 0.2 }));
+  const lat = [];
+  run(car, g, 3, (t, c) => ({ accel: kmh(c) < 100 ? 0.5 : 0.2, steer: 1 }), (t, c) => {
+    lat.push((c.body.vel.length() * Math.abs(c.body.angVel.y)) / 9.81);
+  });
+  const peak = Math.max(...lat);
+  const tail = lat.slice(-240);
+  const steady = tail.reduce((a, b) => a + b, 0) / tail.length;
+  const ripple = Math.max(...tail) - Math.min(...tail);
+  console.log(`   100 km/s: tepe ${peak.toFixed(2)}g, kararli ${steady.toFixed(2)}g, son 1 sn dalgalanma ${ripple.toFixed(3)}g`);
+  assert.ok(steady > 0.6 && steady < 0.9, `kararli yanal ivme ${steady}`);
+  assert.ok(peak < steady * 1.35, `asim cok yuksek: ${peak} / ${steady}`);
+  assert.ok(ripple < 0.05, `salinim: ${ripple}`);
+});

@@ -71,6 +71,32 @@ function makeMaterials(paintId) {
     color: p.color, metalness: p.metal || 0.0, roughness: p.metal ? 0.4 : 0.36,
     clearcoat: 0.85, clearcoatRoughness: 0.11, envMapIntensity: 1.0,
   });
+  // kir: zemin renginde, alttan yukari azalan, gurultulu toz tabakasi; cilayi matlastirir
+  const dirt = { uDirt: { value: 0 }, uDirtColor: { value: new THREE.Color(0.62, 0.52, 0.38) } };
+  m.dirt = dirt;
+  m.paint.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, dirt);
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vGround;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvGround = position;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `#include <common>
+varying vec3 vGround;
+uniform float uDirt;
+uniform vec3 uDirtColor;
+float dHash(vec2 p) { return fract(sin(dot(p, vec2(41.3, 289.1))) * 43758.5); }
+float dNoise(vec2 p) { vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(dHash(i), dHash(i + vec2(1, 0)), u.x), mix(dHash(i + vec2(0, 1)), dHash(i + vec2(1, 1)), u.x), u.y); }
+float dirtMask() {
+  float h = smoothstep(1.05, 0.28, vGround.y);
+  float n = dNoise(vGround.xz * 9.0 + vGround.y * 3.0) * 0.6 + dNoise(vGround.zy * 23.0) * 0.4;
+  return clamp(uDirt * (h * 1.3 + 0.12) * (0.55 + 0.7 * n), 0.0, 0.92);
+}`)
+      .replace('#include <color_fragment>', '#include <color_fragment>\nfloat dm = dirtMask();\ndiffuseColor.rgb = mix(diffuseColor.rgb, uDirtColor, dm);')
+      .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 0.95, dm);')
+      .replace('#include <lights_physical_fragment>', '#include <lights_physical_fragment>\n#ifdef USE_CLEARCOAT\nmaterial.clearcoat *= 1.0 - dm * 0.95;\n#endif');
+  };
+  m.paint.customProgramCacheKey = () => 'kartal-paint-dirt';
   m.chrome = new THREE.MeshPhysicalMaterial({ color: 0xf2f2f2, metalness: 1.0, roughness: 0.07, envMapIntensity: 1.4 });
   m.blackPlastic = new THREE.MeshStandardMaterial({ color: 0x141516, roughness: 0.72, metalness: 0.0 });
   m.rubber = new THREE.MeshStandardMaterial({ color: 0x0b0b0c, roughness: 0.85 });
@@ -281,7 +307,7 @@ function buildSeams(variant) {
     geos.push(vLine(1.255, archTop(1.255) + 0.02, yTop(1.255) - 0.01, s)); // arka kapi arka kenari
     // kapi alt kenari (esik ustu)
     const pts = [];
-    for (let k = 0; k <= 20; k++) { const z = lerp(-0.69, 0.78, k / 20); pts.push(new THREE.Vector3(s * sidePoint(z, 0.29, 0.0012), 0.29, z)); }
+    for (let k = 0; k <= 20; k++) { const z = lerp(-0.69, 0.78, k / 20); pts.push(new THREE.Vector3(s * sidePoint(z, 0.345, 0.0012), 0.345, z)); }
     geos.push(seamStrip(pts));
     // kaput kenari (camurluk ustu)
     const hp = [];
@@ -381,7 +407,7 @@ function buildFront(m, variant, g) {
     const lensMat = m.headLens.clone(); lensMat.map = lensTexture();
     const lens = lathe([[0.0005, 0.021], [r * 0.6, 0.019], [r * 0.95, 0.012], [r + 0.002, 0.004]], 40, 'z');
     lg.add(mesh(lens, lensMat, false));
-    lens.userData.lens = true; lamps.push({ lens: lensMat, refl: m.reflector });
+    lens.userData.lens = true; lamps.push({ lens: lensMat, refl: m.reflector, x });
     lg.rotation.y = Math.PI; // +z eksenli lathe -> one (-z) baksin
     lg.position.set(x, y, zFace - 0.012);
     g.add(lg);
@@ -396,7 +422,7 @@ function buildFront(m, variant, g) {
       const lens = mesh(new RoundedBoxGeometry(0.29, 0.13, 0.02, 2, 0.006), lensMat, false);
       lens.position.z = -0.012; lg.add(lens);
       const refl = mesh(new THREE.PlaneGeometry(0.27, 0.11), m.reflector, false); refl.position.z = 0.002; refl.rotation.y = Math.PI; lg.add(refl);
-      lamps.push({ lens: lensMat, refl: m.reflector });
+      lamps.push({ lens: lensMat, refl: m.reflector, x: s * 0.555 });
       lg.position.set(s * 0.555, 0.585, zFace - 0.015);
       g.add(lg);
     }
@@ -539,6 +565,16 @@ function buildSideDetails(m, variant, g) {
     for (const z of [0.07, 1.88]) {
       const foot = mesh(new RoundedBoxGeometry(0.04, 0.045, 0.06, 2, 0.01), m.blackPlastic, false);
       foot.position.set(s * 0.58, yRoof(z) + 0.02, z); g.add(foot);
+    }
+  }
+  // pacaliklar (camurluk tozluklari) - her tekerin arkasinda
+  for (const s of [-1, 1]) {
+    for (const az of [AXF, AXR]) {
+      const flap = mesh(new RoundedBoxGeometry(0.2, 0.24, 0.012, 1, 0.004), m.rubber, true);
+      const z = az + ARCH_R * 0.72;
+      flap.position.set(s * (halfW(z) - 0.11), 0.24, z + 0.02);
+      flap.rotation.x = 0.05;
+      g.add(flap);
     }
   }
   // depo kapagi (sag arka)
@@ -727,6 +763,7 @@ export class KartalModel {
       this.spots.push(sp);
     }
     this.optimize();
+    this.prepareDamage();
   }
 
   /**
@@ -763,6 +800,103 @@ export class KartalModel {
     }
   }
 
+  /** Hasar icin birlesik govde geometrilerinin orijinal konum/normallerini sakla. */
+  prepareDamage() {
+    this.deformables = [];
+    for (const o of this.body.children) {
+      if (!o.isMesh || o.material.map || o.geometry.index) continue;
+      const g = o.geometry;
+      this.deformables.push({ mesh: o, orig: g.attributes.position.array.slice(), origN: g.attributes.normal.array.slice() });
+    }
+    this.broken = { L: false, R: false, glass: false };
+  }
+
+  /**
+   * Govdeyi bir noktada ice gocert. p ve dir zemin (govde) uzayinda; dir = ice dogru birim vektor.
+   * Goculen ucgenlerin normalleri yuzey bazinda yeniden hesaplanir (buruşuk sac gorunumu).
+   */
+  deform(p, dir, amount, radius) {
+    if (!this.deformables) this.prepareDamage();
+    const r2 = radius * radius, maxDisp = 0.2;
+    const hash = (x, y, z) => {
+      const h = Math.sin(Math.round(x * 40) * 12.9898 + Math.round(y * 40) * 78.233 + Math.round(z * 40) * 37.719) * 43758.5453;
+      return h - Math.floor(h);
+    };
+    for (const d of this.deformables) {
+      const g = d.mesh.geometry;
+      const bs = g.boundingSphere;
+      if (bs && bs.center.distanceTo(p) > bs.radius + radius) continue;
+      const a = g.attributes.position.array, o = d.orig, n = g.attributes.normal.array;
+      const tris = new Set();
+      for (let i = 0; i < a.length; i += 3) {
+        const dx = a[i] - p.x, dy = a[i + 1] - p.y, dz = a[i + 2] - p.z;
+        const q = dx * dx + dy * dy + dz * dz;
+        if (q > r2) continue;
+        const f = 1 - Math.sqrt(q) / radius;
+        const k = amount * f * f * (0.7 + 0.6 * hash(o[i], o[i + 1], o[i + 2]));
+        let x = a[i] + dir.x * k, y = a[i + 1] + dir.y * k, z = a[i + 2] + dir.z * k;
+        const ox = x - o[i], oy = y - o[i + 1], oz = z - o[i + 2];
+        const ol = Math.hypot(ox, oy, oz);
+        if (ol > maxDisp) { const s = maxDisp / ol; x = o[i] + ox * s; y = o[i + 1] + oy * s; z = o[i + 2] + oz * s; }
+        a[i] = x; a[i + 1] = y; a[i + 2] = z;
+        tris.add(Math.floor(i / 9));
+      }
+      if (!tris.size) continue;
+      for (const t of tris) {
+        const b = t * 9;
+        const ux = a[b + 3] - a[b], uy = a[b + 4] - a[b + 1], uz = a[b + 5] - a[b + 2];
+        const vx = a[b + 6] - a[b], vy = a[b + 7] - a[b + 1], vz = a[b + 8] - a[b + 2];
+        let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+        const l = Math.hypot(nx, ny, nz) || 1;
+        nx /= l; ny /= l; nz /= l;
+        // orijinal normal yonunu koru (ters cevrilmis ucgen olmasin)
+        if (nx * n[b] + ny * n[b + 1] + nz * n[b + 2] < 0) { nx = -nx; ny = -ny; nz = -nz; }
+        for (let k = 0; k < 3; k++) { n[b + k * 3] = nx; n[b + k * 3 + 1] = ny; n[b + k * 3 + 2] = nz; }
+      }
+      g.attributes.position.needsUpdate = true;
+      g.attributes.normal.needsUpdate = true;
+    }
+  }
+
+  /** Bir taraftaki farlari kir (L/R). */
+  breakHeadlight(side) {
+    if (!this.broken || this.broken[side]) return;
+    this.broken[side] = true;
+    for (const l of this.headLamps) {
+      if ((side === 'L' && l.x < 0) || (side === 'R' && l.x > 0)) { l.lens.color.set(0x6b6b6b); l.lens.opacity = 0.85; l.dead = true; }
+    }
+  }
+
+  crackGlass() {
+    if (!this.broken || this.broken.glass) return;
+    this.broken.glass = true;
+    const g = this.mats.glass;
+    g.roughness = 0.38; g.opacity = 0.62; g.color.set(0x8c9599); g.clearcoatRoughness = 0.4;
+  }
+
+  /** Hasari ve kiri tamamen onar. */
+  repair() {
+    if (this.deformables) {
+      for (const d of this.deformables) {
+        const g = d.mesh.geometry;
+        g.attributes.position.array.set(d.orig);
+        g.attributes.normal.array.set(d.origN);
+        g.attributes.position.needsUpdate = true;
+        g.attributes.normal.needsUpdate = true;
+      }
+    }
+    for (const l of this.headLamps) { l.lens.color.set(0xffffff); l.lens.opacity = 0.55; l.dead = false; }
+    const g = this.mats.glass;
+    g.roughness = 0.02; g.opacity = 0.42; g.color.set(0x0b1416); g.clearcoatRoughness = 0;
+    this.broken = { L: false, R: false, glass: false };
+    this.mats.dirt.uDirt.value = 0;
+  }
+
+  setDirt(v, color) {
+    this.mats.dirt.uDirt.value = v;
+    if (color) this.mats.dirt.uDirtColor.value.setRGB(color[0], color[1], color[2]);
+  }
+
   /** Dinamik yansima haritasi alacak malzemeler. */
   reflectiveMaterials() {
     const set = new Set([this.mats.paint, this.mats.chrome, this.mats.glass, this.mats.reflector, this.mats.steel]);
@@ -785,9 +919,10 @@ export class KartalModel {
   }
 
   setLights({ head = false, brake = 0, reverse = false, tail = false } = {}) {
-    for (const l of this.headLamps) { l.lens.emissiveIntensity = head ? 2.2 : 0; }
+    for (const l of this.headLamps) { l.lens.emissiveIntensity = head && !l.dead ? 2.2 : 0; }
     this.mats.reflector.emissiveIntensity = head ? 1.5 : 0;
-    for (const sp of this.spots) sp.intensity = head ? 60 : 0;
+    this.spots[0].intensity = head && !(this.broken && this.broken.L) ? 60 : 0;
+    this.spots[1].intensity = head && !(this.broken && this.broken.R) ? 60 : 0;
     const tailI = (tail || head ? 0.9 : 0.15) + brake * 3.2;
     for (const t of this.tails.tail) t.emissiveIntensity = tailI;
     for (const t of this.tails.reverse) t.emissiveIntensity = reverse ? 2.5 : 0;

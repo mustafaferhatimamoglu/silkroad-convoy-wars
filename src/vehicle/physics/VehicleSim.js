@@ -218,17 +218,29 @@ export class VehicleSim {
   _steering(dt, steerIn, vF) {
     const S = this.p.steering;
     const v = Math.abs(vF);
-    let maxA = S.maxAngle / (1 + v * 0.11 * S.speedReduce * 1.6);
-    // karsi direksiyon yardimi: kayarken arka kaymaya gore ek aci
+    // 1) giris rampasi: tus 0.25 sn'de tam aciya, birakinca daha hizli merkeze
+    const si = this.steerIn || 0;
+    const back = Math.abs(steerIn) < Math.abs(si) || sign(steerIn) !== sign(si);
+    const inRate = back ? 6.5 : 4.0;
+    this.steerIn = si + clamp(steerIn - si, -inRate * dt, inRate * dt);
+    // 2) hiza bagli aci siniri: yardimla lastik tutusuna gore (geometri + kayma payi)
+    let maxA;
     if (this.assists.steer) {
-      const rear = this.wheels[2].contact ? this.wheels[2].slipAngle : 0;
-      maxA = Math.min(S.maxAngle, maxA + Math.abs(rear) * 0.8);
+      const grip = 6.6 * this.p.tire.mu / 0.9;
+      maxA = Math.min(S.maxAngle, (this.p.dims.wheelbase * grip) / Math.max(v * v, 1) + 0.02 + 0.02 * clamp(1 - v / 20, 0, 1));
+      // karsi direksiyon: sadece arka, onden daha cok kayarken (savrulma) ek aci
+      const W = this.wheels;
+      const rear = W[2].contact ? Math.abs(W[2].slipAngle) : 0, front = W[0].contact ? Math.abs(W[0].slipAngle) : 0;
+      maxA = Math.min(S.maxAngle, maxA + Math.max(0, rear - front) * 1.4);
+      // el freni cekiliyken (kasitli kaydirma) direksiyon serbest
+      if (this.input.handbrake > 0) maxA = Math.max(maxA, S.maxAngle * 0.65);
+    } else {
+      maxA = S.maxAngle / (1 + v * 0.06);
     }
-    const target = steerIn * maxA;
-    const returning = Math.abs(target) < Math.abs(this.steer) || sign(target) !== sign(this.steer);
-    const rate = (returning ? S.returnRate : S.rate) * (1 + 0.5 * (1 - Math.min(v / 30, 1)));
-    const d = target - this.steer;
-    this.steer += clamp(d, -rate * dt, rate * dt);
+    // 3) teker acisi hedefe fiziksel bir hizla yaklasir
+    const target = this.steerIn * maxA;
+    const rate = S.rate * 1.6;
+    this.steer += clamp(target - this.steer, -rate * dt, rate * dt);
     // Ackermann: icteki teker daha fazla doner
     const L = this.p.dims.wheelbase, T = this.p.dims.trackF;
     const a = this.steer;
@@ -460,10 +472,14 @@ export class VehicleSim {
     // ---- yanal: kayma acisina bagli kuvvet, yanal hizi asmayacak sekilde (dusuk hizda kararli)
     const kLat = b.invMassAt(w.point, _s);
     const Jcancel = -vLat / kLat;
-    const alpha = Math.atan2(Math.abs(vLat), Math.max(Math.abs(vLong), 0.5));
-    const muY = curve(alpha, T.peakSlip, T.slideRatio);
-    let Jy = -sign(vLat) * muY * maxJ;
-    if (Math.abs(Jy) > Math.abs(Jcancel)) Jy = Jcancel;
+    // lastik gecikmesi (relaxation length): yanal kuvvet kayma acisini ~0.45 m yolda yakalar
+    const alphaRaw = Math.atan2(vLat, Math.max(Math.abs(vLong), 0.5));
+    const relax = Math.min(1, (dt * Math.max(Math.abs(vLong), 1.5)) / 0.45);
+    w.alphaEff = (w.alphaEff || 0) + (alphaRaw - (w.alphaEff || 0)) * relax;
+    const muY = curve(Math.abs(w.alphaEff), T.peakSlip, T.slideRatio);
+    let Jy = -sign(w.alphaEff) * muY * maxJ;
+    if (Jy * Jcancel < 0) Jy = 0;                         // gecikmeden dolayi ters itme olmasin
+    else if (Math.abs(Jy) > Math.abs(Jcancel)) Jy = Jcancel;
 
     // ---- surtunme elipsi
     const r = Math.hypot(Jl, Jy) / maxJ;

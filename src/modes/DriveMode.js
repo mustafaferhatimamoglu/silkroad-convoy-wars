@@ -114,7 +114,9 @@ export class DriveMode {
     if (v.sim.impacts.length) {
       for (const im of v.sim.impacts) this.camera.addShake(Math.min(1, im.speed / 12));
       v.lastImpacts = v.sim.impacts.splice(0);
+      v.applyImpacts(v.lastImpacts);
     }
+    v.updateDirt(dt);
     // bozuk zeminde hafif sarsinti
     const rough = v.sim.wheels.reduce((a, w) => a + (w.contact ? Math.abs(w.x - w.xPrev) : 0), 0);
     if (rough > 0.004) this.camera.addShake(Math.min(0.15, rough * 3));

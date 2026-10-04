@@ -136,12 +136,13 @@ export class Menu {
     this.layer = el;
   }
 
-  pause({ onResume, onTeleport, onGarage, onSettings, onMain, title = 'DURAKLATILDI' }) {
+  pause({ onResume, onTeleport, onGarage, onRepair, onSettings, onMain, title = 'DURAKLATILDI' }) {
     this.clear();
     const el = h(`<div id="pause" class="interactive"><div class="panel box">
       <h2>${title}</h2>
       <button class="btn" data-a="resume">Devam et</button>
       ${onTeleport ? '<button class="btn secondary" data-a="teleport">Şehre ışınlan</button>' : ''}
+      ${onRepair ? '<button class="btn secondary" data-a="repair">Aracı onar ve yıka</button>' : ''}
       ${onGarage ? '<button class="btn secondary" data-a="garage">Garaj (renk / sürüm)</button>' : ''}
       <button class="btn secondary" data-a="settings">Ayarlar</button>
       <button class="btn secondary" data-a="main">Ana menü</button>
@@ -151,8 +152,9 @@ export class Menu {
       if (!a) return;
       const act = a.dataset.a;
       if (act === 'resume') onResume();
-      if (act === 'teleport') this.teleportList(onTeleport, () => this.pause({ onResume, onTeleport, onGarage, onSettings, onMain, title }));
+      if (act === 'teleport') this.teleportList(onTeleport, () => this.pause({ onResume, onTeleport, onGarage, onRepair, onSettings, onMain, title }));
       if (act === 'garage') onGarage();
+      if (act === 'repair') onRepair();
       if (act === 'settings') onSettings();
       if (act === 'main') onMain();
     });

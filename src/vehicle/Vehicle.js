@@ -13,6 +13,7 @@ const _v = new V3();
 const _q = new THREE.Quaternion();
 const _q2 = new THREE.Quaternion();
 const _p = new THREE.Vector3();
+const _d = new THREE.Vector3();
 
 export class Vehicle {
   constructor(app, { variant = 'kartal80', paint = 'lacivert', params = KARTAL } = {}) {
@@ -138,6 +139,47 @@ export class Vehicle {
     this.shadow.rotation.z = Math.atan2(this.forward.x, this.forward.z) + Math.PI;
     const lift = Math.max(0, this.position.y - this.params.cgHeight - gy);
     this.shadow.material.opacity = Math.max(0, 1 - lift * 1.5);
+  }
+
+  /** Carpisma olaylarini gorsel hasara cevirir (gocuk, kirik far, catlak cam). */
+  applyImpacts(list) {
+    if (!list || !list.length) return;
+    const inv = _q.copy(this.root.quaternion).invert();
+    for (const im of list) {
+      if (im.speed < 3) continue;
+      const p = _p.set(im.point.x, im.point.y, im.point.z).sub(this.root.position).applyQuaternion(inv).sub(this.model.body.position);
+      const d = _d.set(im.normal.x, im.normal.y, im.normal.z).applyQuaternion(inv).normalize();
+      const amount = Math.min(0.14, (im.speed - 2.5) * 0.013);
+      const radius = 0.32 + Math.min(0.45, im.speed * 0.025);
+      this.model.deform(p, d, amount, radius);
+      if (p.z < -1.75 && im.speed > 5) this.model.breakHeadlight(p.x < 0 ? 'L' : 'R');
+      if (im.speed > 9) this.model.crackGlass();
+    }
+  }
+
+  /** Tozlu zeminde kir birikir, suda yikanir. */
+  updateDirt(dt) {
+    const s = this.sim;
+    let dust = 0, n = 0, wet = false;
+    const col = this._dirtCol || (this._dirtCol = [0.62, 0.52, 0.38]);
+    for (const w of s.wheels) {
+      if (!w.contact) continue;
+      const info = surfaceInfo(w.surface);
+      dust += info.dustAmt; n++;
+      if (info.dustAmt > 0.2) for (let k = 0; k < 3; k++) col[k] += (Math.pow(info.dust[k], 2.2) * 0.9 - col[k]) * Math.min(1, dt * 0.05);
+      const wl = this.app.world && this.app.world.waterAt(w.point.x, w.point.z);
+      if (wl !== null && wl !== undefined && wl > w.point.y + 0.15) wet = true;
+    }
+    if (n) dust /= n;
+    const speed = this.velocity.length();
+    this.dirt = Math.min(1, Math.max(0, (this.dirt || 0) + (dust * speed * 0.00055 - (wet ? 0.25 : 0)) * dt));
+    this.model.setDirt(this.dirt, col);
+  }
+
+  repair() {
+    this.model.repair();
+    this.sim.health = this.params.maxHealth;
+    this.dirt = 0;
   }
 
   updateGauges(dt) {

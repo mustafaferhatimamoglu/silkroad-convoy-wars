@@ -213,6 +213,7 @@ export class Game {
       onResume: () => this._resume(mode),
       onTeleport: mode.teleportable === false ? null : (id) => { this._resume(mode); this.teleport(id); },
       onGarage: () => this.menu.garage(() => { this._applyVehicleLook(mode); this.pauseDrive2(mode); }),
+      onRepair: () => { mode.vehicle.repair(); this._resume(mode); if (mode.hud) mode.hud.toast('Araç onarıldı ve yıkandı', 1.8); },
       onSettings: () => this.menu.settings(() => this.pauseDrive2(mode)),
       onMain: () => { this.menu.clear(); this.showMainMenu(); },
     });
