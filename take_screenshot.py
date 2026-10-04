@@ -81,7 +81,7 @@ async def run():
         city = arg1
         if arg1 in ['kartal_drive', 'kartal_race', 'plaza', 'ground_close', 'bridge_view', 'jangan_ground']:
             mode = arg1
-            city = '168,97' if 'jangan' in mode or 'kartal' in mode else '135,92'
+            city = '168,97' if 'jangan' in mode else '135,92'
 
         res = await call('Runtime.evaluate', {
             'expression': f'''
@@ -116,35 +116,29 @@ async def run():
                     // Kamerayi amaca uygun ayarla
                     const mode = "{mode}";
                     if (mode === 'plaza' && plazaObj) {{
-                        // Hotan meydani ve mermer kaplama temiz sinematik aci (palmiye engelsiz)
                         window.controls.target.set(pPos.x, pPos.y + 8, pPos.z);
                         window.camera.position.set(pPos.x - 15, pPos.y + 45, pPos.z + 65);
                         window.controls.update();
                     }} else if (mode === 'ground_close' && plazaObj) {{
-                        // Zemin mikro dokusuna cok yakindan bakis (detail texture)
                         window.controls.target.set(pPos.x + 35, pPos.y + 10, pPos.z + 30);
                         window.camera.position.set(pPos.x + 30, pPos.y + 15, pPos.z + 42);
                         window.controls.update();
                     }} else if (mode === 'bridge_view') {{
-                        // Kullanicinin screenshot'indaki kopru ve yamac/cimenler
                         const bx = -6240, by = 15, bz = 590;
                         window.controls.target.set(bx, by, bz);
                         window.camera.position.set(bx + 45, by + 40, bz + 55);
                         window.controls.update();
                     }} else if (mode === 'jangan_ground') {{
-                        // Jangan meydan & zemin mikro dokusu
                         const t = window.controls.target;
                         window.camera.position.set(t.x - 30, t.y + 14, t.z + 35);
                         window.controls.update();
                     }} else if (mode === 'kartal_drive') {{
-                        // Tofas Kartal surus modunu baslat
                         document.getElementById('btn-car-mode').click();
-                        // Araba bir miktar gaz versin
                         window.keys['KeyW'] = true;
                     }} else if (mode === 'kartal_race') {{
-                        // Jangan -> Hotan yarisini baslat
                         document.getElementById('btn-start-race').click();
                         window.keys['KeyW'] = true;
+                        window.keys['KeyD'] = true; // Sağa dönüş testi
                     }}
 
                     return JSON.stringify({{
@@ -163,8 +157,51 @@ async def run():
         })
         print('SCENE & CAMERA STATUS:', ray_res, flush=True)
 
-        # Wait a moment for controls/camera to settle and render
-        await asyncio.sleep(2)
+        # 1.5 saniye sürüş & sağa dönüş
+        await asyncio.sleep(1.5)
+
+        right_check = await call('Runtime.evaluate', {
+            'expression': '''
+                (function() {
+                    const v = window.vehicle;
+                    const r = {
+                        yawAfterRight: v ? v.yaw : 0,
+                        steerAngle: v ? v.steeringAngle : 0,
+                        speed: v ? v.speedKmh : 0,
+                        health: v ? v.health : 0,
+                        sound: v ? v.soundEnabled : false
+                    };
+                    // Şimdi sola (A) kır
+                    window.keys['KeyD'] = false;
+                    window.keys['KeyA'] = true;
+                    return JSON.stringify(r);
+                })()
+            '''
+        })
+        print('STEER RIGHT CHECK:', right_check.get('result', {}).get('value') if 'result' in right_check else right_check, flush=True)
+
+        # 1.5 saniye sola dönüş
+        await asyncio.sleep(1.5)
+
+        left_check = await call('Runtime.evaluate', {
+            'expression': '''
+                (function() {
+                    const v = window.vehicle;
+                    const r = {
+                        yawAfterLeft: v ? v.yaw : 0,
+                        steerAngle: v ? v.steeringAngle : 0,
+                        speed: v ? v.speedKmh : 0
+                    };
+                    // Düzelt
+                    window.keys['KeyA'] = false;
+                    window.keys['KeyD'] = false;
+                    return JSON.stringify(r);
+                })()
+            '''
+        })
+        print('STEER LEFT CHECK:', left_check.get('result', {}).get('value') if 'result' in left_check else left_check, flush=True)
+
+        await asyncio.sleep(1.0)
 
         inspect_res = await call('Runtime.evaluate', {
             'expression': '''
@@ -177,12 +214,13 @@ async def run():
                         vehPos: v ? v.position : null,
                         vehYaw: v ? v.yaw : null,
                         speed: v ? v.speedKmh : 0,
+                        health: v ? v.health : null,
                         dist: (v && c) ? c.position.distanceTo(v.position) : null
                     });
                 })()
             '''
         })
-        print('INSPECT BEFORE SHOT:', inspect_res.get('result', {}).get('result', {}).get('value'), flush=True)
+        print('INSPECT BEFORE SHOT:', inspect_res.get('result', {}).get('value') if 'result' in inspect_res else inspect_res, flush=True)
 
         shot = await call('Page.captureScreenshot', {'format': 'png'})
         out_name = sys.argv[3] if len(sys.argv) > 3 and sys.argv[3] else 'screenshot.png'

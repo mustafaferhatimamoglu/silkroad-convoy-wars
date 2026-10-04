@@ -1,13 +1,13 @@
 /**
- * KartalVehicle.js — Tofas Kartal 1.6 SLX Gercekci Fizik ve 3D Arac Modeli
+ * KartalVehicle.js — Tofaş Kartal 1.6 SLX Gerçekçi Fizik & GTA Tarzı Sürüş Motoru
  * 
- * Silkroad Online V3 Üzerinde:
- * - Arkadan itis (RWD) & Ackermann direksiyon geometrisi
- * - Gercekci motor devri (RPM), 5 ileri + 1 geri vites oranlari
- * - Agirlik transferi (pitch/roll acceleration & braking)
- * - Diferansiyel & el freni ile gercekci drift fizigi
- * - 4 bagimsiz amortisor / suspansiyon & arazi raycast yukseklik uyumu
- * - Tofas Kartal station-wagon govde geometrisi, farlar, stoplar, jantlar
+ * Silkroad Online V3:
+ * - Arkadan İtiş (RWD) & Doğru Ackermann Direksiyon Geometrisi (A: Sol, D: Sağ)
+ * - GTA Tarzı Zıplama & Havada Kalma Fiziği (Air control & Suspension bounce)
+ * - Obje & Sur Çarpışma Tepkisi (Bounce, Elastic Impact, Shake & Hasar Sistemi)
+ * - Köprü ve Platform Raycast Desteği (Yükseltilmiş köprülerden geçebilme)
+ * - Çift Tonlu Gerçekçi Motor Sesi + Çarpma Sesi + Mute Desteği
+ * - Tofaş Kartal SLX Detaylı 3D Modeli, Farlar, Stoplar, Egzoz Dumanı
  */
 (function (global) {
   'use strict';
@@ -22,118 +22,128 @@
       this.group.name = 'Tofas_Kartal_SLX';
       this.scene.add(this.group);
 
-      // Fiziksel Boyutlar & Parametreler (Kartal Station Wagon)
+      // Boyutlar (Kartal Station Wagon)
       this.width = 1.70;       // metre
       this.length = 4.30;      // metre
       this.height = 1.45;      // metre
-      this.wheelbase = 2.45;   // aks araligi
-      this.trackWidth = 1.42;  // tekerlek izi
-      this.wheelRadius = 0.32; // 175/70 R13
+      this.wheelbase = 2.45;   // aks mesafesi
+      this.trackWidth = 1.42;  // teker izi
+      this.wheelRadius = 0.32; // teker yaricapi
       this.mass = 1050;        // kg
 
-      // Arac Pozisyonu & Yonelimi
+      // Konum, Hiz & Yonelim
       this.position = new THREE.Vector3(0, 0, 0);
       this.velocity = new THREE.Vector3(0, 0, 0);
-      this.angularVelocity = 0; // rad/s (yaw rate)
-      this.yaw = 0;             // yonelme acisi (radyan)
-      this.pitch = 0;           // burnu kaldirma / dalma
-      this.roll = 0;            // yana yatma (viraj savrulmasi)
+      this.verticalVelocity = 0; // m/s (ziplama ve dusme)
+      this.angularVelocity = 0;  // rad/s
+      this.yaw = 0;              // radyan
+      this.pitch = 0;            // burun kalkma / dalma
+      this.roll = 0;             // yana yatma (body roll)
 
-      // Motor & Sanziman (1.6L Tempra motoru)
-      this.gear = 1;            // -1: R, 0: N, 1..5
-      this.rpm = 900;           // rolanti
+      // Motor & Sanziman
+      this.gear = 1;             // -1: R, 0: N, 1..5
+      this.rpm = 900;
       this.idleRpm = 900;
       this.maxRpm = 6500;
       this.gearRatios = {
         '-1': -3.60,
         0: 0.0,
-        1: 3.75,
+        1: 3.80,
         2: 2.15,
         3: 1.40,
         4: 1.00,
         5: 0.82
       };
       this.finalDrive = 3.90;
-      this.maxTorque = 125;     // Nm @ 3000 RPM
+      this.maxTorque = 130;      // Nm
 
       // Dinamik Durumlar
-      this.steeringAngle = 0;   // on tekerleklerin acisi
-      this.maxSteerAngle = 0.62;// ~35 derece
-      this.speedKmh = 0;        // gosterge km/s
-      this.driftFactor = 0;     // kayma derecesi (0..1)
+      this.steeringAngle = 0;    // on tekerlek acisi
+      this.maxSteerAngle = 0.60; // radyan (~34 derece)
+      this.speedKmh = 0;
+      this.driftFactor = 0;
       this.isGrounded = true;
-      this.suspensionTravel = [0, 0, 0, 0]; // 4 teker
+      this.airTime = 0;
+
+      // Hasar & Saglik Sistemi (GTA Tarzi)
+      this.health = 100;
+      this.lastImpactSpeed = 0;
+      this.cameraShakeIntensity = 0;
 
       // Girdi Durumu
       this.inputs = {
         throttle: 0,
         brake: 0,
         handbrake: false,
-        steer: 0
+        steer: 0,
+        jump: false
       };
 
-      // Tekerlek 3D Mesh Referanslari
+      // Raycaster (Zemin ve Kopruler icin)
+      this.raycaster = new THREE.Raycaster();
+      this.downVector = new THREE.Vector3(0, -1, 0);
+
+      // Ses Sistemi (Web Audio)
+      this.soundEnabled = true;
+      this._initAudio();
+
+      // Tekerlekler & Duman Parcaciklari
       this.wheels = [];
+      this.smokeParticles = [];
 
       this._buildMesh();
+      this._buildSmokeSystem();
     }
 
     _buildMesh() {
-      // Tofas Beyazi Govde Materyali
+      // Beyaz Govde Materyali
       const bodyMat = new THREE.MeshStandardMaterial({
-        color: 0xf4f4f2,
-        roughness: 0.35,
-        metalness: 0.25
+        color: 0xf5f5f3,
+        roughness: 0.32,
+        metalness: 0.22
       });
 
-      // Siyah Plastik Tampon ve Citalar
+      // Siyah Plastik Tampon ve Yan Citalar
       const plasticMat = new THREE.MeshStandardMaterial({
-        color: 0x1a1a1a,
-        roughness: 0.85,
+        color: 0x1f1f1f,
+        roughness: 0.88,
         metalness: 0.05
       });
 
-      // Cam Materyali (Hafif yesilimsi film)
+      // Filmli Camlar
       const glassMat = new THREE.MeshStandardMaterial({
-        color: 0x1a2e26,
+        color: 0x14201a,
         roughness: 0.1,
-        metalness: 0.9,
+        metalness: 0.85,
         transparent: true,
-        opacity: 0.65
+        opacity: 0.70
       });
 
-      // Krom / Far Aynasi
+      // Krom Detaylar
       const chromeMat = new THREE.MeshStandardMaterial({
         color: 0xeeeeee,
-        roughness: 0.1,
+        roughness: 0.15,
         metalness: 0.95
       });
 
-      // Far Cami (Parlak)
+      // Farlar & Stoplar
       const headLightMat = new THREE.MeshStandardMaterial({
-        color: 0xfffae0,
+        color: 0xfffae6,
         roughness: 0.2,
         metalness: 0.3,
-        emissive: 0xffeeaa,
-        emissiveIntensity: 0.7
+        emissive: 0xffea9f,
+        emissiveIntensity: 0.85
       });
-
-      // Stop Cami (Kirmizi)
       const tailLightMat = new THREE.MeshStandardMaterial({
         color: 0xd91414,
         roughness: 0.3,
         metalness: 0.1,
-        emissive: 0x990000,
-        emissiveIntensity: 0.5
-      });
-
-      // Gosterge / Iceri
-      const interiorMat = new THREE.MeshStandardMaterial({
-        color: 0x222222,
-        roughness: 0.9
+        emissive: 0xaa0000,
+        emissiveIntensity: 0.6
       });
 
       this.chassis = new THREE.Group();
+      this.chassis.name = 'Chassis';
       this.group.add(this.chassis);
 
       // --- 1. ALT GOVDE (Kabin alti & kapi bolgesi) ---
@@ -144,7 +154,7 @@
       lowerBody.receiveShadow = true;
       this.chassis.add(lowerBody);
 
-      // --- 2. KARTAL STATION WAGON UST KABIN (Arkaya kadar uzanan tavan) ---
+      // --- 2. KARTAL STATION WAGON UST KABIN ---
       const cabinGeo = new THREE.BoxGeometry(1.50, 0.60, 2.70);
       const cabin = new THREE.Mesh(cabinGeo, bodyMat);
       cabin.position.set(0, 1.05, -0.45);
@@ -159,7 +169,7 @@
       winFront.rotation.x = -0.38;
       this.chassis.add(winFront);
 
-      // Arka Bagaj Cami (Kartal Bagaj Kapagi)
+      // Arka Bagaj Cami
       const winRearGeo = new THREE.BoxGeometry(1.42, 0.50, 0.06);
       const winRear = new THREE.Mesh(winRearGeo, glassMat);
       winRear.position.set(0, 1.04, -1.78);
@@ -172,53 +182,46 @@
       winSide.position.set(0, 1.05, -0.45);
       this.chassis.add(winSide);
 
-      // --- 4. TAMPONLAR & YAN CITALAR ---
+      // --- 4. TAMPONLAR & IZGARA ---
       // On Tampon
-      const fBumpGeo = new THREE.BoxGeometry(1.72, 0.22, 0.20);
-      const fBump = new THREE.Mesh(fBumpGeo, plasticMat);
-      fBump.position.set(0, 0.38, 2.15);
-      this.chassis.add(fBump);
+      this.frontBumper = new THREE.Mesh(new THREE.BoxGeometry(1.72, 0.22, 0.20), plasticMat);
+      this.frontBumper.position.set(0, 0.38, 2.15);
+      this.chassis.add(this.frontBumper);
 
       // Arka Tampon
-      const rBumpGeo = new THREE.BoxGeometry(1.72, 0.24, 0.20);
-      const rBump = new THREE.Mesh(rBumpGeo, plasticMat);
-      rBump.position.set(0, 0.40, -2.15);
-      this.chassis.add(rBump);
+      this.rearBumper = new THREE.Mesh(new THREE.BoxGeometry(1.72, 0.24, 0.20), plasticMat);
+      this.rearBumper.position.set(0, 0.40, -2.15);
+      this.chassis.add(this.rearBumper);
 
-      // Tofas On Panjur (Grille) & Logo
-      const grilleGeo = new THREE.BoxGeometry(1.10, 0.16, 0.05);
-      const grille = new THREE.Mesh(grilleGeo, plasticMat);
+      // Tofas On Panjur & Logo
+      const grille = new THREE.Mesh(new THREE.BoxGeometry(1.10, 0.16, 0.05), plasticMat);
       grille.position.set(0, 0.58, 2.14);
       this.chassis.add(grille);
 
-      // Tofas Kusu / Amblem
-      const emblemGeo = new THREE.BoxGeometry(0.12, 0.10, 0.06);
-      const emblem = new THREE.Mesh(emblemGeo, chromeMat);
+      const emblem = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.10, 0.06), chromeMat);
       emblem.position.set(0, 0.58, 2.15);
       this.chassis.add(emblem);
 
-      // --- 5. FARLAR & STOPLAR ---
-      // Kare Tofas On Farlari
+      // --- 5. AYDINLATMA & DETAYLAR ---
+      // On Farlar
       [-0.60, 0.60].forEach(x => {
         const hl = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.18, 0.06), headLightMat);
         hl.position.set(x, 0.58, 2.14);
         this.chassis.add(hl);
 
-        // Sinayller (Turuncu)
-        const indMat = new THREE.MeshStandardMaterial({ color: 0xff9900, roughness: 0.3, emissive: 0x663300 });
-        const ind = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.18, 0.06), indMat);
+        const ind = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.18, 0.06), new THREE.MeshStandardMaterial({ color: 0xff9900, emissive: 0x663300 }));
         ind.position.set(x > 0 ? x + 0.22 : x - 0.22, 0.58, 2.13);
         this.chassis.add(ind);
       });
 
-      // Dikdortgen Kartal Arka Stoplar
+      // Arka Stoplar
       [-0.65, 0.65].forEach(x => {
         const tl = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.32, 0.06), tailLightMat);
         tl.position.set(x, 0.58, -2.14);
         this.chassis.add(tl);
       });
 
-      // Kartal Tavan Raylari (Portbagaj raylari - Klasik Kartal SLX)
+      // Kartal Portbagaj Tavan Raylari
       [-0.62, 0.62].forEach(x => {
         const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 2.30, 8), plasticMat);
         rail.rotation.x = Math.PI / 2;
@@ -226,13 +229,13 @@
         this.chassis.add(rail);
       });
 
-      // Egzoz Borusu (Arka sol)
+      // Egzoz Borusu
       const exhaust = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.40, 8), chromeMat);
       exhaust.rotation.x = Math.PI / 2;
       exhaust.position.set(-0.55, 0.22, -2.15);
       this.chassis.add(exhaust);
 
-      // Far Isiklari (Three.js SpotLight)
+      // Spot Farlar (Gorus Isigi)
       this.leftHeadlight = new THREE.SpotLight(0xfffae0, 2.5, 90, Math.PI / 5, 0.4);
       this.leftHeadlight.position.set(-0.60, 0.60, 2.20);
       this.chassis.add(this.leftHeadlight);
@@ -245,11 +248,11 @@
       this.rightHeadlight.target.position.set(0.60, 0.0, 30.0);
       this.chassis.add(this.rightHeadlight.target);
 
-      // --- 6. 4 ADET TEKERLEK (Klasik 5 Kollu Tofas Jant) ---
+      // --- 6. 4 ADET TEKERLEK ---
       const wheelGeo = new THREE.CylinderGeometry(this.wheelRadius, this.wheelRadius, 0.22, 20);
       wheelGeo.rotateZ(Math.PI / 2);
 
-      const tireMat = new THREE.MeshStandardMaterial({ color: 0x1c1c1c, roughness: 0.95 });
+      const tireMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.95 });
       const rimMat = new THREE.MeshStandardMaterial({ color: 0xdddddd, roughness: 0.3, metalness: 0.85 });
 
       const wheelPositions = [
@@ -259,7 +262,7 @@
         { x:  this.trackWidth / 2, z: -this.wheelbase / 2, isFront: false }  // Arka Sag
       ];
 
-      wheelPositions.forEach((wp, idx) => {
+      wheelPositions.forEach((wp) => {
         const wGroup = new THREE.Group();
         wGroup.position.set(wp.x, this.wheelRadius, wp.z);
 
@@ -283,9 +286,250 @@
       });
     }
 
+    _buildSmokeSystem() {
+      // Egzoz ve Hasar Duman Partikulleri
+      const smokeGeo = new THREE.SphereGeometry(0.12, 6, 6);
+      const smokeMat = new THREE.MeshBasicMaterial({
+        color: 0x333333,
+        transparent: true,
+        opacity: 0.4
+      });
+
+      this.smokeGroup = new THREE.Group();
+      this.scene.add(this.smokeGroup);
+
+      for (let i = 0; i < 20; i++) {
+        const p = new THREE.Mesh(smokeGeo, smokeMat.clone());
+        p.visible = false;
+        p.userData = { life: 0, maxLife: 1.0, velocity: new THREE.Vector3() };
+        this.smokeGroup.add(p);
+        this.smokeParticles.push(p);
+      }
+    }
+
+    _emitSmoke(origin, dir, isDamage = false) {
+      const p = this.smokeParticles.find(sp => !sp.visible);
+      if (!p) return;
+      p.visible = true;
+      p.position.copy(origin);
+      p.scale.setScalar(isDamage ? 1.5 : 0.8);
+      p.material.color.setHex(isDamage ? 0x111111 : 0x666666);
+      p.material.opacity = isDamage ? 0.6 : 0.35;
+      p.userData.life = 0;
+      p.userData.maxLife = isDamage ? 1.4 : 0.8;
+      p.userData.velocity.set(
+        dir.x + (Math.random() - 0.5) * 1.5,
+        dir.y + Math.random() * 2.0 + 1.0,
+        dir.z + (Math.random() - 0.5) * 1.5
+      );
+    }
+
+    _updateSmoke(dt) {
+      this.smokeParticles.forEach(p => {
+        if (!p.visible) return;
+        p.userData.life += dt;
+        if (p.userData.life >= p.userData.maxLife) {
+          p.visible = false;
+        } else {
+          p.position.addScaledVector(p.userData.velocity, dt);
+          p.scale.multiplyScalar(1.0 + dt * 1.5);
+          p.material.opacity = Math.max(0, p.material.opacity - dt * 0.4);
+        }
+      });
+    }
+
+    // ------------------------------------------------------------ Web Audio Motor & Carpma Sesi
+    _initAudio() {
+      try {
+        const AudioClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioClass) return;
+        this.audioCtx = new AudioClass();
+
+        // 1. Tok Bas Tonu (Low rumble - Tempra sub-bass)
+        this.bassOsc = this.audioCtx.createOscillator();
+        this.bassOsc.type = 'triangle';
+
+        // 2. Mekanik Devir Tonu (Harmonics)
+        this.engineOsc = this.audioCtx.createOscillator();
+        this.engineOsc.type = 'sawtooth';
+
+        // 3. Low-Pass Filtre (Kulak tirmalamayan tok tork sesi)
+        this.filter = this.audioCtx.createBiquadFilter();
+        this.filter.type = 'lowpass';
+        this.filter.frequency.value = 320;
+        this.filter.Q.value = 2.0;
+
+        // 4. Ses Seviyesi Kontrolu
+        this.masterGain = this.audioCtx.createGain();
+        this.masterGain.gain.value = 0.035; // Rahatsiz etmeyen tatli seviye
+
+        this.bassGain = this.audioCtx.createGain();
+        this.bassGain.gain.value = 0.7;
+
+        this.engineGain = this.audioCtx.createGain();
+        this.engineGain.gain.value = 0.3;
+
+        this.bassOsc.connect(this.bassGain);
+        this.engineOsc.connect(this.engineGain);
+
+        this.bassGain.connect(this.filter);
+        this.engineGain.connect(this.filter);
+        this.filter.connect(this.masterGain);
+        this.masterGain.connect(this.audioCtx.destination);
+
+        this.bassOsc.start();
+        this.engineOsc.start();
+      } catch (e) {
+        console.warn('Audio init error:', e);
+      }
+    }
+
+    setMute(mute) {
+      this.soundEnabled = !mute;
+      if (this.masterGain) {
+        this.masterGain.gain.setTargetAtTime(this.soundEnabled ? 0.035 : 0.0, this.audioCtx ? this.audioCtx.currentTime : 0, 0.05);
+      }
+    }
+
+    _updateAudio(dt) {
+      if (!this.audioCtx || !this.soundEnabled) return;
+      if (this.audioCtx.state === 'suspended') {
+        this.audioCtx.resume().catch(() => {});
+      }
+
+      // Devire gore frekans (Rolanti 35Hz, 6500 RPM 190Hz)
+      const baseFreq = 28 + (this.rpm / 6500) * 165;
+      const throttleBonus = this.inputs.throttle ? 1.15 : 0.95;
+      const now = this.audioCtx.currentTime;
+
+      this.bassOsc.frequency.setTargetAtTime(baseFreq * 0.75, now, 0.04);
+      this.engineOsc.frequency.setTargetAtTime(baseFreq * throttleBonus, now, 0.04);
+
+      // Gaz verildiğinde filtrenin açılması (tok egzoz sesi)
+      const filterCutoff = 220 + (this.rpm / 6500) * 550 + (this.inputs.throttle ? 300 : 0);
+      this.filter.frequency.setTargetAtTime(filterCutoff, now, 0.06);
+    }
+
+    playCrashSound(intensity) {
+      if (!this.audioCtx || !this.soundEnabled) return;
+      try {
+        const now = this.audioCtx.currentTime;
+        const osc = this.audioCtx.createOscillator();
+        const gain = this.audioCtx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(140, now);
+        osc.frequency.exponentialRampToValueAtTime(30, now + 0.25);
+
+        gain.gain.setValueAtTime(Math.min(0.2, 0.05 * intensity), now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+
+        osc.connect(gain);
+        gain.connect(this.audioCtx.destination);
+        osc.start(now);
+        osc.stop(now + 0.35);
+      } catch (e) {}
+    }
+
+    // ------------------------------------------------------------ Zemin & Kopru Tespiti
+    getSurfaceHeightAt(x, z, referenceY) {
+      // 1. Dogal Arazi Yuksekligi (.bin verisi)
+      let terrainH = this.map.getHeightAt(x, z);
+      if (terrainH === null) terrainH = -100;
+
+      // 2. Sahnedeki 3D Obje / Kopru / Mermer Platform Raycast
+      // Yukaridan asagiya dikey isin atarak kopru ve binalarin ustune cikilmasini sagla
+      const startY = (referenceY !== undefined && referenceY > terrainH) ? referenceY + 4.0 : terrainH + 12.0;
+      this.raycaster.set(new THREE.Vector3(x, startY, z), this.downVector);
+      this.raycaster.far = 40.0;
+
+      let highestSurface = terrainH;
+
+      // Map group altindaki tum nesneleri tara
+      if (this.map && this.map.group) {
+        const hits = this.raycaster.intersectObjects(this.map.group.children, true);
+        for (const hit of hits) {
+          // Kendi aracimiz ve zemin mesh'i disindaki katı kopru/bina yuzeyleri
+          if (hit.object !== this.group && !hit.object.name.startsWith('terrain_') && !hit.object.name.startsWith('water_')) {
+            if (hit.point.y > highestSurface) {
+              highestSurface = hit.point.y;
+            }
+          }
+        }
+      }
+
+      return highestSurface;
+    }
+
+    // ------------------------------------------------------------ Duvar & Engel Carpisma Tespiti
+    checkObstacleCollisions() {
+      if (!this.map || !this.map.group) return;
+
+      const currentSpeed = this.velocity.length();
+      if (currentSpeed < 0.5) return;
+
+      const fwd = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw)).normalize();
+      const right = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw)).normalize();
+
+      // Arac tampon ve kose kontrol noktalari
+      const checkPoints = [
+        { pos: this.position.clone().addScaledVector(fwd, 2.2), isFront: true },  // On Tampon Merkez
+        { pos: this.position.clone().addScaledVector(fwd, 2.1).addScaledVector(right, 0.8), isFront: true },  // On Sag Kose
+        { pos: this.position.clone().addScaledVector(fwd, 2.1).addScaledVector(right, -0.8), isFront: true }, // On Sol Kose
+        { pos: this.position.clone().addScaledVector(fwd, -2.2), isFront: false } // Arka Tampon
+      ];
+
+      // Yakindaki 3D modelleri tara
+      for (const cp of checkPoints) {
+        this.raycaster.set(cp.pos.clone().add(new THREE.Vector3(0, 0.4, 0)), cp.isFront ? fwd : fwd.clone().negate());
+        this.raycaster.far = 0.8;
+
+        const hits = this.raycaster.intersectObjects(this.map.group.children, true);
+        for (const hit of hits) {
+          // Sutun, duvar, sur kapisi, kaya veya bina engeli
+          if (hit.object !== this.group && !hit.object.name.startsWith('terrain_') && !hit.object.name.startsWith('water_')) {
+            // Yuzeyin dikey olmasi (duvar) gerekiyor
+            if (Math.abs(hit.face.normal.y) < 0.6) {
+              this._resolveCollision(hit, currentSpeed);
+              return;
+            }
+          }
+        }
+      }
+    }
+
+    _resolveCollision(hit, impactSpeed) {
+      // 1. Carpma Tepkisi (Geri Sekme / Elastic Rebound)
+      const normal = hit.face.normal.clone().normalize();
+      
+      // Hizi duvardan yansit ve enerjisini em
+      this.velocity.reflect(normal).multiplyScalar(0.35);
+      this.position.addScaledVector(normal, 0.45); // Duvarin icinden cikar
+
+      // 2. Hasar ve Sarsinti
+      const damage = Math.round(impactSpeed * 1.5);
+      this.health = Math.max(0, this.health - damage);
+      this.lastImpactSpeed = impactSpeed;
+      this.cameraShakeIntensity = Math.min(1.2, impactSpeed / 15.0);
+
+      // Gövde Sarsintisi (Pitch/Roll darbesi)
+      this.pitch += (Math.random() - 0.5) * 0.25;
+      this.roll += (Math.random() - 0.5) * 0.35;
+
+      // 3. Carpma Sesi & Dumani
+      this.playCrashSound(impactSpeed / 10.0);
+      this._emitSmoke(hit.point, normal, true);
+
+      // Kaput deformasyonu (Cok hizli carpmada on tampon hafif yamulur)
+      if (impactSpeed > 20 && this.frontBumper) {
+        this.frontBumper.rotation.z = (Math.random() - 0.5) * 0.15;
+      }
+    }
+
+    // ------------------------------------------------------------ Spawn / Reset
     setSpawn(x, y, z, yaw = 0) {
       this.position.set(x, y, z);
       this.velocity.set(0, 0, 0);
+      this.verticalVelocity = 0;
       this.angularVelocity = 0;
       this.yaw = yaw;
       this.pitch = 0;
@@ -293,56 +537,59 @@
       this.speedKmh = 0;
       this.rpm = this.idleRpm;
       this.gear = 1;
+      this.health = 100;
       this.group.position.copy(this.position);
       this.group.rotation.set(0, this.yaw, 0);
     }
 
+    // ------------------------------------------------------------ Ana Fizik Guncellemesi
     update(dt, inputKeys) {
       if (!dt || dt > 0.1) dt = 0.016;
 
-      // 1. Girdileri isle
+      // 1. Girdileri Oku
       this.inputs.throttle = inputKeys.KeyW || inputKeys.ArrowUp ? 1 : 0;
       this.inputs.brake = inputKeys.KeyS || inputKeys.ArrowDown ? 1 : 0;
       this.inputs.handbrake = !!inputKeys.Space;
 
-      let targetSteer = 0;
-      if (inputKeys.KeyA || inputKeys.ArrowLeft) targetSteer -= 1;   // Sola donus (- yaw)
-      if (inputKeys.KeyD || inputKeys.ArrowRight) targetSteer += 1;  // Saga donus (+ yaw)
+      // Direksiyon: A = SOL (-1), D = SAĞ (+1)
+      let steerInput = 0;
+      if (inputKeys.KeyA || inputKeys.ArrowLeft) steerInput -= 1.0;  // SOL
+      if (inputKeys.KeyD || inputKeys.ArrowRight) steerInput += 1.0; // SAĞ
 
-      // Yuksek hizda direksiyon yumusamasi (Speed-sensitive steering)
+      // Hiza duyarli direksiyon yumusamasi (Speed-sensitive steering)
       const currentSpeed = this.velocity.length();
-      const steerSpeedFactor = Math.max(0.3, 1.0 - (currentSpeed / 60));
-      const targetAngle = targetSteer * this.maxSteerAngle * steerSpeedFactor;
+      const steerSpeedFactor = Math.max(0.28, 1.0 - (currentSpeed / 65));
+      const targetAngle = steerInput * this.maxSteerAngle * steerSpeedFactor;
       this.steeringAngle += (targetAngle - this.steeringAngle) * Math.min(1.0, dt * 10.0);
 
       // 2. Vites & Geri Vites Mantigi
-      const fwdDot = Math.cos(this.yaw) * this.velocity.z + Math.sin(this.yaw) * this.velocity.x;
-      if (this.inputs.brake > 0 && Math.abs(currentSpeed) < 1.0 && this.gear >= 0) {
-        this.gear = -1; // Geri vitese gec
-      } else if (this.inputs.throttle > 0 && this.gear === -1 && Math.abs(currentSpeed) < 1.0) {
-        this.gear = 1;  // Tekrar 1. vitese gec
+      if (this.inputs.brake > 0 && currentSpeed < 0.8 && this.gear >= 0) {
+        this.gear = -1; // Geri vites
+      } else if (this.inputs.throttle > 0 && currentSpeed < 0.8 && this.gear === -1) {
+        this.gear = 1;  // 1. Vites
       }
 
-      // Otomatik Vites Degisimi (1..5)
+      // Otomatik vites gecisleri (1..5)
       if (this.gear > 0) {
-        if (this.rpm > 5500 && this.gear < 5) {
+        if (this.rpm > 5400 && this.gear < 5) {
           this.gear++;
-          this.rpm = 3200;
-        } else if (this.rpm < 2200 && this.gear > 1) {
+          this.rpm = 3100;
+        } else if (this.rpm < 2100 && this.gear > 1) {
           this.gear--;
-          this.rpm = 4200;
+          this.rpm = 4100;
         }
       }
 
-      // 3. Yon ve Hiz Vektorleri
-      // Forward: Three.js'de Z negatif ileri veya pozitif, biz burada Z eksenini arac burnu olarak aliyoruz
-      const fwd = new THREE.Vector3(Math.sin(this.yaw), 0, Math.cos(this.yaw)).normalize();
+      // 3. Yon Vektorleri (Silkroad / Three.js Uyumlu)
+      // Model burnu yerel +Z yonundedir.
+      // rotation.y = yaw uygulandiginda burnun dunya vektorleri:
+      const fwd = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw)).normalize();
       const right = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw)).normalize();
 
       const forwardSpeed = this.velocity.dot(fwd);
       const lateralSpeed = this.velocity.dot(right);
 
-      // 4. Motor Kuvveti & Cekis (RWD Arkadan Itis)
+      // 4. Motor Kuvveti & Tork (Arkadan Itis - RWD)
       let driveForce = 0;
       const ratio = this.gearRatios[this.gear] || 0;
 
@@ -351,115 +598,159 @@
         this.rpm += (targetRpm - this.rpm) * Math.min(1.0, dt * 8.0);
         this.rpm = Math.min(this.maxRpm, Math.max(this.idleRpm, this.rpm));
 
-        if (this.gear > 0 && this.inputs.throttle > 0) {
-          // Tofas guc egrisi (3000-5000 arasi tepe tork)
-          const torqueFactor = Math.sin((this.rpm / this.maxRpm) * Math.PI);
-          driveForce = this.inputs.throttle * this.maxTorque * ratio * this.finalDrive * (0.6 + 0.4 * torqueFactor);
-        } else if (this.gear === -1 && this.inputs.brake > 0) {
-          // Geri gitme
-          driveForce = -this.inputs.brake * this.maxTorque * Math.abs(ratio) * this.finalDrive * 0.7;
+        if (this.isGrounded) {
+          if (this.gear > 0 && this.inputs.throttle > 0) {
+            // Tofas SLX tork egrisi
+            const torqueFactor = Math.sin((this.rpm / this.maxRpm) * Math.PI);
+            driveForce = this.inputs.throttle * this.maxTorque * ratio * this.finalDrive * (0.65 + 0.35 * torqueFactor);
+          } else if (this.gear === -1 && this.inputs.brake > 0) {
+            // Geri vites cekisi
+            driveForce = -this.inputs.brake * this.maxTorque * Math.abs(ratio) * this.finalDrive * 0.75;
+          }
         }
       }
 
-      // 5. Fren & El Freni
+      // 5. Fren & El Freni (Drift)
       let brakeForce = 0;
-      if (this.gear > 0 && this.inputs.brake > 0) {
-        brakeForce = 4500 * Math.sign(forwardSpeed);
+      if (this.gear > 0 && this.inputs.brake > 0 && this.isGrounded) {
+        brakeForce = 4600 * Math.sign(forwardSpeed);
       }
       let handbrakeFriction = 1.0;
-      if (this.inputs.handbrake) {
-        brakeForce += 5500 * Math.sign(forwardSpeed);
-        handbrakeFriction = 0.25; // Arka tekerlekler kilitlenir -> DRIFT baslar!
+      if (this.inputs.handbrake && this.isGrounded) {
+        brakeForce += 5200 * Math.sign(forwardSpeed);
+        handbrakeFriction = 0.28; // Arka lastikler kilitlenir -> DRIFT!
       }
 
-      // 6. Lastik Tutunmasi & Suruklenme (Lateral / Longitudinal Friction)
-      const rollResistance = 250 * Math.sign(forwardSpeed);
-      const aeroDrag = 0.42 * 0.5 * 1.225 * 2.1 * forwardSpeed * Math.abs(forwardSpeed); // 0.5 * rho * Cd * A * v^2
+      // 6. Yuvarlanma Direnci & Hava Direnci (Aero Drag)
+      const rollResistance = this.isGrounded ? (240 * Math.sign(forwardSpeed)) : 10;
+      const aeroDrag = 0.42 * 0.5 * 1.225 * 2.1 * forwardSpeed * Math.abs(forwardSpeed);
 
       const netForwardForce = driveForce - brakeForce - rollResistance - aeroDrag;
       const forwardAccel = netForwardForce / this.mass;
 
-      // Yanal surtunme (viraj kavrama & kayma)
+      // Yanal Yol Tutus (Lateral Grip)
       const corneringStiffness = 32000 * handbrakeFriction;
-      let lateralForce = -lateralSpeed * corneringStiffness / this.mass;
+      let lateralForce = this.isGrounded ? (-lateralSpeed * corneringStiffness / this.mass) : (-lateralSpeed * 0.2);
 
-      // Drift faktoru hesapla
-      this.driftFactor = Math.min(1.0, Math.abs(lateralSpeed) / 8.0 + (this.inputs.handbrake ? 0.6 : 0.0));
+      // Drift faktoru
+      this.driftFactor = Math.min(1.0, Math.abs(lateralSpeed) / 7.5 + (this.inputs.handbrake ? 0.6 : 0.0));
 
-      // 7. Donus & Yaw Acisal Hizi
-      const turnRadius = this.wheelbase / Math.tan(Math.max(0.001, Math.abs(this.steeringAngle)));
+      // Egzoz Dumani
+      if (this.inputs.throttle > 0 && Math.random() < 0.3) {
+        const exhaustPos = this.position.clone().addScaledVector(fwd, -2.15).addScaledVector(right, -0.55).add(new THREE.Vector3(0, 0.25, 0));
+        this._emitSmoke(exhaustPos, fwd.clone().negate().multiplyScalar(2.0), this.health < 40);
+      }
+
+      // 7. Donus & Direksiyon Donus Hizi (Yaw Rate)
+      // Direksiyon saga (D) kirildiginda: steeringAngle > 0 -> burnun saga donmesi icin yaw pozitif artar
+      // Direksiyon sola (A) kirildiginda: steeringAngle < 0 -> burnun sola donmesi icin yaw negatif azalir
       const baseYawRate = (forwardSpeed / this.wheelbase) * Math.sin(this.steeringAngle);
-      // El freni cekildiginde arkadan kayma (oversteer)
-      const oversteerBonus = this.inputs.handbrake ? (this.steeringAngle * 2.8) : (this.driftFactor * this.steeringAngle * 1.2);
+      const oversteerBonus = this.inputs.handbrake ? (this.steeringAngle * 2.6) : (this.driftFactor * this.steeringAngle * 1.2);
 
       this.angularVelocity = baseYawRate + oversteerBonus;
-      this.yaw += this.angularVelocity * dt;
+      if (this.isGrounded) {
+        this.yaw += this.angularVelocity * dt;
+      } else {
+        // Havada iken hafif gyroscopic yaw
+        this.yaw += this.angularVelocity * 0.4 * dt;
+      }
 
       // 8. Hiz Vektorunu Guncelle
       this.velocity.addScaledVector(fwd, forwardAccel * dt);
       this.velocity.addScaledVector(right, lateralForce * dt);
 
-      // Yere temas ve hava direnci
+      // Pozisyon Yatay Hareket
       this.position.x += this.velocity.x * dt;
       this.position.z += this.velocity.z * dt;
 
       this.speedKmh = Math.abs(this.velocity.length() * 3.6);
 
-      // 9. 4 Noktadan Zemin Raycast & Suspansiyon
-      const hFL = this.map.getHeightAt(this.position.x + right.x * (this.trackWidth / 2) + fwd.x * (this.wheelbase / 2),
-                                       this.position.z + right.z * (this.trackWidth / 2) + fwd.z * (this.wheelbase / 2));
-      const hFR = this.map.getHeightAt(this.position.x - right.x * (this.trackWidth / 2) + fwd.x * (this.wheelbase / 2),
-                                       this.position.z - right.z * (this.trackWidth / 2) + fwd.z * (this.wheelbase / 2));
-      const hRL = this.map.getHeightAt(this.position.x + right.x * (this.trackWidth / 2) - fwd.x * (this.wheelbase / 2),
-                                       this.position.z + right.z * (this.trackWidth / 2) - fwd.z * (this.wheelbase / 2));
-      const hRR = this.map.getHeightAt(this.position.x - right.x * (this.trackWidth / 2) - fwd.x * (this.wheelbase / 2),
-                                       this.position.z - right.z * (this.trackWidth / 2) - fwd.z * (this.wheelbase / 2));
+      // 9. GTA Tarzi Ziplama, Dusme ve Suspansiyon (Vertical Physics)
+      const groundH = this.getSurfaceHeightAt(this.position.x, this.position.z, this.position.y);
+      const targetY = groundH + this.wheelRadius;
 
-      const validHeights = [hFL, hFR, hRL, hRR].filter(h => h !== null);
-      if (validHeights.length > 0) {
-        const avgGround = validHeights.reduce((a, b) => a + b, 0) / validHeights.length;
-        
-        // Yer cekimi ve yaylanma (tekerlek yari capi kadar zeminin ustunde durmali)
-        const targetY = avgGround + this.wheelRadius;
-        this.position.y += (targetY - this.position.y) * Math.min(1.0, dt * 15.0);
+      const gravity = -24.0; // m/s^2 sert yercekimi
+      this.verticalVelocity += gravity * dt;
+      this.position.y += this.verticalVelocity * dt;
 
-        // Zemin egiminden pitch & roll hesapla
-        if (hFL !== null && hRL !== null) {
-          const frontAvg = ((hFL || avgGround) + (hFR || avgGround)) / 2;
-          const rearAvg = ((hRL || avgGround) + (hRR || avgGround)) / 2;
-          const groundPitch = Math.atan2(frontAvg - rearAvg, this.wheelbase);
-          // Hizlanma/fren agirlik transferi
-          const accelPitch = (forwardAccel / 9.81) * -0.06;
-          this.pitch += (groundPitch + accelPitch - this.pitch) * Math.min(1.0, dt * 10.0);
+      if (this.position.y <= targetY) {
+        // Zemine temas etti (Landing / Grounded)
+        const impactY = Math.abs(this.verticalVelocity);
+        if (!this.isGrounded && impactY > 8.0) {
+          // Sert inis (GTA Suspansiyon sekmesi)
+          this.cameraShakeIntensity = Math.min(1.0, impactY / 20.0);
+          this.playCrashSound(impactY / 15.0);
         }
 
-        if (hFL !== null && hFR !== null) {
-          const leftAvg = ((hFL || avgGround) + (hRL || avgGround)) / 2;
-          const rightAvg = ((hFR || avgGround) + (hRR || avgGround)) / 2;
-          const groundRoll = Math.atan2(leftAvg - rightAvg, this.trackWidth);
-          // Viraj savrulmasi (body roll)
-          const cornerRoll = (lateralSpeed / 9.81) * 0.08;
-          this.roll += (groundRoll + cornerRoll - this.roll) * Math.min(1.0, dt * 10.0);
+        this.position.y = targetY;
+        this.verticalVelocity = 0;
+        this.isGrounded = true;
+        this.airTime = 0;
+      } else {
+        // Arac havada! (Ziplama / Rampadan ucma)
+        this.isGrounded = false;
+        this.airTime += dt;
+      }
+
+      // Rampadan firlama (Arazide yuksek hizla tepeye cikarken firlasin)
+      if (this.isGrounded && forwardSpeed > 15.0) {
+        // Onumuzdeki 2 metrenin yukseklik farki
+        const aheadH = this.getSurfaceHeightAt(this.position.x + fwd.x * 2.5, this.position.z + fwd.z * 2.5, this.position.y);
+        const rampSlope = (aheadH - groundH) / 2.5;
+        if (rampSlope > 0.35) {
+          // Rampa yukari firlama kuvveti
+          this.verticalVelocity = forwardSpeed * rampSlope * 0.65;
+          this.isGrounded = false;
         }
       }
 
-      // 10. 3D Model Dönüşümlerini Güncelle
+      // 10. Agirlik Transferi & Egim (Pitch & Roll)
+      if (this.isGrounded) {
+        const hFront = this.getSurfaceHeightAt(this.position.x + fwd.x * 1.5, this.position.z + fwd.z * 1.5, this.position.y);
+        const hRear = this.getSurfaceHeightAt(this.position.x - fwd.x * 1.5, this.position.z - fwd.z * 1.5, this.position.y);
+        const groundPitch = Math.atan2(hFront - hRear, 3.0);
+        const accelPitch = (forwardAccel / 9.81) * -0.06;
+        this.pitch += (groundPitch + accelPitch - this.pitch) * Math.min(1.0, dt * 12.0);
+
+        const hRight = this.getSurfaceHeightAt(this.position.x + right.x * 1.0, this.position.z + right.z * 1.0, this.position.y);
+        const hLeft = this.getSurfaceHeightAt(this.position.x - right.x * 1.0, this.position.z - right.z * 1.0, this.position.y);
+        const groundRoll = Math.atan2(hRight - hLeft, 2.0);
+        const cornerRoll = (lateralSpeed / 9.81) * 0.08;
+        this.roll += (groundRoll + cornerRoll - this.roll) * Math.min(1.0, dt * 12.0);
+      } else {
+        // Havada iken burnun asagi dogru egilmesi (GTA air pitch)
+        this.pitch += (-0.2 - this.pitch) * dt * 2.0;
+        this.roll *= (1.0 - dt * 2.0);
+      }
+
+      // 11. Engel & Duvar Carpisma Kontrolu
+      this.checkObstacleCollisions();
+
+      // Kamera sarsintisini sonumle
+      if (this.cameraShakeIntensity > 0) {
+        this.cameraShakeIntensity = Math.max(0, this.cameraShakeIntensity - dt * 2.5);
+      }
+
+      // 12. 3D Model Matrislerini Guncelle
       this.group.position.copy(this.position);
       this.group.rotation.set(0, this.yaw, 0);
-
-      // Sasinin yaylanmasi ve egimi
       this.chassis.rotation.set(this.pitch, 0, this.roll);
 
-      // 11. Tekerlek Donusleri & Direksiyon
+      // 13. Tekerlek Donusleri & Direksiyon Acisi
       const wheelSpin = (forwardSpeed / this.wheelRadius) * dt;
       this.wheels.forEach(w => {
         w.rotation += wheelSpin;
         w.tire.rotation.x = w.rotation;
 
         if (w.isFront) {
+          // On tekerlekler donus yonune kirilsin
           w.group.rotation.y = this.steeringAngle;
         }
       });
+
+      // 14. Ses & Partikul Guncelle
+      this._updateAudio(dt);
+      this._updateSmoke(dt);
     }
   }
 

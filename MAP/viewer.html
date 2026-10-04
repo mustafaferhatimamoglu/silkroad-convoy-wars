@@ -74,7 +74,7 @@
 
 <!-- Yaris HUD -->
 <div id="race-bar">
-  <div>🏆 <span style="color:#ffd479;">İPEK YOLU BÜYÜK YARIŞI:</span> JANGAN ➔ HOTAN</div>
+  <div>🏆 <span style="color:#ffd479;">İPEK YOLU BÜYÜK YARIŞI:</span> HOTAN KALESİ ➔ TAKLAMAKAN (LORD YARKAN)</div>
   <div style="font-size: 11px; color: #cbd5e1; margin-top: 2px;">
     Kalan Mesafe: <span id="race-dist" style="color:#4ade80;">- km</span> · Zaman: <span id="race-time" style="color:#60a5fa;">00:00.0</span> · Durum: <span id="race-status" style="color:#fcd34d;">Hazır</span>
   </div>
@@ -87,7 +87,7 @@
     <div id="val-speed" class="dial-val">0</div>
     <div class="dial-lbl">KM / S</div>
   </div>
-  <div class="dial-box" style="margin: 0 10px; text-align: center;">
+  <div class="dial-box" style="margin: 0 8px; text-align: center;">
     <div id="val-gear" class="gear-val">1</div>
     <div class="dial-lbl">VİTES</div>
   </div>
@@ -95,11 +95,15 @@
     <div id="val-rpm" class="dial-val" style="color:#60a5fa;">900</div>
     <div class="dial-lbl">MOTOR RPM</div>
   </div>
-  <div style="font-size: 11px; color: #94a3b8; border-left: 1px solid #334155; padding-left: 12px; line-height: 1.4;">
+  <div class="dial-box" style="margin-left: 8px;">
+    <div id="val-health" class="dial-val" style="color:#4ade80;">100%</div>
+    <div class="dial-lbl">GÖVDE / SAĞLIK</div>
+  </div>
+  <div style="font-size: 11px; color: #94a3b8; border-left: 1px solid #334155; padding-left: 10px; line-height: 1.35;">
     🚗 <b>Tofaş Kartal 1.6 SLX</b><br>
-    W: Gaz · S: Fren / Geri<br>
-    A/D: Direksiyon · Space: El Freni (Drift)<br>
-    C: Kamera Değiştir (İç/Dış) · R: Sıfırla
+    W: Gaz · S: Fren/Geri · A/D: Direksiyon<br>
+    Space: El Freni / Drift · C: Kamera · R: Sıfırla<br>
+    <button id="btn-engine-mute" style="background:#334155; color:#cbd5e1; border:1px solid #475569; border-radius:3px; padding:2px 6px; font-size:10px; margin-top:2px; cursor:pointer;">🔊 Motor: Açık (M)</button>
   </div>
 </div>
 
@@ -111,10 +115,10 @@
   <div class="hud-row">
     <span>Hizli Sehir:</span>
     <select id="sel-city">
-      <option value="168,97" selected>Jangan (Çin Başkenti)</option>
+      <option value="168,97">Jangan (Çin Başkenti)</option>
       <option value="168,98">Jangan Sarayı (İmparatorluk Sarayı)</option>
       <option value="157,98">Donwhang (Vaha Şehri)</option>
-      <option value="135,92">Hotan (Vaha Kalesi & Şehir Merkezi)</option>
+      <option value="135,92" selected>Hotan (Vaha Kalesi & Şehir Merkezi)</option>
       <option value="107,107">Samarkand (Orta Asya)</option>
       <option value="78,106">Constantinople (Avrupa Başkenti)</option>
       <option value="53,90">Alexandria (Mısır Limanı)</option>
@@ -132,8 +136,8 @@
 
   <div class="hud-row">
     <span>Koor:</span>
-    X <input id="gx" type="number" value="168">
-    Z <input id="gz" type="number" value="97">
+    X <input id="gx" type="number" value="135">
+    Z <input id="gz" type="number" value="92">
     <button id="go">Git</button>
   </div>
 
@@ -148,7 +152,7 @@
     <button id="btn-car-mode" style="background:#e11d48; width: 100%; padding: 6px 0; font-size: 13px;">🚗 Tofaş Kartal Sürme Modu</button>
   </div>
   <div class="hud-row">
-    <button id="btn-start-race" style="background:#16a34a; width: 100%; padding: 5px 0; font-size: 12px;">🏁 Jangan ➔ Hotan Yarışı Başlat</button>
+    <button id="btn-start-race" style="background:#16a34a; width: 100%; padding: 5px 0; font-size: 12px;">🏁 Hotan ➔ Taklamakan (Lord Yarkan) Rallisi</button>
   </div>
 </div>
 
@@ -169,7 +173,7 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <script src="SilkroadMap.js?v=10"></script>
-<script src="KartalVehicle.js?v=1"></script>
+<script src="KartalVehicle.js?v=2"></script>
 <script>
 (async function () {
   const canvas = document.getElementById('c');
@@ -360,41 +364,35 @@
   const vehicle = new KartalVehicle(scene, map);
   window.vehicle = vehicle;
   let isCarMode = false;
-  let cameraViewMode = 'chase'; // 'chase', 'hood', 'orbit'
-  
-  // Basit Web Audio Motor Sentezleyicisi (Tempra 1.6L Motor Sesi)
-  let audioCtx = null, engineOsc = null, engineGain = null;
-  function initEngineAudio() {
-    if (audioCtx) return;
-    try {
-      const AudioClass = window.AudioContext || window.webkitAudioContext;
-      if (!AudioClass) return;
-      audioCtx = new AudioClass();
-      engineOsc = audioCtx.createOscillator();
-      engineOsc.type = 'sawtooth';
-      engineGain = audioCtx.createGain();
-      engineGain.gain.value = 0.04;
-      engineOsc.connect(engineGain);
-      engineGain.connect(audioCtx.destination);
-      engineOsc.start();
-    } catch(e){}
-  }
-  function updateEngineAudio(rpm) {
-    if (!engineOsc) return;
-    // 900 RPM -> ~45 Hz, 6000 RPM -> ~280 Hz
-    const freq = 35 + (rpm / 6000) * 240;
-    engineOsc.frequency.setTargetAtTime(freq, audioCtx.currentTime, 0.05);
-  }
+  let cameraViewMode = 'chase'; // 'chase', 'hood', 'far'
 
-  // Yaris Sistemi (Jangan -> Hotan)
+  // Motor Sesi Ac/Kapat (Mute)
+  let isEngineMuted = false;
+  function toggleEngineMute() {
+    isEngineMuted = !isEngineMuted;
+    vehicle.setMute(isEngineMuted);
+    const muteBtn = document.getElementById('btn-engine-mute');
+    if (muteBtn) {
+      muteBtn.textContent = isEngineMuted ? '🔇 Motor: Sessiz (M)' : '🔊 Motor: Açık (M)';
+      muteBtn.style.color = isEngineMuted ? '#f87171' : '#cbd5e1';
+    }
+  }
+  const muteBtn = document.getElementById('btn-engine-mute');
+  if (muteBtn) muteBtn.onclick = (e) => { e.target.blur(); toggleEngineMute(); };
+
+  // Yaris Sistemi (Hotan Kalesi -> Taklamakan Lord Yarkan)
   let isRacing = false;
   let raceStartTime = 0;
-  // Jangan (168, 97) -> Donwhang (157, 98) -> Hotan (135, 92)
   const checkpoints = [
-    { name: 'Sarı Nehir Geçidi',         rx: 164, rz: 98, lx: 960, lz: 960, reached: false },
-    { name: 'Donwhang Vaha Girişi',      rx: 157, rz: 98, lx: 960, lz: 960, reached: false },
-    { name: 'Tarim Çöl Kanyonu',         rx: 146, rz: 95, lx: 960, lz: 960, reached: false },
-    { name: 'Hotan Kale Kapısı (BİTİŞ)',   rx: 135, rz: 92, lx: 960, lz: 960, reached: false }
+    { name: 'Hotan Meydanı & Saray Kapısı',     rx: 135, rz: 92, lx: 1136, lz: 1400, reached: false },
+    { name: 'Hotan Kuzey Kale Kapısı & Köprü', rx: 135, rz: 93, lx: 960,  lz: 800,  reached: false },
+    { name: 'Hotan Vaha Çıkışı & Palmiyeler',  rx: 135, rz: 94, lx: 960,  lz: 960,  reached: false },
+    { name: 'Karakoram Dağ Geçidi & Kanyon',   rx: 135, rz: 95, lx: 960,  lz: 960,  reached: false },
+    { name: 'Karakoram Kanyon Köprüsü',        rx: 135, rz: 96, lx: 960,  lz: 960,  reached: false },
+    { name: 'Taklamakan Çöl Girişi & Kumulları',rx: 135, rz: 97, lx: 960,  lz: 960,  reached: false },
+    { name: 'Niya Kalıntıları Harabeleri',     rx: 135, rz: 99, lx: 960,  lz: 960,  reached: false },
+    { name: 'Taklamakan Tapınak Önü Köprüsü',  rx: 135, rz: 101, lx: 687, lz: 1553, reached: false },
+    { name: 'Lord Yarkan Tapınağı (BİTİŞ)',    rx: 135, rz: 102, lx: 49,  lz: 1145, reached: false }
   ];
   let currentCheckpointIdx = 0;
 
@@ -406,31 +404,29 @@
     if (document.activeElement) document.activeElement.blur();
 
     if (isCarMode) {
-      initEngineAudio();
-      if (engineGain) engineGain.gain.value = 0.05;
       carHud.style.display = 'flex';
       btn.style.background = '#059669';
       btn.textContent = '🚶 Serbest Kamera Moduna Dön';
       controls.enabled = false;
 
-      // Jangan Bati Kapisi cikisi (sehir disi genis ana yol)
-      let spawnX = controls.target.x, spawnZ = controls.target.z;
-      if (Math.abs(spawnX - 96) < 80 && Math.abs(spawnZ - (-96)) < 80) {
-        // Jangan sehir disindaki bati cikis yolu (rx=167, lx=1800, lz=960)
-        const openRoadPos = map.toThree(167, 97, 1800, 0, 960);
-        spawnX = openRoadPos.x;
-        spawnZ = openRoadPos.z;
+      // Hotan Kalesi Meydani baslangic noktasi (kristal teleport tasinin onu, acik yol)
+      const hotanCenter = map.toThree(135, 92, 1136, 0, 680);
+      let spawnX = hotanCenter.x, spawnZ = hotanCenter.z;
+
+      // Eger kamera baska bir yerdeyse mevcut hedef yakininda basla
+      if (Math.abs(controls.target.x - hotanCenter.x) > 400 || Math.abs(controls.target.z - hotanCenter.z) > 400) {
+        spawnX = controls.target.x;
+        spawnZ = controls.target.z;
       }
 
-      const spawnY = (map.getHeightAt(spawnX, spawnZ) || 0) + 0.35;
-      vehicle.setSpawn(spawnX, spawnY, spawnZ, -Math.PI / 2); // Batiya, Hotan yonune bak
+      const spawnY = vehicle.getSurfaceHeightAt(spawnX, spawnZ, controls.target.y) + 0.35;
+      vehicle.setSpawn(spawnX, spawnY, spawnZ, 0); // Kuzeye (Taklamakan yonune) bak
 
       // Kamerayi aninda arabanin arkasina konumlandir
-      const fwd = new THREE.Vector3(Math.sin(vehicle.yaw), 0, Math.cos(vehicle.yaw));
+      const fwd = new THREE.Vector3(-Math.sin(vehicle.yaw), 0, -Math.cos(vehicle.yaw));
       camera.position.set(vehicle.position.x - fwd.x * 7.5, vehicle.position.y + 3.2, vehicle.position.z - fwd.z * 7.5);
       camera.lookAt(vehicle.position.clone().add(new THREE.Vector3(0, 1.2, 0)));
     } else {
-      if (engineGain) engineGain.gain.value = 0.0;
       carHud.style.display = 'none';
       btn.style.background = '#e11d48';
       btn.textContent = '🚗 Tofaş Kartal Sürme Modu';
@@ -449,16 +445,16 @@
     e.target.blur();
     if (document.activeElement) document.activeElement.blur();
 
-    // Jangan Sehir Disi Bati Cikis Yolu (Donwhang ve Hotan'a giden ana Ipek Yolu)
-    const startPos = map.toThree(167, 97, 1800, 0, 960);
-    const startH = map.getHeightAt(startPos.x, startPos.z) || 0;
+    // Hotan Meydani Baslangic Noktasi (kristal tasin onu, acik kuzey yolu)
+    const startPos = map.toThree(135, 92, 1136, 0, 680);
+    const startH = vehicle.getSurfaceHeightAt(startPos.x, startPos.z, 0);
     startPos.y = startH + 0.35;
 
     toggleCarMode(true);
-    vehicle.setSpawn(startPos.x, startPos.y, startPos.z, -Math.PI / 2); // Batiya, Hotan yonune bak
+    vehicle.setSpawn(startPos.x, startPos.y, startPos.z, 0); // Kuzeye, Taklamakan'a dogru bak
     
     // Kamerayi aninda arabanin arkasina gecir
-    const fwd = new THREE.Vector3(Math.sin(vehicle.yaw), 0, Math.cos(vehicle.yaw));
+    const fwd = new THREE.Vector3(-Math.sin(vehicle.yaw), 0, -Math.cos(vehicle.yaw));
     camera.position.set(vehicle.position.x - fwd.x * 7.5, vehicle.position.y + 3.2, vehicle.position.z - fwd.z * 7.5);
     camera.lookAt(vehicle.position.clone().add(new THREE.Vector3(0, 1.2, 0)));
     
@@ -472,15 +468,17 @@
     document.getElementById('race-status').style.color = '#fcd34d';
   };
 
-  // C tusu ile kamera degisimi, R ile araba duzeltme
+  // C tusu: Kamera degisimi, R: Araba duzeltme, M: Motor sesi susturma
   addEventListener('keydown', e => {
     if (e.code === 'KeyC' && isCarMode) {
       cameraViewMode = cameraViewMode === 'chase' ? 'hood' : (cameraViewMode === 'hood' ? 'far' : 'chase');
     }
     if (e.code === 'KeyR' && isCarMode) {
-      // Arabayı mevcut yerde duzelt ve yukselt
-      const h = map.getHeightAt(vehicle.position.x, vehicle.position.z) || vehicle.position.y;
+      const h = vehicle.getSurfaceHeightAt(vehicle.position.x, vehicle.position.z, vehicle.position.y);
       vehicle.setSpawn(vehicle.position.x, h + 0.5, vehicle.position.z, vehicle.yaw);
+    }
+    if (e.code === 'KeyM' && isCarMode) {
+      toggleEngineMute();
     }
   });
 
@@ -496,38 +494,41 @@
     if (isCarMode) {
       // 1. Kartal Fizik & Surus Motoru
       vehicle.update(dt, keys);
-      updateEngineAudio(vehicle.rpm);
 
-      // 2. Takip Kamerasi (Smooth Third-Person / Hood)
+      // 2. Takip Kamerasi (Smooth Third-Person / Hood) + GTA Sarsinti Efekti
       const carPos = vehicle.position;
       const carYaw = vehicle.yaw;
-      const fwdDir = new THREE.Vector3(Math.sin(carYaw), 0, Math.cos(carYaw));
+      const fwdDir = new THREE.Vector3(-Math.sin(carYaw), 0, -Math.cos(carYaw));
+
+      const shake = vehicle.cameraShakeIntensity;
+      const shakeOffset = new THREE.Vector3(
+        (Math.random() - 0.5) * shake * 1.5,
+        (Math.random() - 0.5) * shake * 1.5,
+        (Math.random() - 0.5) * shake * 1.5
+      );
 
       if (cameraViewMode === 'chase') {
-        // Dinamik arkadan takip kamerasi (Kartal'i ve yolu yukaridan net gosteren aci)
         const camDist = 7.5 + (vehicle.speedKmh / 160) * 4.0;
         const camHeight = 3.6 + (vehicle.speedKmh / 160) * 1.2;
         const targetCamPos = new THREE.Vector3(
           carPos.x - fwdDir.x * camDist,
           carPos.y + camHeight,
           carPos.z - fwdDir.z * camDist
-        );
+        ).add(shakeOffset);
         camera.position.lerp(targetCamPos, Math.min(1.0, dt * 10.0));
         
         const lookTarget = carPos.clone().add(new THREE.Vector3(0, 0.9, 0)).addScaledVector(fwdDir, 3.0);
         camera.lookAt(lookTarget);
       } else if (cameraViewMode === 'far') {
-        // Genis Silkroad manzarali uzak kamera
         const targetCamPos = new THREE.Vector3(
           carPos.x - fwdDir.x * 16.0,
           carPos.y + 7.0,
           carPos.z - fwdDir.z * 16.0
-        );
+        ).add(shakeOffset);
         camera.position.lerp(targetCamPos, Math.min(1.0, dt * 6.0));
         camera.lookAt(carPos.clone().add(new THREE.Vector3(0, 1.2, 0)));
       } else if (cameraViewMode === 'hood') {
-        // Kaput ustu / surucu gozu kamerasi
-        camera.position.set(carPos.x + fwdDir.x * 0.8, carPos.y + 1.2, carPos.z + fwdDir.z * 0.8);
+        camera.position.set(carPos.x + fwdDir.x * 0.8, carPos.y + 1.2, carPos.z + fwdDir.z * 0.8).add(shakeOffset);
         const lookTarget = carPos.clone().addScaledVector(fwdDir, 25.0);
         camera.lookAt(lookTarget);
       }
@@ -545,6 +546,15 @@
         document.getElementById('val-gear').style.color = '#ff3344';
       }
 
+      // Govde Saglik / Hasar Barı (GTA Tarzı)
+      const healthElem = document.getElementById('val-health');
+      if (healthElem) {
+        healthElem.textContent = vehicle.health + '%';
+        if (vehicle.health > 60) healthElem.style.color = '#4ade80';
+        else if (vehicle.health > 30) healthElem.style.color = '#facc15';
+        else healthElem.style.color = '#ef4444';
+      }
+
       // 4. Yaris Durumu & Checkpoint Kontrolu
       if (isRacing) {
         const elapsed = (t - raceStartTime) / 1000;
@@ -552,17 +562,15 @@
         const secs = (elapsed % 60).toFixed(1);
         document.getElementById('race-time').textContent = `${mins.toString().padStart(2,'0')}:${secs.padStart(4,'0')}`;
 
-        // Hedef checkpoint mesafesi
         const targetCp = checkpoints[currentCheckpointIdx];
         const cpWorld = map.toThree(targetCp.rx, targetCp.rz, targetCp.lx || 960, 0, targetCp.lz || 960);
         const distToCp = new THREE.Vector2(carPos.x - cpWorld.x, carPos.z - cpWorld.z).length();
         
-        // Silkroad biriminde toplam kalan mesafe
         const totalProgress = (currentCheckpointIdx + Math.max(0, 1.0 - (distToCp / 200))) / checkpoints.length;
         document.getElementById('race-progress-fill').style.width = Math.min(100, Math.round(totalProgress * 100)) + '%';
         document.getElementById('race-dist').textContent = (distToCp * 0.01).toFixed(1) + ' km';
 
-        if (distToCp < 90) { // Checkpoint'e yaklasildi
+        if (distToCp < 95) { // Checkpoint'e yaklasildi
           targetCp.reached = true;
           currentCheckpointIdx++;
           if (currentCheckpointIdx >= checkpoints.length) {
