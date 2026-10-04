@@ -90,39 +90,56 @@ async def run():
         # Wait 4s for assets to stream in
         await asyncio.sleep(4)
 
-        # Raycast from castle position straight down to terrain
+        # Raycast and check plaza & castle positions
         ray_res = await call('Runtime.evaluate', {
             'expression': '''
                 (function() {
+                    const plazaObj = window.scene.getObjectByName('model_685_oas_hot_plaza01');
                     const castleObj = window.scene.getObjectByName('model_681_oas_hot_c1_castle');
-                    if (!castleObj) return 'Castle object not found!';
+                    
+                    const pPos = new THREE.Vector3();
+                    if (plazaObj) plazaObj.getWorldPosition(pPos);
+                    
                     const cPos = new THREE.Vector3();
-                    castleObj.getWorldPosition(cPos);
-                    
-                    const raycaster = new THREE.Raycaster();
-                    raycaster.set(new THREE.Vector3(cPos.x, 600, cPos.z), new THREE.Vector3(0, -1, 0));
-                    
-                    const terrains = [];
-                    window.scene.traverse(o => { if (o.isMesh && o.name.startsWith('terrain_')) terrains.push(o); });
-                    const hits = raycaster.intersectObjects(terrains, false);
-                    
+                    if (castleObj) castleObj.getWorldPosition(cPos);
+
+                    // Kamerayi amaca uygun ayarla
+                    const mode = "''' + (sys.argv[2] if len(sys.argv) > 2 and sys.argv[2] else 'plaza') + '''";
+                    if (mode === 'plaza' && plazaObj) {
+                        // Hotan meydani ve mermer kaplama temiz sinematik aci (palmiye engelsiz)
+                        window.controls.target.set(pPos.x, pPos.y + 8, pPos.z);
+                        window.camera.position.set(pPos.x - 15, pPos.y + 45, pPos.z + 65);
+                        window.controls.update();
+                    } else if (mode === 'ground_close' && plazaObj) {
+                        // Zemin mikro dokusuna cok yakindan bakis (detail texture)
+                        window.controls.target.set(pPos.x + 35, pPos.y + 10, pPos.z + 30);
+                        window.camera.position.set(pPos.x + 30, pPos.y + 15, pPos.z + 42);
+                        window.controls.update();
+                    } else if (mode === 'jangan_ground') {
+                        // Jangan meydan & zemin mikro dokusu
+                        const t = window.controls.target;
+                        window.camera.position.set(t.x - 30, t.y + 14, t.z + 35);
+                        window.controls.update();
+                    }
+
                     return JSON.stringify({
-                        castleWorldPos: cPos,
-                        terrainsFound: terrains.length,
-                        hitCount: hits.length,
-                        firstHit: hits[0] ? {
-                            point: hits[0].point,
-                            mesh: hits[0].object.name,
-                            uv: hits[0].uv
-                        } : null
+                        plazaFound: !!plazaObj,
+                        plazaWorldPos: plazaObj ? pPos : null,
+                        castleFound: !!castleObj,
+                        castleWorldPos: castleObj ? cPos : null,
+                        cameraPos: window.camera.position,
+                        target: window.controls.target
                     });
                 })()
             '''
         })
-        print('RAYCAST RESULT:', ray_res, flush=True)
+        print('SCENE & CAMERA STATUS:', ray_res, flush=True)
+
+        # Wait a moment for controls/camera to settle and render
+        await asyncio.sleep(2)
 
         shot = await call('Page.captureScreenshot', {'format': 'png'})
-        out_name = sys.argv[3] if len(sys.argv) > 3 else 'screenshot.png'
+        out_name = sys.argv[3] if len(sys.argv) > 3 and sys.argv[3] else 'screenshot.png'
         out_path = os.path.join(r'C:\Silkroad\Silkroad_V3', out_name)
         with open(out_path, 'wb') as f:
             f.write(base64.b64decode(shot['result']['data']))

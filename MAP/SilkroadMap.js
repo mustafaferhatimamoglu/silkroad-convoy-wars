@@ -26,6 +26,9 @@
         viewRadius: 2,         // oyuncunun etrafinda yuklenecek bolge yaricapi
         keepRadius: 3,         // bu yaricap disindaki bolgeler bosaltilir
         colormap: true,        // bake edilmis zemin rengi
+        detailTexture: true,   // Zemin mikro detay dokusu (repeating detail texture)
+        detailRepeat: 96,      // Silkroad 96 cell / bolge cozunurluguyle birebir eslesen doku tekrari
+        detailStrength: 0.62,  // Zemin harmanlama gucu (0.0 - 1.0)
         water: true,
         objects: true,         // obje yerlesimleri
         realModels: true,      // gercek 3D modelleri yukle (MODELS/)
@@ -51,6 +54,7 @@
       this.modelDefs = new Map();     // mid -> model json
       this.geomCache = new Map();     // path -> THREE.BufferGeometry
       this.matCache = new Map();      // path -> THREE.Material
+      this.detailTexCache = new Map(); // path -> THREE.Texture
       this.geomLoader = new THREE.BufferGeometryLoader();
       this.texLoader = new THREE.TextureLoader();
 
@@ -313,12 +317,85 @@
       } else {
         mat.color.set(0x8a7a5a);
       }
+
+      if (this.opts.detailTexture) {
+        const { texture: detailTex, path: detailPath } = this._getTerrainDetailTexture(info);
+        const repeatCount = this.opts.detailRepeat || 96;
+        const strength = this.opts.detailStrength !== undefined ? this.opts.detailStrength : 0.62;
+
+        mat.onBeforeCompile = (shader) => {
+          shader.uniforms.detailMap = { value: detailTex };
+          shader.uniforms.detailRepeat = { value: new THREE.Vector2(repeatCount, repeatCount) };
+          shader.uniforms.detailStrength = { value: strength };
+
+          shader.fragmentShader = shader.fragmentShader.replace(
+            '#include <map_pars_fragment>',
+            `#include <map_pars_fragment>
+            uniform sampler2D detailMap;
+            uniform vec2 detailRepeat;
+            uniform float detailStrength;
+            `
+          );
+
+          shader.fragmentShader = shader.fragmentShader.replace(
+            '#include <map_fragment>',
+            `#include <map_fragment>
+            #ifdef USE_MAP
+              vec4 dTex = texture2D( detailMap, vUv * detailRepeat );
+              // Standart Joymax arazi mikro-detay harmonisi:
+              // Ortalama parlaklik ~0.5 civari oldugundan 1.95 ile carpilarak 1.0 merkezlenir.
+              vec3 dMod = dTex.rgb * 1.95;
+              diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * dMod, detailStrength);
+            #endif
+            `
+          );
+        };
+        mat.customProgramCacheKey = () => 'terrain_detail_' + detailPath;
+      }
+
       const mesh = new THREE.Mesh(geo, mat);
       mesh.name = 'terrain_' + info.key;
       mesh.renderOrder = 0;
       mesh.receiveShadow = true;
       mesh.userData.region = info;
       return mesh;
+    }
+
+    _getDetailTexturePath(info) {
+      const rx = info.x, rz = info.z;
+      // Hotan (Vaha & Col bolgesi)
+      if (rx >= 125 && rx <= 145 && rz >= 85 && rz <= 100) return 'textures/tile2d/oaho_dust_earth01.jpg';
+      // Donwhang (Kanyon & Sari Col)
+      if (rx >= 146 && rx <= 164 && rz >= 90 && rz <= 104) return 'textures/tile2d/wc_dust_don00.jpg';
+      // Jangan & Asya (Cin Imparatorlugu)
+      if (rx >= 165) return 'textures/tile2d/asiaminor_dust_01.jpg';
+      // Roc Dagi
+      if (rx >= 105 && rx <= 120 && rz <= 95) return 'textures/tile2d/rok_dust_01.jpg';
+      // Samarkand & Central Asia
+      if (rx >= 95 && rx <= 124) return 'textures/tile2d/central asia_dust_01.jpg';
+      // Alexandria / Misir
+      if (rx <= 65) return 'textures/tile2d/alex_dust_01.jpg';
+      // Constantinople / Dogu Avrupa
+      if (rx >= 66 && rx <= 94) return 'textures/tile2d/c_dust_fld_01.jpg';
+      // Varsayilan otantik zemin
+      return 'textures/tile2d/asiaminor_dust_01.jpg';
+    }
+
+    _getTerrainDetailTexture(info) {
+      const relPath = this._getDetailTexturePath(info);
+      if (this.detailTexCache.has(relPath)) {
+        return { texture: this.detailTexCache.get(relPath), path: relPath };
+      }
+      const tex = this.texLoader.load(this.opts.baseUrl + encodeURI(relPath));
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.wrapT = THREE.RepeatWrapping;
+      tex.anisotropy = 8;
+      tex.generateMipmaps = true;
+      tex.minFilter = THREE.LinearMipmapLinearFilter;
+      tex.magFilter = THREE.LinearFilter;
+      if (THREE.sRGBEncoding) tex.encoding = THREE.sRGBEncoding;
+      this.detailTexCache.set(relPath, tex);
+      return { texture: tex, path: relPath };
     }
 
     _buildWater(info, heights, types, wh) {
