@@ -25,7 +25,7 @@ const ZF = -2.06, ZR = 2.06;          // sac gövde uclari
 export const AXF = -1.33, AXR = 1.16; // akslar (zemin uzayi)
 const WR = 0.287;                     // teker yaricapi
 const W = 0.815;                      // yari genislik
-const ARCH_R = 0.372, ARCH_CY = 0.30, WELL = 0.27;
+const ARCH_R = 0.362, ARCH_CY = 0.285, WELL = 0.27;
 const ZWS0 = -0.62, ZWS1 = -0.17, ZRF = 1.97, ZTG = 2.045;
 const ROOF = 1.375;
 export const CG_Z = -0.184;           // kutle merkezinin zemin uzayi z'si (fizik ile ayni)
@@ -68,8 +68,8 @@ function makeMaterials(paintId) {
   const p = PAINTS[paintId] || PAINTS.lacivert;
   const m = {};
   m.paint = new THREE.MeshPhysicalMaterial({
-    color: p.color, metalness: p.metal || 0.0, roughness: p.metal ? 0.38 : 0.3,
-    clearcoat: 1.0, clearcoatRoughness: 0.05, envMapIntensity: 1.1,
+    color: p.color, metalness: p.metal || 0.0, roughness: p.metal ? 0.4 : 0.36,
+    clearcoat: 0.85, clearcoatRoughness: 0.11, envMapIntensity: 1.0,
   });
   m.chrome = new THREE.MeshPhysicalMaterial({ color: 0xf2f2f2, metalness: 1.0, roughness: 0.07, envMapIntensity: 1.4 });
   m.blackPlastic = new THREE.MeshStandardMaterial({ color: 0x141516, roughness: 0.72, metalness: 0.0 });
@@ -460,7 +460,7 @@ function buildRear(m, variant, g) {
       tails[kind].push(mat);
     }
     const housing = mesh(new RoundedBoxGeometry(0.145, 0.32, 0.026, 2, 0.01), m.blackPlastic, false);
-    housing.position.set(0, 0.72, 0.006); grp.add(housing);
+    housing.position.set(0, 0.72, -0.012); grp.add(housing);
     grp.position.set(s * 0.715, 0, zFace);
     g.add(grp);
   }
@@ -489,8 +489,8 @@ function buildRear(m, variant, g) {
   if (is80) {
     g.add(mesh(sweep(pts, [{ x: -0.025, y: -0.05 }, { x: 0.02, y: -0.056 }, { x: 0.032, y: -0.02 }, { x: 0.034, y: 0.03 }, { x: 0.02, y: 0.055 }, { x: -0.025, y: 0.05 }].map((q) => ({ x: -q.x, y: q.y }))), m.chrome));
     for (const s of [-1, 1]) {
-      const cap = mesh(new RoundedBoxGeometry(0.1, 0.12, 0.24, 2, 0.03), m.rubber);
-      cap.position.set(s * 0.79, y, ZR - 0.05); g.add(cap);
+      const cap = mesh(new RoundedBoxGeometry(0.075, 0.105, 0.17, 2, 0.03), m.rubber);
+      cap.position.set(s * 0.8, y, ZR - 0.07); g.add(cap);
     }
   } else {
     g.add(mesh(sweep(pts, [{ x: -0.03, y: -0.085 }, { x: 0.025, y: -0.09 }, { x: 0.04, y: -0.04 }, { x: 0.042, y: 0.05 }, { x: 0.02, y: 0.08 }, { x: -0.03, y: 0.075 }].map((q) => ({ x: -q.x, y: q.y }))), m.blackPlastic));
@@ -726,7 +726,49 @@ export class KartalModel {
       this.body.add(sp, sp.target);
       this.spots.push(sp);
     }
-    this.root.traverse((o) => { if (o.isMesh) o.frustumCulled = true; });
+    this.optimize();
+  }
+
+  /**
+   * Dokusuz ve hareketsiz parcalari malzemeye gore tek geometride birlestirir
+   * (~150 cizim cagrisi -> ~20). Direksiyon, tekerlekler ve dokulu parcalar ayri kalir.
+   */
+  optimize() {
+    const body = this.body;
+    body.updateMatrixWorld(true);
+    const inv = new THREE.Matrix4().copy(body.matrixWorld).invert();
+    const keep = new Set();
+    if (this.steeringWheel) this.steeringWheel.traverse((o) => keep.add(o));
+    const buckets = new Map();
+    const remove = [];
+    body.traverse((o) => {
+      if (!o.isMesh || keep.has(o) || o.material.map || o.userData.keep) return;
+      const g = o.geometry.clone();
+      g.applyMatrix4(new THREE.Matrix4().multiplyMatrices(inv, o.matrixWorld));
+      let b = buckets.get(o.material);
+      if (!b) { b = { list: [], cast: false, order: 0 }; buckets.set(o.material, b); }
+      b.list.push(g);
+      b.cast = b.cast || o.castShadow;
+      b.order = Math.max(b.order, o.renderOrder);
+      remove.push(o);
+    });
+    for (const o of remove) o.parent.remove(o);
+    for (const [mat, b] of buckets) {
+      const geo = mergeInto(b.list);
+      if (!geo) continue;
+      geo.computeBoundingSphere();
+      const m = mesh(geo, mat, b.cast);
+      m.renderOrder = b.order;
+      body.add(m);
+    }
+  }
+
+  /** Dinamik yansima haritasi alacak malzemeler. */
+  reflectiveMaterials() {
+    const set = new Set([this.mats.paint, this.mats.chrome, this.mats.glass, this.mats.reflector, this.mats.steel]);
+    for (const l of this.headLamps) set.add(l.lens);
+    for (const k of ['tail', 'amber', 'reverse']) for (const m of this.tails[k]) set.add(m);
+    return [...set];
   }
 
   /** Zemin uzayini fizik govde uzayina hizalar (CG orijin). */
@@ -739,7 +781,7 @@ export class KartalModel {
     if (!p) return;
     this.mats.paint.color.set(p.color);
     this.mats.paint.metalness = p.metal || 0;
-    this.mats.paint.roughness = p.metal ? 0.38 : 0.3;
+    this.mats.paint.roughness = p.metal ? 0.4 : 0.36;
   }
 
   setLights({ head = false, brake = 0, reverse = false, tail = false } = {}) {

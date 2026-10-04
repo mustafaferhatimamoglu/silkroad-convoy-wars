@@ -4,6 +4,7 @@ import { V3 } from './physics/math.js';
 import { KARTAL, surfaceInfo } from './presets.js';
 import { KartalModel } from './model/KartalModel.js';
 import { WorldGround } from './WorldGround.js';
+import { VehicleReflections } from './Reflections.js';
 
 // Oyundaki arac: sabit adimli fizik (240 Hz) + ara degerlemeli gorsel model + isiklar.
 
@@ -17,6 +18,7 @@ export class Vehicle {
   constructor(app, { variant = 'kartal80', paint = 'lacivert', params = KARTAL } = {}) {
     this.app = app;
     this.params = params;
+    this.variant = variant;
     this.sim = new VehicleSim(params);
     this.ground = app.collision ? new WorldGround(app.collision) : null;
     this.model = new KartalModel({ variant, paint });
@@ -33,6 +35,10 @@ export class Vehicle {
     this._gaugeT = 0;
     this.shadow = this._makeShadowBlob();
     app.scene.add(this.shadow);
+    this.reflections = new VehicleReflections(app, { size: 128 });
+    this.reflections.enabled = app.settings ? app.settings.get('quality') !== 'dusuk' : true;
+    this.reflections.track(this.model.reflectiveMaterials());
+    this._reflPos = new THREE.Vector3();
   }
 
   _makeShadowBlob() {
@@ -89,6 +95,8 @@ export class Vehicle {
     if (n >= 24) this.acc = 0;
     this.steps = n;
     this._sync(this.acc / STEP);
+    this._reflPos.copy(this.position).y += 0.6;
+    this.reflections.update(this._reflPos, [this.root, this.shadow]);
   }
 
   _sync(alpha) {
@@ -149,5 +157,6 @@ export class Vehicle {
   dispose() {
     this.app.scene.remove(this.root);
     this.app.scene.remove(this.shadow);
+    this.reflections.dispose();
   }
 }

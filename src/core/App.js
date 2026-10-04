@@ -8,6 +8,7 @@ import { Settings } from './Settings.js';
 import { World } from '../world/World.js';
 import { Collision } from '../world/Collision.js';
 import { SkySystem } from '../world/Sky.js';
+import { AudioSystem } from './AudioSystem.js';
 
 // Uygulama cekirdegi: renderer, sahne, kamera, dunya ve oyun dongusu.
 // Oyun modlari (surus, gezgin, ralli...) setMode ile degisir; her mod
@@ -47,6 +48,7 @@ export class App {
 
     this.input = new Input(this.canvas);
     this.canvas.tabIndex = 0;
+    this.audio = new AudioSystem(this.settings);
 
     onProgress(0.1, 'Gökyüzü ve ışık…');
     this.sky = new SkySystem(renderer, this.scene, { shadowMapSize: q.shadowMap, shadowExtent: q.shadowExtent });

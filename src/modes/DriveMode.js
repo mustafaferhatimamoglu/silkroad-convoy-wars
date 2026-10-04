@@ -3,6 +3,9 @@ import { Vehicle } from '../vehicle/Vehicle.js';
 import { VehicleCamera, CAMERA_NAMES } from '../vehicle/VehicleCamera.js';
 import { DriveHud } from '../ui/DriveHud.js';
 import { cityById } from '../data/cities.js';
+import { VehicleEffects } from '../vehicle/effects/VehicleEffects.js';
+import { VehicleAudio } from '../vehicle/VehicleAudio.js';
+import { musicForRegion } from '../core/AudioSystem.js';
 
 // Serbest surus modu: Silkroad dunyasinda Tofas Kartal.
 
@@ -29,6 +32,24 @@ export class DriveMode {
     this.hud.toast(`${city.name} — iyi yolculuklar!`, 3);
     this.vehicle.headlights = app.sky.night > 0.5;
     this.focus.copy(this.vehicle.position);
+    this.effects = new VehicleEffects(app, this.vehicle);
+    this.sound = new VehicleAudio(app.audio, this.vehicle, { engine: s.get('engineSound') });
+    this._musicT = 0;
+  }
+
+  /** Arac surumunu degistir (garajdan); konum ve yon korunur. */
+  rebuildVehicle(variant, paint) {
+    const app = this.app, old = this.vehicle, b = old.sim.body;
+    const x = b.pos.x, y = b.pos.y, z = b.pos.z, yaw = old.sim.yaw, head = old.headlights, auto = old.sim.autoShift;
+    this.sound.dispose(); this.effects.dispose(); old.dispose();
+    this.vehicle = new Vehicle(app, { variant, paint });
+    this.vehicle.sim.reset(x, y + 0.15, z, yaw);
+    this.vehicle.sim.autoShift = auto;
+    this.vehicle.headlights = head;
+    this.applyAssists(app.settings.get('assists'));
+    this.camera.vehicle = this.vehicle;
+    this.effects = new VehicleEffects(app, this.vehicle);
+    this.sound = new VehicleAudio(app.audio, this.vehicle, { engine: app.settings.get('engineSound') });
   }
 
   applyAssists(level) {
@@ -76,23 +97,44 @@ export class DriveMode {
       this.hud.toast(v.sim.autoShift ? 'Otomatik şanzıman' : 'Manuel şanzıman (Q / E)', 1.6);
     }
     if (input.pressed('F1')) this.hud.toggleHelp();
+    if (input.pressed('KeyN')) {
+      const on = !settings.get('engineSound');
+      settings.set('engineSound', on); this.sound.setEngine(on);
+      this.hud.toast(on ? 'Motor sesi açık' : 'Motor sesi kapalı', 1.2);
+    }
+    if (input.pressed('KeyM')) {
+      this.app.audio.setMusicMuted(!this.app.audio.musicMuted);
+      this.hud.toast(this.app.audio.musicMuted ? 'Müzik kapalı' : 'Müzik açık', 1.2);
+    }
+    this.sound.horn(input.down('KeyH') || !!(input.gamepad && input.gamepad.buttons[10] > 0.5));
 
     v.update(dt, c);
     v.updateGauges(dt);
     // carpismalarda kamera sarsintisi
     if (v.sim.impacts.length) {
       for (const im of v.sim.impacts) this.camera.addShake(Math.min(1, im.speed / 12));
-      this.lastImpacts = v.sim.impacts.splice(0);
+      v.lastImpacts = v.sim.impacts.splice(0);
     }
     // bozuk zeminde hafif sarsinti
     const rough = v.sim.wheels.reduce((a, w) => a + (w.contact ? Math.abs(w.x - w.xPrev) : 0), 0);
     if (rough > 0.004) this.camera.addShake(Math.min(0.15, rough * 3));
     this.camera.update(dt, input);
+    this.sound.update(dt);
+    this.effects.update(dt);
     this.hud.update(dt, v, this.camera.mode);
     this.focus.copy(v.position);
+    // bolge muzigi
+    this._musicT -= dt;
+    if (this._musicT <= 0) {
+      this._musicT = 2;
+      const p = this.app.world.fromThree(v.position.x, v.position.z);
+      this.app.audio.playMusic(musicForRegion(p.rx, p.rz));
+    }
   }
 
   dispose() {
+    this.sound.dispose();
+    this.effects.dispose();
     this.vehicle.dispose();
     this.hud.dispose();
   }

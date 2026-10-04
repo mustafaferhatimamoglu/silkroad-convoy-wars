@@ -23,6 +23,7 @@ export class ExploreMode {
 
   update(dt) {
     const { input, camera, world } = this.app;
+    if (input.pressed('Escape') && this.onPause) this.onPause();
     if (input.mouse.buttons & 3) {
       this.yaw -= input.mouse.dx * 0.0032;
       this.pitch = THREE.MathUtils.clamp(this.pitch - input.mouse.dy * 0.0032, -1.5, 1.5);

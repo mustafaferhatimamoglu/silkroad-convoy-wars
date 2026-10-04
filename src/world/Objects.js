@@ -9,6 +9,8 @@ const SEASONAL_PATH = /(?:res|compound\/struct)\/etc\/(?:summer_event|obt|hallow
 const SEASONAL_NAME = /^(?:sum_event|obt_event|halloween_|x_mas_|newyearday_)/i;
 const EFFECT_PATH = /\.cpd|compound\/particle|flame_|light_|hide_light|cobweb|pha_touch|waterfall|particle|flame|light/i;
 const EFFECT_NAME = /waterfall|particle|flame|light/i;
+const STRUCTURE = /^res\/(bldg|artifact|dun)\//i;
+const FOLIAGE = /tree|grass|flower|leaf|leaves|bush|plant|vine|ivy|weed|palm|willow|bamboo|reed/i;
 
 function limit(n) {
   let active = 0;
@@ -148,18 +150,25 @@ export async function buildRegionObjects(lib, list, isCancelled) {
   // 3) sayim
   const parts = [];
   const counts = { opaque: { v: 0, i: 0 }, alpha: { v: 0, i: 0 } };
+  const col = { v: 0, i: 0 };
   for (const o of list) {
-    const d = defs.get(String(o[0]));
+    const mid = String(o[0]);
+    const d = defs.get(mid);
     if (!d) continue;
+    // alfa dokulu yapilar (oymali korkuluk, cit, kafes) carpismaya girer; bitkiler girmez
+    const path = (lib.data.objModels[mid] && lib.data.objModels[mid].path) || '';
+    const solidAlpha = STRUCTURE.test(path) && !FOLIAGE.test(path) && !FOLIAGE.test(d.name || '');
     for (const m of d.meshes) {
       const g = geoms.get(m.geom);
       if (!g || !g.index || !g.attributes.position) continue;
       const alpha = !!m.alpha || (m.texture && /\.png$/i.test(m.texture));
       const slot = m.texture ? texSlot.get(m.texture) : -1;
       const bucket = alpha ? 'alpha' : 'opaque';
+      const collide = !alpha || solidAlpha;
       counts[bucket].v += g.attributes.position.count;
       counts[bucket].i += g.index.count;
-      parts.push({ o, g, slot, bucket, color: m.color });
+      if (collide) { col.v += g.attributes.position.count; col.i += g.index.count; }
+      parts.push({ o, g, slot, bucket, collide, color: m.color });
     }
   }
 
@@ -175,9 +184,10 @@ export async function buildRegionObjects(lib, list, isCancelled) {
       vo: 0, io: 0,
     };
   }
-  // carpisma: sadece opak parcalar
-  const colPos = counts.opaque.v ? new Float32Array(counts.opaque.v * 3) : null;
-  const colIdx = counts.opaque.v ? new Uint32Array(counts.opaque.i) : null;
+  // carpisma geometrisi (opak + kati alfa yapilar)
+  const colPos = col.v ? new Float32Array(col.v * 3) : null;
+  const colIdx = col.v ? new Uint32Array(col.i) : null;
+  let cvo = 0, cio = 0;
 
   for (const part of parts) {
     const { o, g, slot } = part;
@@ -209,9 +219,10 @@ export async function buildRegionObjects(lib, list, isCancelled) {
     }
     const I = g.index.array, ic = g.index.count;
     for (let k = 0; k < ic; k++) B.idx[B.io + k] = I[k] + base;
-    if (part.bucket === 'opaque') {
-      colPos.set(B.pos.subarray(base * 3, (base + vc) * 3), base * 3);
-      for (let k = 0; k < ic; k++) colIdx[B.io + k] = I[k] + base;
+    if (part.collide) {
+      colPos.set(B.pos.subarray(base * 3, (base + vc) * 3), cvo * 3);
+      for (let k = 0; k < ic; k++) colIdx[cio + k] = I[k] + cvo;
+      cvo += vc; cio += ic;
     }
     B.vo += vc; B.io += ic;
   }
