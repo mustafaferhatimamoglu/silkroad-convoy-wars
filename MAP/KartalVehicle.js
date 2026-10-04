@@ -31,7 +31,7 @@
       this.wheelbase = 2.49;   // m
       this.trackWidth = 1.39;  // m
       this.wheelRadius = 0.31; // 155 SR 13
-      this.mass = 990;         // kg (1980 kasa daha hafif)
+      this.mass = 990;         // kg (1980 kasa)
 
       // Dinamik Durumlar
       this.position = new THREE.Vector3(0, 0, 0);
@@ -42,11 +42,19 @@
       this.pitch = 0;
       this.roll = 0;
 
-      // Motor & Sanziman
+      // Süspansiyon Dinamikleri (Yay ve Amortisör Simülasyonu)
+      this.suspensionPitch = 0;
+      this.suspensionRoll = 0;
+      this.suspensionPitchVel = 0;
+      this.suspensionRollVel = 0;
+      this.suspensionBounce = 0;
+      this.suspensionBounceVel = 0;
+
+      // Motor & Şanzıman
       this.gear = 1;
       this.rpm = 900;
       this.idleRpm = 900;
-      this.maxRpm = 6400;
+      this.maxRpm = 6800;
       this.gearRatios = {
         '-1': -3.67,
         0: 0.0,
@@ -57,26 +65,41 @@
         5: 0.86
       };
       this.finalDrive = 4.10;
-      this.maxTorque = 122; // Nm (1.6 OHV / OHC)
+      this.maxTorque = 135; // Nm (1.6 OHV / OHC)
 
       this.steeringAngle = 0;
-      this.maxSteerAngle = 0.60;
+      this.maxSteerAngle = 0.62;
       this.speedKmh = 0;
       this.driftFactor = 0;
       this.isGrounded = true;
 
-      // Hasar ve Çarpışma Durumu
+      // NFS Nitro / Boost Sistemi (NFS tarzı N2O)
+      this.nitro = 100; // 0 - 100%
+      this.isNitroActive = false;
+
+      // Hasar, Çarpışma ve Deformasyon
       this.health = 100;
       this.cameraShakeIntensity = 0;
       this.stuckTimer = 0;
       this.isColliding = false;
+      this.damageState = {
+        hoodBent: 0,
+        frontBumperBent: 0,
+        rearBumperBent: 0,
+        trunkBent: 0,
+        windshieldCracked: false,
+        rearGlassCracked: false,
+        leftLightBroken: false,
+        rightLightBroken: false
+      };
 
       // Girdiler
       this.inputs = {
         throttle: 0,
         brake: 0,
         handbrake: false,
-        steer: 0
+        steer: 0,
+        nitro: false
       };
 
       // Raycaster
@@ -89,9 +112,12 @@
 
       this.wheels = [];
       this.smokeParticles = [];
+      this.sparkParticles = [];
+      this.nitroFlames = [];
 
       this._build1980Mesh();
-      this._buildSmokeSystem();
+      this._buildInteriorAndCockpit();
+      this._buildParticleSystems();
     }
 
     _build1980Mesh() {
@@ -170,11 +196,11 @@
       this.chassis.add(this.carBody);
 
       // --- 1. 1980 KARTAL ALT GÖVDE & YAN PANELLER (Düz Klasik Hatlar) ---
-      const lowerBody = new THREE.Mesh(new THREE.BoxGeometry(1.66, 0.46, 4.22), navyPaintMat);
-      lowerBody.position.y = 0.50;
-      lowerBody.castShadow = true;
-      lowerBody.receiveShadow = true;
-      this.carBody.add(lowerBody);
+      this.lowerBody = new THREE.Mesh(new THREE.BoxGeometry(1.66, 0.46, 4.22), navyPaintMat);
+      this.lowerBody.position.y = 0.50;
+      this.lowerBody.castShadow = true;
+      this.lowerBody.receiveShadow = true;
+      this.carBody.add(this.lowerBody);
 
       // Yan Krom Kuşak Çıtası (1980 Murat 131 boydan boya ince nikelaj çıtası)
       [-0.835, 0.835].forEach(x => {
@@ -184,21 +210,21 @@
       });
 
       // --- 2. 1980 MOTOR KAPUTU & KROM ÖN BURUN ---
-      const hood = new THREE.Mesh(new THREE.BoxGeometry(1.62, 0.15, 1.30), navyPaintMat);
-      hood.position.set(0, 0.77, -1.45);
-      hood.rotation.x = -0.06; // Öne doğru zarif Murat 131 eğimi
-      this.carBody.add(hood);
+      this.hood = new THREE.Mesh(new THREE.BoxGeometry(1.62, 0.15, 1.30), navyPaintMat);
+      this.hood.position.set(0, 0.77, -1.45);
+      this.hood.rotation.x = -0.06; // Öne doğru zarif Murat 131 eğimi
+      this.carBody.add(this.hood);
 
       // Kaput Ön Krom Burun Çıtası
-      const hoodNose = new THREE.Mesh(new THREE.BoxGeometry(1.60, 0.03, 0.04), chromeMat);
-      hoodNose.position.set(0, 0.73, -2.10);
-      this.carBody.add(hoodNose);
+      this.hoodNose = new THREE.Mesh(new THREE.BoxGeometry(1.60, 0.03, 0.04), chromeMat);
+      this.hoodNose.position.set(0, 0.73, -2.10);
+      this.carBody.add(this.hoodNose);
 
       // --- 3. 1980 KARTAL STATION WAGON KABİN & TAVAN ---
-      const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.48, 0.56, 2.68), navyPaintMat);
-      cabin.position.set(0, 1.02, 0.42);
-      cabin.castShadow = true;
-      this.carBody.add(cabin);
+      this.cabin = new THREE.Mesh(new THREE.BoxGeometry(1.48, 0.56, 2.68), navyPaintMat);
+      this.cabin.position.set(0, 1.02, 0.42);
+      this.cabin.castShadow = true;
+      this.carBody.add(this.cabin);
 
       // Krom Yağmurluk Oluğu (Tavan kenarlarındaki klasik nikelaj oluk)
       [-0.745, 0.745].forEach(x => {
@@ -209,26 +235,28 @@
 
       // --- 4. 1980 KLASİK CAMLAR & NİKELAJ ÇERÇEVELER ---
       // Ön Cam (Krom Çerçeveli)
-      const winFront = new THREE.Mesh(new THREE.BoxGeometry(1.42, 0.50, 0.05), glassMat);
-      winFront.position.set(0, 1.00, -0.90);
-      winFront.rotation.x = 0.38;
-      this.carBody.add(winFront);
+      this.winFrontMat = glassMat.clone();
+      this.winFront = new THREE.Mesh(new THREE.BoxGeometry(1.42, 0.50, 0.05), this.winFrontMat);
+      this.winFront.position.set(0, 1.00, -0.90);
+      this.winFront.rotation.x = 0.38;
+      this.carBody.add(this.winFront);
 
-      const winFrontFrame = new THREE.Mesh(new THREE.BoxGeometry(1.45, 0.52, 0.03), chromeMat);
-      winFrontFrame.position.set(0, 1.00, -0.89);
-      winFrontFrame.rotation.x = 0.38;
-      this.carBody.add(winFrontFrame);
+      this.winFrontFrame = new THREE.Mesh(new THREE.BoxGeometry(1.45, 0.52, 0.03), chromeMat);
+      this.winFrontFrame.position.set(0, 1.00, -0.89);
+      this.winFrontFrame.rotation.x = 0.38;
+      this.carBody.add(this.winFrontFrame);
 
       // Arka Bagaj Camı (Krom Çerçeveli Dik Bagaj Camı)
-      const winRear = new THREE.Mesh(new THREE.BoxGeometry(1.40, 0.48, 0.05), glassMat);
-      winRear.position.set(0, 1.02, 1.76);
-      winRear.rotation.x = -0.10;
-      this.carBody.add(winRear);
+      this.winRearMat = glassMat.clone();
+      this.winRear = new THREE.Mesh(new THREE.BoxGeometry(1.40, 0.48, 0.05), this.winRearMat);
+      this.winRear.position.set(0, 1.02, 1.76);
+      this.winRear.rotation.x = -0.10;
+      this.carBody.add(this.winRear);
 
       // Yan Camlar Bloğu
-      const winSide = new THREE.Mesh(new THREE.BoxGeometry(1.50, 0.42, 2.45), glassMat);
-      winSide.position.set(0, 1.03, 0.42);
-      this.carBody.add(winSide);
+      this.winSide = new THREE.Mesh(new THREE.BoxGeometry(1.50, 0.42, 2.45), glassMat);
+      this.winSide.position.set(0, 1.03, 0.42);
+      this.carBody.add(this.winSide);
 
       // 1980 Klasik Ön Kelebek Camı Çıtası (Vent Wing Window Divider)
       [-0.755, 0.755].forEach(x => {
@@ -300,19 +328,20 @@
       this.carBody.add(emblem);
 
       // İKİZ YUVARLAK KROM ÇERÇEVELİ FARLAR (Her iki yanda 2'şer adet yuvarlak far)
+      this.headlightMeshes = [];
       const headlightX = [-0.68, -0.52, 0.52, 0.68];
-      headlightX.forEach(x => {
-        // Krom Çerçeve
+      headlightX.forEach((x, idx) => {
         const bezel = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.085, 0.04, 20), chromeMat);
         bezel.rotation.x = Math.PI / 2;
         bezel.position.set(x, 0.60, -2.14);
         this.carBody.add(bezel);
 
-        // Yuvarlak Cam Mercek
-        const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.05, 20), roundHeadlightMat);
+        const lensMat = roundHeadlightMat.clone();
+        const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.05, 20), lensMat);
         lens.rotation.x = Math.PI / 2;
         lens.position.set(x, 0.60, -2.15);
         this.carBody.add(lens);
+        this.headlightMeshes.push({ mesh: lens, mat: lensMat, isLeft: idx < 2 });
       });
 
       // Tampon Altı Dikdörtgen Turuncu Ön Sinyaller
@@ -323,6 +352,7 @@
       });
 
       // --- 7. 1980 DİK STOP LAMBALARI & ARKA DETAYLAR ---
+      this.tailBrakeMats = [];
       [-0.66, 0.66].forEach(x => {
         const stopGroup = new THREE.Group();
         stopGroup.position.set(x, 0.62, 2.14);
@@ -341,10 +371,12 @@
         sWhite.position.y = 0.0;
         stopGroup.add(sWhite);
 
-        // Alt: Kırmızı Fren Lambası
-        const sRed = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.12, 0.05), tailRedMat);
+        // Alt: Kırmızı Fren Lambası (Dinamik Parlayan)
+        const brakeMat = tailRedMat.clone();
+        const sRed = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.12, 0.05), brakeMat);
         sRed.position.y = -0.10;
         stopGroup.add(sRed);
+        this.tailBrakeMats.push(brakeMat);
 
         this.carBody.add(stopGroup);
       });
@@ -356,27 +388,37 @@
 
       // Krom Basmalı Kapı Kolları (1980 Murat 131)
       [-0.845, 0.845].forEach(x => {
-        // Ön kapı kolu
         const fH = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.04, 0.14), chromeMat);
         fH.position.set(x, 0.68, -0.35);
         this.carBody.add(fH);
 
-        // Arka kapı kolu
         const rH = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.04, 0.14), chromeMat);
         rH.position.set(x, 0.68, 0.45);
         this.carBody.add(rH);
       });
 
-      // Klasik Krom Yuvarlak Sol Dikiz Aynası
-      const mirrorStem = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, 0.08, 8), chromeMat);
-      mirrorStem.rotation.z = Math.PI / 4;
-      mirrorStem.position.set(-0.86, 0.84, -0.72);
-      this.carBody.add(mirrorStem);
+      // Klasik Krom Yuvarlak Sol & Sağ Dikiz Aynaları
+      [-0.86, 0.86].forEach((x, isRight) => {
+        const mirrorStem = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, 0.08, 8), chromeMat);
+        mirrorStem.rotation.z = isRight ? -Math.PI / 4 : Math.PI / 4;
+        mirrorStem.position.set(x, 0.84, -0.72);
+        this.carBody.add(mirrorStem);
 
-      const mirrorHead = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.03, 16), chromeMat);
-      mirrorHead.rotation.x = Math.PI / 2;
-      mirrorHead.position.set(-0.91, 0.88, -0.72);
-      this.carBody.add(mirrorHead);
+        const mirrorHead = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.03, 16), chromeMat);
+        mirrorHead.rotation.x = Math.PI / 2;
+        mirrorHead.position.set(x > 0 ? x + 0.05 : x - 0.05, 0.88, -0.72);
+        this.carBody.add(mirrorHead);
+
+        // Ayna Yüzeyi (Gerçekçi Yansıtıcı)
+        const mirrorFaceMat = new THREE.MeshStandardMaterial({
+          color: 0xcccccc,
+          metalness: 0.98,
+          roughness: 0.05
+        });
+        const mirrorGlass = new THREE.Mesh(new THREE.CircleGeometry(0.055, 16), mirrorFaceMat);
+        mirrorGlass.position.set(x > 0 ? x + 0.05 : x - 0.05, 0.88, -0.70);
+        this.carBody.add(mirrorGlass);
+      });
 
       // Kıvrık Uçlu Klasik Krom Egzoz Borusu (Arka sol)
       const exhaust = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.40, 10), chromeMat);
@@ -451,49 +493,206 @@
           isFront: wp.isFront,
           baseX: wp.x,
           baseZ: wp.z,
+          baseY: this.wheelRadius,
           rotation: 0
         });
       });
     }
 
-    _buildSmokeSystem() {
-      const smokeGeo = new THREE.SphereGeometry(0.14, 6, 6);
-      const smokeMat = new THREE.MeshBasicMaterial({
-        color: 0x333333,
-        transparent: true,
-        opacity: 0.45
+    // ------------------------------------------------------------ 1980 KOKPİT & İÇ DİZAYN (İÇ MEKAN VE DİREKSİYON)
+    _buildInteriorAndCockpit() {
+      const interiorGroup = new THREE.Group();
+      interiorGroup.name = 'Interior_Cockpit';
+      this.carBody.add(interiorGroup);
+
+      const vinylMat = new THREE.MeshStandardMaterial({ color: 0x221a15, roughness: 0.85 }); // Taba/Kahve Vinil
+      const blackPlastic = new THREE.MeshStandardMaterial({ color: 0x181818, roughness: 0.75 });
+      const chromeTrim = new THREE.MeshStandardMaterial({ color: 0xf0f0f0, metalness: 0.95, roughness: 0.1 });
+
+      // Taban Halısı
+      const carpet = new THREE.Mesh(new THREE.BoxGeometry(1.42, 0.05, 2.50), blackPlastic);
+      carpet.position.set(0, 0.52, 0.40);
+      interiorGroup.add(carpet);
+
+      // Ön Torpido Konsolu (1980 Murat 131 Düz Göğüs)
+      const dashboard = new THREE.Mesh(new THREE.BoxGeometry(1.40, 0.26, 0.38), vinylMat);
+      dashboard.position.set(0, 0.85, -0.66);
+      interiorGroup.add(dashboard);
+
+      // Gösterge Paneli Bloğu (Hız ve Devir Saati Kutusu)
+      const cluster = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.14, 0.08), blackPlastic);
+      cluster.position.set(-0.35, 0.91, -0.56);
+      interiorGroup.add(cluster);
+
+      // Gösterge Kadranları (Yeşil Aydınlatmalı Klasik Tofaş Saatleri)
+      const gaugeMat = new THREE.MeshBasicMaterial({ color: 0x44ffaa });
+      const speedo = new THREE.Mesh(new THREE.CircleGeometry(0.045, 12), gaugeMat);
+      speedo.position.set(-0.42, 0.91, -0.51);
+      interiorGroup.add(speedo);
+
+      const tacho = new THREE.Mesh(new THREE.CircleGeometry(0.045, 12), gaugeMat);
+      tacho.position.set(-0.28, 0.91, -0.51);
+      interiorGroup.add(tacho);
+
+      // Direksiyon Mili & DİREKSİYON SİMİDİ (Hareketli 2 Kollu Klasik Tofaş Direksiyonu)
+      this.steeringColumn = new THREE.Group();
+      this.steeringColumn.position.set(-0.35, 0.82, -0.48);
+      this.steeringColumn.rotation.x = -0.45;
+      interiorGroup.add(this.steeringColumn);
+
+      const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.28, 8), blackPlastic);
+      shaft.position.z = 0.12;
+      shaft.rotation.x = Math.PI / 2;
+      this.steeringColumn.add(shaft);
+
+      // Direksiyon Simidi (Torus)
+      this.steeringWheelMesh = new THREE.Group();
+      this.steeringWheelMesh.position.z = 0.24;
+      this.steeringColumn.add(this.steeringWheelMesh);
+
+      const wheelRim = new THREE.Mesh(new THREE.TorusGeometry(0.18, 0.016, 10, 24), blackPlastic);
+      this.steeringWheelMesh.add(wheelRim);
+
+      // 1980 Murat 131 İki Kollu Klasik Göbek & Krom Çıta
+      const spoke = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.035, 0.02), blackPlastic);
+      this.steeringWheelMesh.add(spoke);
+
+      const hornBtn = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.03, 16), chromeTrim);
+      hornBtn.rotation.x = Math.PI / 2;
+      this.steeringWheelMesh.add(hornBtn);
+
+      // Klasik Ön Koltuklar (Sürücü ve Yolcu Başlıklı Taba Vinil Koltuk)
+      [-0.36, 0.36].forEach(x => {
+        const seatGroup = new THREE.Group();
+        seatGroup.position.set(x, 0.62, -0.05);
+
+        // Minder
+        const cushion = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.14, 0.50), vinylMat);
+        seatGroup.add(cushion);
+
+        // Sırtlık
+        const backrest = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.50, 0.14), vinylMat);
+        backrest.position.set(0, 0.28, 0.20);
+        backrest.rotation.x = 0.15;
+        seatGroup.add(backrest);
+
+        // Başlık
+        const headrest = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.12, 0.10), vinylMat);
+        headrest.position.set(0, 0.58, 0.24);
+        seatGroup.add(headrest);
+
+        interiorGroup.add(seatGroup);
       });
 
+      // Arka Kartal Geniş Süngerli Koltuk
+      const rearSeat = new THREE.Mesh(new THREE.BoxGeometry(1.36, 0.18, 0.52), vinylMat);
+      rearSeat.position.set(0, 0.64, 0.95);
+      interiorGroup.add(rearSeat);
+
+      const rearBack = new THREE.Mesh(new THREE.BoxGeometry(1.36, 0.52, 0.16), vinylMat);
+      rearBack.position.set(0, 0.88, 1.22);
+      rearBack.rotation.x = 0.12;
+      interiorGroup.add(rearBack);
+
+      // Vites Kolu & Körüğü
+      const gearBoot = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.10, 8), blackPlastic);
+      gearBoot.position.set(0, 0.56, -0.22);
+      interiorGroup.add(gearBoot);
+
+      const gearStick = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.22, 8), chromeTrim);
+      gearStick.position.set(0, 0.65, -0.22);
+      interiorGroup.add(gearStick);
+
+      const gearKnob = new THREE.Mesh(new THREE.SphereGeometry(0.025, 8, 8), blackPlastic);
+      gearKnob.position.set(0, 0.76, -0.22);
+      interiorGroup.add(gearKnob);
+
+      // Dikiz Aynası (İç Kabin Orta Ayna)
+      const rearViewMirror = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.06, 0.03), chromeTrim);
+      rearViewMirror.position.set(0, 1.20, -0.74);
+      interiorGroup.add(rearViewMirror);
+    }
+
+    // ------------------------------------------------------------ ULTRA PARTİKÜL SİSTEMLERİ (Duman, Kıvılcım, Backfire, Nitro Alevi)
+    _buildParticleSystems() {
+      // 1. Duman ve Yanık Lastik Partikülleri
+      const smokeGeo = new THREE.SphereGeometry(0.14, 6, 6);
+      const smokeMat = new THREE.MeshBasicMaterial({ color: 0x333333, transparent: true, opacity: 0.45 });
       this.smokeGroup = new THREE.Group();
+      this.smokeGroup.name = 'Smoke_Particles';
       this.scene.add(this.smokeGroup);
 
-      for (let i = 0; i < 25; i++) {
+      for (let i = 0; i < 35; i++) {
         const p = new THREE.Mesh(smokeGeo, smokeMat.clone());
         p.visible = false;
         p.userData = { life: 0, maxLife: 1.0, velocity: new THREE.Vector3() };
         this.smokeGroup.add(p);
         this.smokeParticles.push(p);
       }
+
+      // 2. Çarpışma ve Sürtünme Kıvılcımları (NFS Sparks FX)
+      const sparkGeo = new THREE.BoxGeometry(0.04, 0.04, 0.12);
+      const sparkMat = new THREE.MeshBasicMaterial({ color: 0xffcc33 });
+      this.sparkGroup = new THREE.Group();
+      this.sparkGroup.name = 'Spark_Particles';
+      this.scene.add(this.sparkGroup);
+
+      for (let i = 0; i < 40; i++) {
+        const sp = new THREE.Mesh(sparkGeo, sparkMat.clone());
+        sp.visible = false;
+        sp.userData = { life: 0, maxLife: 0.4, velocity: new THREE.Vector3() };
+        this.sparkGroup.add(sp);
+        this.sparkParticles.push(sp);
+      }
+
+      // 3. Nitro ve Egzoz Backfire Alevi (NFS Blue Flame FX)
+      const flameGeo = new THREE.ConeGeometry(0.065, 0.38, 8);
+      flameGeo.rotateX(-Math.PI / 2);
+      const flameMat = new THREE.MeshBasicMaterial({ color: 0x00ccff, transparent: true, opacity: 0.85 });
+      this.exhaustFlame = new THREE.Mesh(flameGeo, flameMat);
+      this.exhaustFlame.position.set(-0.52, 0.22, 2.38);
+      this.exhaustFlame.visible = false;
+      this.carBody.add(this.exhaustFlame);
     }
 
-    _emitSmoke(origin, dir, isDamage = false) {
+    _emitSmoke(origin, dir, isDamage = false, isTireSmoke = false) {
       const p = this.smokeParticles.find(sp => !sp.visible);
       if (!p) return;
       p.visible = true;
       p.position.copy(origin);
-      p.scale.setScalar(isDamage ? 1.6 : 0.85);
-      p.material.color.setHex(isDamage ? 0x111111 : 0x666666);
-      p.material.opacity = isDamage ? 0.65 : 0.35;
+      p.scale.setScalar(isDamage ? 1.6 : (isTireSmoke ? 1.2 : 0.85));
+      p.material.color.setHex(isDamage ? 0x111111 : (isTireSmoke ? 0xdddddd : 0x555555));
+      p.material.opacity = isDamage ? 0.70 : (isTireSmoke ? 0.50 : 0.35);
       p.userData.life = 0;
-      p.userData.maxLife = isDamage ? 1.5 : 0.8;
+      p.userData.maxLife = isDamage ? 1.6 : 0.8;
       p.userData.velocity.set(
         dir.x + (Math.random() - 0.5) * 1.5,
-        dir.y + Math.random() * 2.2 + 1.0,
+        dir.y + Math.random() * 2.2 + 0.8,
         dir.z + (Math.random() - 0.5) * 1.5
       );
     }
 
-    _updateSmoke(dt) {
+    _emitSparks(origin, normal, count = 15) {
+      let emitted = 0;
+      for (const sp of this.sparkParticles) {
+        if (!sp.visible) {
+          sp.visible = true;
+          sp.position.copy(origin).add(new THREE.Vector3((Math.random() - 0.5) * 0.2, (Math.random() - 0.5) * 0.2, (Math.random() - 0.5) * 0.2));
+          sp.userData.life = 0;
+          sp.userData.maxLife = 0.25 + Math.random() * 0.25;
+          sp.userData.velocity.set(
+            normal.x * 6.0 + (Math.random() - 0.5) * 8.0,
+            normal.y * 3.0 + Math.random() * 6.0 + 2.0,
+            normal.z * 6.0 + (Math.random() - 0.5) * 8.0
+          );
+          emitted++;
+          if (emitted >= count) break;
+        }
+      }
+    }
+
+    _updateParticles(dt) {
+      // Duman güncellemesi
       this.smokeParticles.forEach(p => {
         if (!p.visible) return;
         p.userData.life += dt;
@@ -501,10 +700,40 @@
           p.visible = false;
         } else {
           p.position.addScaledVector(p.userData.velocity, dt);
-          p.scale.multiplyScalar(1.0 + dt * 1.6);
-          p.material.opacity = Math.max(0, p.material.opacity - dt * 0.42);
+          p.scale.multiplyScalar(1.0 + dt * 1.8);
+          p.material.opacity = Math.max(0, p.material.opacity - dt * 0.45);
         }
       });
+
+      // Kıvılcım güncellemesi (Yerçekimi ve sönme)
+      this.sparkParticles.forEach(sp => {
+        if (!sp.visible) return;
+        sp.userData.life += dt;
+        if (sp.userData.life >= sp.userData.maxLife) {
+          sp.visible = false;
+        } else {
+          sp.userData.velocity.y -= 22.0 * dt; // Yerçekimi
+          sp.position.addScaledVector(sp.userData.velocity, dt);
+          sp.lookAt(sp.position.clone().add(sp.userData.velocity));
+        }
+      });
+
+      // Nitro & Backfire Alevi
+      if (this.exhaustFlame) {
+        if (this.isNitroActive) {
+          this.exhaustFlame.visible = true;
+          this.exhaustFlame.scale.set(1.0 + Math.random() * 0.4, 1.0 + Math.random() * 0.4, 1.5 + Math.random() * 0.8);
+          this.exhaustFlame.material.color.setHex(0x00d0ff);
+        } else if (this.gear > 1 && this.rpm > 5500 && Math.random() < 0.15) {
+          // Vites atarken veya yüksek devirde egzoz patlaması (Backfire)
+          this.exhaustFlame.visible = true;
+          this.exhaustFlame.scale.set(1.2, 1.2, 1.2 + Math.random() * 0.6);
+          this.exhaustFlame.material.color.setHex(0xffaa00);
+          this.playBackfireSound();
+        } else {
+          this.exhaustFlame.visible = false;
+        }
+      }
     }
 
     // ------------------------------------------------------------ Web Audio Motor Sesi
@@ -671,6 +900,93 @@
       }
     }
 
+
+    playBackfireSound() {
+      if (!this.audioCtx || !this.soundEnabled) return;
+      try {
+        const now = this.audioCtx.currentTime;
+        const osc = this.audioCtx.createOscillator();
+        const gain = this.audioCtx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(180, now);
+        osc.frequency.exponentialRampToValueAtTime(35, now + 0.12);
+
+        gain.gain.setValueAtTime(0.18, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+
+        osc.connect(gain);
+        gain.connect(this.audioCtx.destination);
+        osc.start(now);
+        osc.stop(now + 0.16);
+      } catch (e) {}
+    }
+
+    _applyDeformation(sensor, currentSpeed) {
+      const dmg = Math.min(1.0, currentSpeed / 20.0);
+      if (sensor.isFront) {
+        // Ön Kaput ve Tampon Eğilme & Kıvrılma
+        this.damageState.hoodBent = Math.min(0.24, this.damageState.hoodBent + dmg * 0.14);
+        this.damageState.frontBumperBent = Math.min(0.18, this.damageState.frontBumperBent + dmg * 0.12);
+
+        if (this.hood) {
+          this.hood.rotation.x = -0.06 + this.damageState.hoodBent * 0.9;
+          this.hood.position.y = 0.77 + this.damageState.hoodBent * 0.4;
+          this.hood.position.z = -1.45 + this.damageState.hoodBent * 0.3;
+        }
+        if (this.frontBumper) {
+          this.frontBumper.position.z = -2.16 + this.damageState.frontBumperBent * 0.35;
+          this.frontBumper.rotation.z = (Math.random() - 0.5) * this.damageState.frontBumperBent * 0.6;
+          this.frontBumper.rotation.x = this.damageState.frontBumperBent * 0.5;
+        }
+
+        // Şiddetli çarpışmada ön cam çatlaması (NFS Shattered Glass)
+        if (currentSpeed > 10.0 && !this.damageState.windshieldCracked) {
+          this.damageState.windshieldCracked = true;
+          if (this.winFrontMat) {
+            this.winFrontMat.opacity = 0.92;
+            this.winFrontMat.roughness = 0.85;
+            this.winFrontMat.color.setHex(0xb8d4d8);
+          }
+        }
+
+        // Farların patlaması
+        if (currentSpeed > 8.0) {
+          if (sensor.pos.x < this.position.x && !this.damageState.leftLightBroken) {
+            this.damageState.leftLightBroken = true;
+            if (this.leftHeadlight) this.leftHeadlight.intensity = 0;
+            const lMesh = this.headlightMeshes.find(h => h.isLeft);
+            if (lMesh) {
+              lMesh.mat.emissiveIntensity = 0;
+              lMesh.mat.color.setHex(0x333333);
+            }
+          } else if (sensor.pos.x >= this.position.x && !this.damageState.rightLightBroken) {
+            this.damageState.rightLightBroken = true;
+            if (this.rightHeadlight) this.rightHeadlight.intensity = 0;
+            const rMesh = this.headlightMeshes.find(h => !h.isLeft);
+            if (rMesh) {
+              rMesh.mat.emissiveIntensity = 0;
+              rMesh.mat.color.setHex(0x333333);
+            }
+          }
+        }
+      } else {
+        // Arka Tampon & Bagaj Eğilmesi
+        this.damageState.rearBumperBent = Math.min(0.20, this.damageState.rearBumperBent + dmg * 0.12);
+        if (this.rearBumper) {
+          this.rearBumper.position.z = 2.16 - this.damageState.rearBumperBent * 0.35;
+          this.rearBumper.rotation.z = (Math.random() - 0.5) * this.damageState.rearBumperBent * 0.5;
+        }
+        if (currentSpeed > 11.0 && !this.damageState.rearGlassCracked) {
+          this.damageState.rearGlassCracked = true;
+          if (this.winRearMat) {
+            this.winRearMat.opacity = 0.95;
+            this.winRearMat.roughness = 0.90;
+            this.winRearMat.color.setHex(0xb0cbcf);
+          }
+        }
+      }
+    }
+
     _resolveSafeWallCollision(hit, sensor) {
       const normal = (hit.face && hit.face.normal) ? hit.face.normal.clone() : sensor.dir.clone().negate();
       normal.y = 0;
@@ -684,43 +1000,87 @@
       // 2. DUVARA DOĞRU OLAN HIZI ANINDA SIFIRLA VE GERİ SEKTİR
       const vDotN = this.velocity.dot(normal);
       if (vDotN < 0) {
-        // Duvara doğru hareket eden hız bileşenini yansıt
         this.velocity.subScaledVector(normal, vDotN * 1.4); // Elastik sekme
         this.velocity.multiplyScalar(0.70); // Sürtünme
       }
 
-      // 3. Geri Vites Kurtarma Gücü (Sürüş kolaylığı)
+      // 3. Geri Vites Kurtarma Gücü
       if (this.inputs.brake > 0 && sensor.isFront) {
-        // Ön tarafı duvardayken geri tuşuna basarsa ekstra geri itme gücü ver
         this.velocity.addScaledVector(normal, 8.0);
       } else if (this.inputs.throttle > 0 && !sensor.isFront) {
-        // Arkası duvardayken gaza basarsa ileri it
         this.velocity.addScaledVector(normal, 8.0);
       }
 
-      // 4. Sarsıntı ve Çarpma Sesi
+      // 4. Sarsıntı, Hasar, Deformasyon, Cam Kırılması ve Kıvılcım FX
       const currentSpeed = this.velocity.length();
-      if (currentSpeed > 3.0) {
-        this.cameraShakeIntensity = Math.min(1.0, currentSpeed / 15.0);
-        this.health = Math.max(10, this.health - Math.round(currentSpeed * 0.8));
-        this.playCrashSound(currentSpeed / 10.0);
+      if (currentSpeed > 2.5) {
+        this.cameraShakeIntensity = Math.min(1.0, currentSpeed / 14.0);
+        this.health = Math.max(10, this.health - Math.round(currentSpeed * 0.75));
+        this.playCrashSound(currentSpeed / 9.0);
+        this._emitSparks(hit.point, normal, Math.min(30, Math.round(currentSpeed * 2.5)));
         this._emitSmoke(hit.point, normal, true);
+        this._applyDeformation(sensor, currentSpeed);
+
+        // Çarpışma anında süspansiyon darbesi
+        this.suspensionBounceVel += (currentSpeed / 12.0) * 0.45;
+        this.suspensionPitchVel += sensor.isFront ? 0.35 : -0.35;
       }
     }
 
     // ------------------------------------------------------------ Acil Durum Sıfırlama (R Tuşu)
     unflip() {
       const groundH = this.getSurfaceHeightAt(this.position.x, this.position.z, this.position.y);
-      // Aracı geriye doğru 2.0 metre çek ve yerden kaldır
       const fwd = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
       this.position.addScaledVector(fwd, -2.0);
       this.position.y = groundH + this.wheelRadius + 0.6;
       this.pitch = 0;
       this.roll = 0;
+      this.suspensionPitch = 0;
+      this.suspensionRoll = 0;
+      this.suspensionBounce = 0;
       this.verticalVelocity = 0;
       this.velocity.set(0, 0, 0);
       this.chassis.rotation.set(0, 0, 0);
       this.stuckTimer = 0;
+
+      // Hasarları sıfırla (Tamir et)
+      this.health = 100;
+      this.damageState.hoodBent = 0;
+      this.damageState.frontBumperBent = 0;
+      this.damageState.rearBumperBent = 0;
+      this.damageState.windshieldCracked = false;
+      this.damageState.rearGlassCracked = false;
+      this.damageState.leftLightBroken = false;
+      this.damageState.rightLightBroken = false;
+
+      if (this.hood) {
+        this.hood.rotation.x = -0.06;
+        this.hood.position.set(0, 0.77, -1.45);
+      }
+      if (this.frontBumper) {
+        this.frontBumper.position.set(0, 0.38, -2.16);
+        this.frontBumper.rotation.set(0, 0, 0);
+      }
+      if (this.rearBumper) {
+        this.rearBumper.position.set(0, 0.38, 2.16);
+        this.rearBumper.rotation.set(0, 0, 0);
+      }
+      if (this.winFrontMat) {
+        this.winFrontMat.opacity = 0.80;
+        this.winFrontMat.roughness = 0.05;
+        this.winFrontMat.color.setHex(0xdde8ea);
+      }
+      if (this.winRearMat) {
+        this.winRearMat.opacity = 0.80;
+        this.winRearMat.roughness = 0.05;
+        this.winRearMat.color.setHex(0xdde8ea);
+      }
+      if (this.leftHeadlight) this.leftHeadlight.intensity = 2.6;
+      if (this.rightHeadlight) this.rightHeadlight.intensity = 2.6;
+      this.headlightMeshes.forEach(h => {
+        h.mat.emissiveIntensity = 0.95;
+        h.mat.color.setHex(0xfffbe8);
+      });
     }
 
     setSpawn(x, y, z, yaw = 0) {
@@ -731,10 +1091,14 @@
       this.yaw = yaw;
       this.pitch = 0;
       this.roll = 0;
+      this.suspensionPitch = 0;
+      this.suspensionRoll = 0;
+      this.suspensionBounce = 0;
       this.speedKmh = 0;
       this.rpm = this.idleRpm;
       this.gear = 1;
       this.health = 100;
+      this.nitro = 100;
       this.stuckTimer = 0;
       this.group.position.copy(this.position);
       this.group.rotation.set(0, this.yaw, 0);
@@ -748,6 +1112,18 @@
       this.inputs.throttle = inputKeys.KeyW || inputKeys.ArrowUp ? 1 : 0;
       this.inputs.brake = inputKeys.KeyS || inputKeys.ArrowDown ? 1 : 0;
       this.inputs.handbrake = !!inputKeys.Space;
+      this.inputs.nitro = !!(inputKeys.ShiftLeft || inputKeys.ShiftRight);
+
+      // NFS Nitro Mantığı (Shift tuşu)
+      if (this.inputs.nitro && this.nitro > 0 && this.inputs.throttle > 0) {
+        this.isNitroActive = true;
+        this.nitro = Math.max(0, this.nitro - dt * 25.0); // 4 saniye tam nitro
+        this.cameraShakeIntensity = Math.max(this.cameraShakeIntensity, 0.18);
+      } else {
+        this.isNitroActive = false;
+        // Nitro yavaşça dolsun
+        this.nitro = Math.min(100, this.nitro + dt * 6.5);
+      }
 
       // Direksiyon: A = SOL (-1), D = SAĞ (+1)
       let steerInput = 0;
@@ -759,6 +1135,11 @@
       const targetAngle = steerInput * this.maxSteerAngle * steerSpeedFactor;
       this.steeringAngle += (targetAngle - this.steeringAngle) * Math.min(1.0, dt * 10.0);
 
+      // Kokpit Direksiyon Simidini Döndür (360 derece direksiyon açısı)
+      if (this.steeringWheelMesh) {
+        this.steeringWheelMesh.rotation.z = -this.steeringAngle * 2.8;
+      }
+
       // Vites Mantığı
       if (this.inputs.brake > 0 && currentSpeed < 0.8 && this.gear >= 0) {
         this.gear = -1; // Geri vites
@@ -767,12 +1148,13 @@
       }
 
       if (this.gear > 0) {
-        if (this.rpm > 5400 && this.gear < 5) {
+        if (this.rpm > 5500 && this.gear < 5) {
           this.gear++;
-          this.rpm = 3100;
+          this.rpm = 3200;
+          this.playBackfireSound();
         } else if (this.rpm < 2100 && this.gear > 1) {
           this.gear--;
-          this.rpm = 4100;
+          this.rpm = 4200;
         }
       }
 
@@ -783,9 +1165,10 @@
       const forwardSpeed = this.velocity.dot(fwd);
       const lateralSpeed = this.velocity.dot(right);
 
-      // Motor & Güç
+      // Motor & Güç (Nitro Güç Çarpanı)
       let driveForce = 0;
       const ratio = this.gearRatios[this.gear] || 0;
+      const nitroMultiplier = this.isNitroActive ? 1.75 : 1.0;
 
       if (this.gear !== 0) {
         const targetRpm = Math.max(this.idleRpm, (Math.abs(forwardSpeed) / (this.wheelRadius * 2 * Math.PI)) * 60 * Math.abs(ratio) * this.finalDrive);
@@ -795,7 +1178,7 @@
         if (this.isGrounded) {
           if (this.gear > 0 && this.inputs.throttle > 0) {
             const torqueFactor = Math.sin((this.rpm / this.maxRpm) * Math.PI);
-            driveForce = this.inputs.throttle * this.maxTorque * ratio * this.finalDrive * (0.65 + 0.35 * torqueFactor);
+            driveForce = this.inputs.throttle * this.maxTorque * nitroMultiplier * ratio * this.finalDrive * (0.65 + 0.35 * torqueFactor);
           } else if (this.gear === -1 && this.inputs.brake > 0) {
             driveForce = -this.inputs.brake * this.maxTorque * Math.abs(ratio) * this.finalDrive * 0.85;
           }
@@ -804,13 +1187,22 @@
 
       // Fren & El Freni
       let brakeForce = 0;
-      if (this.gear > 0 && this.inputs.brake > 0 && this.isGrounded) {
-        brakeForce = 4800 * Math.sign(forwardSpeed);
+      const isBraking = this.gear > 0 && this.inputs.brake > 0 && this.isGrounded;
+      if (isBraking) {
+        brakeForce = 5200 * Math.sign(forwardSpeed);
       }
       let handbrakeFriction = 1.0;
       if (this.inputs.handbrake && this.isGrounded) {
-        brakeForce += 5400 * Math.sign(forwardSpeed);
-        handbrakeFriction = 0.28;
+        brakeForce += 5800 * Math.sign(forwardSpeed);
+        handbrakeFriction = 0.26;
+      }
+
+      // Arka Fren Lambası Parlaması (Dinamik Aydınlatma)
+      if (this.tailBrakeMats && this.tailBrakeMats.length) {
+        const brakeBright = (isBraking || this.inputs.handbrake) ? 1.0 : 0.25;
+        this.tailBrakeMats.forEach(mat => {
+          mat.emissiveIntensity = brakeBright;
+        });
       }
 
       const rollResistance = this.isGrounded ? (240 * Math.sign(forwardSpeed)) : 10;
@@ -822,15 +1214,22 @@
       const corneringStiffness = 32000 * handbrakeFriction;
       let lateralForce = this.isGrounded ? (-lateralSpeed * corneringStiffness / this.mass) : (-lateralSpeed * 0.2);
 
-      this.driftFactor = Math.min(1.0, Math.abs(lateralSpeed) / 7.5 + (this.inputs.handbrake ? 0.6 : 0.0));
+      this.driftFactor = Math.min(1.0, Math.abs(lateralSpeed) / 7.0 + (this.inputs.handbrake ? 0.65 : 0.0));
 
+      // Driftte beyaz lastik dumanı ve asfalta sürtünme
+      if (this.driftFactor > 0.45 && currentSpeed > 5.0) {
+        const rearWheelPos = this.position.clone().addScaledVector(fwd, -1.25).addScaledVector(right, (Math.random() - 0.5) * 1.3);
+        this._emitSmoke(rearWheelPos, new THREE.Vector3(0, 0.8, 0), false, true);
+      }
+
+      // Normal egzoz dumanı
       if (this.inputs.throttle > 0 && Math.random() < 0.25) {
         const exhaustPos = this.position.clone().addScaledVector(fwd, -2.15).addScaledVector(right, -0.52).add(new THREE.Vector3(0, 0.25, 0));
         this._emitSmoke(exhaustPos, fwd.clone().negate().multiplyScalar(2.0), this.health < 40);
       }
 
       const baseYawRate = (forwardSpeed / this.wheelbase) * Math.sin(this.steeringAngle);
-      const oversteerBonus = this.inputs.handbrake ? (this.steeringAngle * 2.6) : (this.driftFactor * this.steeringAngle * 1.2);
+      const oversteerBonus = this.inputs.handbrake ? (this.steeringAngle * 2.8) : (this.driftFactor * this.steeringAngle * 1.35);
 
       this.angularVelocity = baseYawRate + oversteerBonus;
       if (this.isGrounded) {
@@ -857,9 +1256,10 @@
 
       if (this.position.y <= targetY) {
         const impactY = Math.abs(this.verticalVelocity);
-        if (!this.isGrounded && impactY > 8.0) {
-          this.cameraShakeIntensity = Math.min(1.0, impactY / 20.0);
-          this.playCrashSound(impactY / 15.0);
+        if (!this.isGrounded && impactY > 7.0) {
+          this.cameraShakeIntensity = Math.min(1.0, impactY / 18.0);
+          this.playCrashSound(impactY / 13.0);
+          this.suspensionBounceVel += (impactY / 15.0) * 0.5;
         }
 
         this.position.y = targetY;
@@ -869,20 +1269,39 @@
         this.isGrounded = false;
       }
 
-      // Jiroskopik Dengeleme (Asla takla atamaz / ters dönemez)
+      // ------------------------------------------------------------ GERÇEKÇİ SÜSPANSİYON ESNEME SİMÜLASYONU (Spring-Damper Physics)
+      const springFreq = 14.0;
+      const damping = 7.5;
+
+      // İvmelenme ve Frende Gövde Burun Dalması / Kalkması (Pitch Squat/Dive)
+      const targetSuspPitch = (forwardAccel / 9.81) * -0.095;
+      const pitchAcc = (targetSuspPitch - this.suspensionPitch) * (springFreq * springFreq) - this.suspensionPitchVel * damping;
+      this.suspensionPitchVel += pitchAcc * dt;
+      this.suspensionPitch += this.suspensionPitchVel * dt;
+
+      // Virajda Gövde Yana Yatması (Body Roll / Sway)
+      const targetSuspRoll = (lateralSpeed / 9.81) * 0.125;
+      const rollAcc = (targetSuspRoll - this.suspensionRoll) * (springFreq * springFreq) - this.suspensionRollVel * damping;
+      this.suspensionRollVel += rollAcc * dt;
+      this.suspensionRoll += this.suspensionRollVel * dt;
+
+      // Tümsek ve Çukur Zıplaması (Suspension Heave / Bounce)
+      const bounceAcc = (0 - this.suspensionBounce) * (springFreq * springFreq) - this.suspensionBounceVel * damping;
+      this.suspensionBounceVel += bounceAcc * dt;
+      this.suspensionBounce += this.suspensionBounceVel * dt;
+
+      // Arazi Eğimine Uyum
       if (this.isGrounded) {
         const hFront = this.getSurfaceHeightAt(this.position.x + fwd.x * 1.5, this.position.z + fwd.z * 1.5, this.position.y);
         const hRear = this.getSurfaceHeightAt(this.position.x - fwd.x * 1.5, this.position.z - fwd.z * 1.5, this.position.y);
         const groundPitch = Math.atan2(hFront - hRear, 3.0);
-        const accelPitch = (forwardAccel / 9.81) * -0.06;
-        const targetPitch = THREE.MathUtils.clamp(groundPitch + accelPitch, -0.42, 0.42);
+        const targetPitch = THREE.MathUtils.clamp(groundPitch, -0.42, 0.42);
         this.pitch += (targetPitch - this.pitch) * Math.min(1.0, dt * 14.0);
 
         const hRight = this.getSurfaceHeightAt(this.position.x + right.x * 1.0, this.position.z + right.z * 1.0, this.position.y);
         const hLeft = this.getSurfaceHeightAt(this.position.x - right.x * 1.0, this.position.z - right.z * 1.0, this.position.y);
         const groundRoll = Math.atan2(hRight - hLeft, 2.0);
-        const cornerRoll = (lateralSpeed / 9.81) * 0.08;
-        const targetRoll = THREE.MathUtils.clamp(groundRoll + cornerRoll, -0.38, 0.38);
+        const targetRoll = THREE.MathUtils.clamp(groundRoll, -0.38, 0.38);
         this.roll += (targetRoll - this.roll) * Math.min(1.0, dt * 14.0);
       } else {
         this.pitch += (0 - this.pitch) * dt * 4.0;
@@ -892,19 +1311,20 @@
       this.pitch = THREE.MathUtils.clamp(this.pitch, -0.45, 0.45);
       this.roll = THREE.MathUtils.clamp(this.roll, -0.40, 0.40);
 
-      // DUVAR VE ENGEL KONTROLÜ (Garantili Ayrılma)
+      // DUVAR VE ENGEL KONTROLÜ
       this.checkObstacleCollisions(dt);
 
       if (this.cameraShakeIntensity > 0) {
         this.cameraShakeIntensity = Math.max(0, this.cameraShakeIntensity - dt * 2.5);
       }
 
-      // Matris Güncellemeleri
+      // Matris Güncellemeleri: Şasi zemin eğimini alır, Gövde süspansiyon esnemesini ekler
       this.group.position.copy(this.position);
       this.group.rotation.set(0, this.yaw, 0);
-      this.chassis.rotation.set(this.pitch, 0, this.roll);
+      this.chassis.position.y = this.suspensionBounce;
+      this.chassis.rotation.set(this.pitch + this.suspensionPitch, 0, this.roll + this.suspensionRoll);
 
-      // Tekerlekler
+      // Tekerlekler ve Süspansiyon Yukarı/Aşağı Hareketi
       const wheelSpin = (forwardSpeed / this.wheelRadius) * dt;
       this.wheels.forEach(w => {
         w.rotation += wheelSpin;
@@ -913,10 +1333,15 @@
         if (w.isFront) {
           w.group.rotation.y = this.steeringAngle;
         }
+
+        // Tekerleğin bağımsız süspansiyon esnemesi
+        const wheelPitchOffset = w.isFront ? -this.suspensionPitch * 1.2 : this.suspensionPitch * 1.2;
+        const wheelRollOffset = w.baseX > 0 ? -this.suspensionRoll * 0.7 : this.suspensionRoll * 0.7;
+        w.group.position.y = THREE.MathUtils.clamp(w.baseY + wheelPitchOffset + wheelRollOffset, this.wheelRadius * 0.75, this.wheelRadius * 1.25);
       });
 
       this._updateAudio(dt);
-      this._updateSmoke(dt);
+      this._updateParticles(dt);
     }
   }
 
