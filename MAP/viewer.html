@@ -459,8 +459,11 @@
     camera.lookAt(vehicle.position.clone().add(new THREE.Vector3(0, 1.2, 0)));
     
     isRacing = true;
+    window.isRacing = true;
     raceStartTime = performance.now();
     currentCheckpointIdx = 0;
+    window.currentCheckpointIdx = 0;
+    window.checkpoints = checkpoints;
     checkpoints.forEach(cp => cp.reached = false);
     
     document.getElementById('race-bar').style.display = 'block';
@@ -468,14 +471,15 @@
     document.getElementById('race-status').style.color = '#fcd34d';
   };
 
-  // C tusu: Kamera degisimi, R: Araba duzeltme, M: Motor sesi susturma
+  window.checkpoints = checkpoints;
+
+  // C tusu: Kamera degisimi, R: Araba duzeltme (Unflip / Reset), M: Motor sesi susturma
   addEventListener('keydown', e => {
     if (e.code === 'KeyC' && isCarMode) {
       cameraViewMode = cameraViewMode === 'chase' ? 'hood' : (cameraViewMode === 'hood' ? 'far' : 'chase');
     }
     if (e.code === 'KeyR' && isCarMode) {
-      const h = vehicle.getSurfaceHeightAt(vehicle.position.x, vehicle.position.z, vehicle.position.y);
-      vehicle.setSpawn(vehicle.position.x, h + 0.5, vehicle.position.z, vehicle.yaw);
+      vehicle.unflip();
     }
     if (e.code === 'KeyM' && isCarMode) {
       toggleEngineMute();
@@ -485,158 +489,178 @@
   let last = performance.now(), acc = 0;
   const fwd = new THREE.Vector3(), right = new THREE.Vector3();
 
+  window.onerror = function (msg, url, line, col, err) {
+    window.__lastErr = msg + ' at ' + line + ':' + col;
+    console.error('[GLOBAL ERR]', window.__lastErr);
+  };
+
   function loop(t) {
-    const dt = Math.min((t - last) / 1000, 0.1);
-    last = t;
+    try {
+      const dt = Math.min((t - last) / 1000, 0.1);
+      last = t;
 
-    map.updateWater(t);
+      map.updateWater(t);
 
-    if (isCarMode) {
-      // 1. Kartal Fizik & Surus Motoru
-      vehicle.update(dt, keys);
+      if (isCarMode) {
+        // 1. Kartal Fizik & Surus Motoru
+        vehicle.update(dt, keys);
 
-      // 2. Takip Kamerasi (Smooth Third-Person / Hood) + GTA Sarsinti Efekti
-      const carPos = vehicle.position;
-      const carYaw = vehicle.yaw;
-      const fwdDir = new THREE.Vector3(-Math.sin(carYaw), 0, -Math.cos(carYaw));
+        // 2. Takip Kamerasi (Smooth Third-Person / Hood) + GTA Sarsinti Efekti
+        const carPos = vehicle.position;
+        const carYaw = vehicle.yaw;
+        const fwdDir = new THREE.Vector3(-Math.sin(carYaw), 0, -Math.cos(carYaw));
 
-      const shake = vehicle.cameraShakeIntensity;
-      const shakeOffset = new THREE.Vector3(
-        (Math.random() - 0.5) * shake * 1.5,
-        (Math.random() - 0.5) * shake * 1.5,
-        (Math.random() - 0.5) * shake * 1.5
-      );
+        const shake = vehicle.cameraShakeIntensity;
+        const shakeOffset = new THREE.Vector3(
+          (Math.random() - 0.5) * shake * 1.5,
+          (Math.random() - 0.5) * shake * 1.5,
+          (Math.random() - 0.5) * shake * 1.5
+        );
 
-      if (cameraViewMode === 'chase') {
-        const camDist = 7.5 + (vehicle.speedKmh / 160) * 4.0;
-        const camHeight = 3.6 + (vehicle.speedKmh / 160) * 1.2;
-        const targetCamPos = new THREE.Vector3(
-          carPos.x - fwdDir.x * camDist,
-          carPos.y + camHeight,
-          carPos.z - fwdDir.z * camDist
-        ).add(shakeOffset);
-        camera.position.lerp(targetCamPos, Math.min(1.0, dt * 10.0));
-        
-        const lookTarget = carPos.clone().add(new THREE.Vector3(0, 0.9, 0)).addScaledVector(fwdDir, 3.0);
-        camera.lookAt(lookTarget);
-      } else if (cameraViewMode === 'far') {
-        const targetCamPos = new THREE.Vector3(
-          carPos.x - fwdDir.x * 16.0,
-          carPos.y + 7.0,
-          carPos.z - fwdDir.z * 16.0
-        ).add(shakeOffset);
-        camera.position.lerp(targetCamPos, Math.min(1.0, dt * 6.0));
-        camera.lookAt(carPos.clone().add(new THREE.Vector3(0, 1.2, 0)));
-      } else if (cameraViewMode === 'hood') {
-        camera.position.set(carPos.x + fwdDir.x * 0.8, carPos.y + 1.2, carPos.z + fwdDir.z * 0.8).add(shakeOffset);
-        const lookTarget = carPos.clone().addScaledVector(fwdDir, 25.0);
-        camera.lookAt(lookTarget);
-      }
+        if (cameraViewMode === 'chase') {
+          const camDist = 7.5 + (vehicle.speedKmh / 160) * 4.0;
+          const camHeight = 3.6 + (vehicle.speedKmh / 160) * 1.2;
+          const targetCamPos = new THREE.Vector3(
+            carPos.x - fwdDir.x * camDist,
+            carPos.y + camHeight,
+            carPos.z - fwdDir.z * camDist
+          ).add(shakeOffset);
+          camera.position.lerp(targetCamPos, Math.min(1.0, dt * 10.0));
+          
+          const lookTarget = carPos.clone().add(new THREE.Vector3(0, 0.9, 0)).addScaledVector(fwdDir, 3.0);
+          camera.lookAt(lookTarget);
+        } else if (cameraViewMode === 'far') {
+          const targetCamPos = new THREE.Vector3(
+            carPos.x - fwdDir.x * 16.0,
+            carPos.y + 7.0,
+            carPos.z - fwdDir.z * 16.0
+          ).add(shakeOffset);
+          camera.position.lerp(targetCamPos, Math.min(1.0, dt * 6.0));
+          camera.lookAt(carPos.clone().add(new THREE.Vector3(0, 1.2, 0)));
+        } else if (cameraViewMode === 'hood') {
+          camera.position.set(carPos.x + fwdDir.x * 0.8, carPos.y + 1.2, carPos.z + fwdDir.z * 0.8).add(shakeOffset);
+          const lookTarget = carPos.clone().addScaledVector(fwdDir, 25.0);
+          camera.lookAt(lookTarget);
+        }
 
-      controls.target.copy(carPos);
+        controls.target.copy(carPos);
 
-      // 3. Gosterge Paneli HUD Guncelleme
-      document.getElementById('val-speed').textContent = Math.round(vehicle.speedKmh);
-      document.getElementById('val-rpm').textContent = Math.round(vehicle.rpm);
-      const gearText = vehicle.gear === -1 ? 'R' : (vehicle.gear === 0 ? 'N' : vehicle.gear);
-      document.getElementById('val-gear').textContent = gearText;
-      if (vehicle.gear === -1) {
-        document.getElementById('val-gear').style.color = '#ff9900';
-      } else {
-        document.getElementById('val-gear').style.color = '#ff3344';
-      }
+        // 3. Gosterge Paneli HUD Guncelleme
+        document.getElementById('val-speed').textContent = Math.round(vehicle.speedKmh);
+        document.getElementById('val-rpm').textContent = Math.round(vehicle.rpm);
+        const gearText = vehicle.gear === -1 ? 'R' : (vehicle.gear === 0 ? 'N' : vehicle.gear);
+        document.getElementById('val-gear').textContent = gearText;
+        if (vehicle.gear === -1) {
+          document.getElementById('val-gear').style.color = '#ff9900';
+        } else {
+          document.getElementById('val-gear').style.color = '#ff3344';
+        }
 
-      // Govde Saglik / Hasar Barı (GTA Tarzı)
-      const healthElem = document.getElementById('val-health');
-      if (healthElem) {
-        healthElem.textContent = vehicle.health + '%';
-        if (vehicle.health > 60) healthElem.style.color = '#4ade80';
-        else if (vehicle.health > 30) healthElem.style.color = '#facc15';
-        else healthElem.style.color = '#ef4444';
-      }
+        // Govde Saglik / Hasar Barı (GTA Tarzı)
+        const healthElem = document.getElementById('val-health');
+        if (healthElem) {
+          healthElem.textContent = vehicle.health + '%';
+          if (vehicle.health > 60) healthElem.style.color = '#4ade80';
+          else if (vehicle.health > 30) healthElem.style.color = '#facc15';
+          else healthElem.style.color = '#ef4444';
+        }
 
-      // 4. Yaris Durumu & Checkpoint Kontrolu
-      if (isRacing) {
-        const elapsed = (t - raceStartTime) / 1000;
-        const mins = Math.floor(elapsed / 60);
-        const secs = (elapsed % 60).toFixed(1);
-        document.getElementById('race-time').textContent = `${mins.toString().padStart(2,'0')}:${secs.padStart(4,'0')}`;
+        // 4. Yaris Durumu & Checkpoint Kontrolu
+        if (isRacing) {
+          const elapsed = (t - raceStartTime) / 1000;
+          const mins = Math.floor(elapsed / 60);
+          const secs = (elapsed % 60).toFixed(1);
+          document.getElementById('race-time').textContent = `${mins.toString().padStart(2,'0')}:${secs.padStart(4,'0')}`;
 
-        const targetCp = checkpoints[currentCheckpointIdx];
-        const cpWorld = map.toThree(targetCp.rx, targetCp.rz, targetCp.lx || 960, 0, targetCp.lz || 960);
-        const distToCp = new THREE.Vector2(carPos.x - cpWorld.x, carPos.z - cpWorld.z).length();
-        
-        const totalProgress = (currentCheckpointIdx + Math.max(0, 1.0 - (distToCp / 200))) / checkpoints.length;
-        document.getElementById('race-progress-fill').style.width = Math.min(100, Math.round(totalProgress * 100)) + '%';
-        document.getElementById('race-dist').textContent = (distToCp * 0.01).toFixed(1) + ' km';
+          // Hedef checkpoint mesafesi & akilli gecis
+          for (let i = currentCheckpointIdx; i < checkpoints.length; i++) {
+            const cp = checkpoints[i];
+            const cpW = map.toThree(cp.rx, cp.rz, cp.lx || 960, 0, cp.lz || 960);
+            const d = new THREE.Vector2(carPos.x - cpW.x, carPos.z - cpW.z).length();
+            if (d < 260) {
+              cp.reached = true;
+              currentCheckpointIdx = i + 1;
+              window.currentCheckpointIdx = currentCheckpointIdx;
+              break;
+            }
+          }
 
-        if (distToCp < 95) { // Checkpoint'e yaklasildi
-          targetCp.reached = true;
-          currentCheckpointIdx++;
           if (currentCheckpointIdx >= checkpoints.length) {
             isRacing = false;
+            window.isRacing = false;
             document.getElementById('race-status').textContent = '🎉 YARIŞ TAMAMLANDI! Tebrikler!';
             document.getElementById('race-status').style.color = '#4ade80';
+            document.getElementById('race-progress-fill').style.width = '100%';
+            document.getElementById('race-dist').textContent = '0.0 km';
           } else {
-            document.getElementById('race-status').textContent = `${currentCheckpointIdx + 1}. ${checkpoints[currentCheckpointIdx].name}`;
+            const targetCp = checkpoints[currentCheckpointIdx];
+            const cpWorld = map.toThree(targetCp.rx, targetCp.rz, targetCp.lx || 960, 0, targetCp.lz || 960);
+            const distToCp = new THREE.Vector2(carPos.x - cpWorld.x, carPos.z - cpWorld.z).length();
+            const totalProgress = (currentCheckpointIdx + Math.max(0, 1.0 - (distToCp / 250))) / checkpoints.length;
+            document.getElementById('race-progress-fill').style.width = Math.min(100, Math.round(totalProgress * 100)) + '%';
+            document.getElementById('race-dist').textContent = (distToCp * 0.01).toFixed(1) + ' km';
+            document.getElementById('race-status').textContent = `${currentCheckpointIdx + 1}. ${targetCp.name}`;
           }
+        }
+
+      } else {
+        // Normal Serbest Kamera (WASD)
+        camera.getWorldDirection(fwd);
+        fwd.y = 0;
+        fwd.normalize();
+        right.crossVectors(fwd, camera.up);
+
+        const sp = (keys.ShiftLeft ? 450 : 130) * dt;
+        const mv = new THREE.Vector3();
+        if (keys.KeyW) mv.add(fwd);
+        if (keys.KeyS) mv.sub(fwd);
+        if (keys.KeyD) mv.add(right);
+        if (keys.KeyA) mv.sub(right);
+
+        if (mv.lengthSq()) {
+          mv.normalize().multiplyScalar(sp);
+          camera.position.add(mv);
+          controls.target.add(mv);
+        }
+
+        // Hedefi zemine oturt
+        const h = map.getHeightAt(controls.target.x, controls.target.z);
+        if (h !== null && map.dungeonGroup.children.length === 0) {
+          const d = h - controls.target.y;
+          controls.target.y += d;
+          camera.position.y += d;
+        }
+        controls.update();
+      }
+
+      // Harita dinamik akisi (Streaming Chunks)
+      acc += dt;
+      if (acc > 0.20) {
+        acc = 0;
+        const streamTarget = isCarMode ? vehicle.position : controls.target;
+        map.update(streamTarget);
+        const p = map.fromThree(streamTarget.x, streamTarget.z);
+        document.getElementById('reg').textContent = `${p.rx}, ${p.rz} (id ${(p.rz << 8) | p.rx})`;
+        const curH = map.getHeightAt(streamTarget.x, streamTarget.z);
+        document.getElementById('hgt').textContent = curH !== null ? (curH / map.opts.scale).toFixed(1) : '-';
+        document.getElementById('cnt').textContent = map.regions.size;
+
+        if (img.complete) {
+          mctx.drawImage(img, 0, 0, MW, MH);
+          const px = (p.rx - B.minX + p.lx / map.cs.regionSize) / (B.maxX - B.minX + 1) * MW;
+          const py = (B.maxZ - p.rz + 1 - p.lz / map.cs.regionSize) / (B.maxZ - B.minZ + 1) * MH;
+          mctx.fillStyle = isCarMode ? '#ffd479' : '#ff2d55';
+          mctx.beginPath();
+          mctx.arc(px, py, isCarMode ? 6 : 4, 0, 7);
+          mctx.fill();
         }
       }
 
-    } else {
-      // Normal Serbest Kamera (WASD)
-      camera.getWorldDirection(fwd);
-      fwd.y = 0;
-      fwd.normalize();
-      right.crossVectors(fwd, camera.up);
-
-      const sp = (keys.ShiftLeft ? 450 : 130) * dt;
-      const mv = new THREE.Vector3();
-      if (keys.KeyW) mv.add(fwd);
-      if (keys.KeyS) mv.sub(fwd);
-      if (keys.KeyD) mv.add(right);
-      if (keys.KeyA) mv.sub(right);
-
-      if (mv.lengthSq()) {
-        mv.normalize().multiplyScalar(sp);
-        camera.position.add(mv);
-        controls.target.add(mv);
-      }
-
-      // Hedefi zemine oturt
-      const h = map.getHeightAt(controls.target.x, controls.target.z);
-      if (h !== null && map.dungeonGroup.children.length === 0) {
-        const d = h - controls.target.y;
-        controls.target.y += d;
-        camera.position.y += d;
-      }
-      controls.update();
+      renderer.render(scene, camera);
+    } catch (err) {
+      window.__loopErr = err.stack || err.message;
+      console.error('[LOOP EXCEPTION]', err);
     }
-
-    // Harita dinamik akisi (Streaming Chunks)
-    acc += dt;
-    if (acc > 0.20) {
-      acc = 0;
-      const streamTarget = isCarMode ? vehicle.position : controls.target;
-      map.update(streamTarget);
-      const p = map.fromThree(streamTarget.x, streamTarget.z);
-      document.getElementById('reg').textContent = `${p.rx}, ${p.rz} (id ${(p.rz << 8) | p.rx})`;
-      const curH = map.getHeightAt(streamTarget.x, streamTarget.z);
-      document.getElementById('hgt').textContent = curH !== null ? (curH / map.opts.scale).toFixed(1) : '-';
-      document.getElementById('cnt').textContent = map.regions.size;
-
-      if (img.complete) {
-        mctx.drawImage(img, 0, 0, MW, MH);
-        const px = (p.rx - B.minX + p.lx / map.cs.regionSize) / (B.maxX - B.minX + 1) * MW;
-        const py = (B.maxZ - p.rz + 1 - p.lz / map.cs.regionSize) / (B.maxZ - B.minZ + 1) * MH;
-        mctx.fillStyle = isCarMode ? '#ffd479' : '#ff2d55';
-        mctx.beginPath();
-        mctx.arc(px, py, isCarMode ? 6 : 4, 0, 7);
-        mctx.fill();
-      }
-    }
-
-    renderer.render(scene, camera);
     requestAnimationFrame(loop);
   }
   requestAnimationFrame(loop);
