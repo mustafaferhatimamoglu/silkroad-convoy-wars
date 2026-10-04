@@ -106,9 +106,8 @@
       this.raycaster = new THREE.Raycaster();
       this.downVector = new THREE.Vector3(0, -1, 0);
 
-      // Ses
-      this.soundEnabled = true;
-      this._initAudio();
+      // Motor Sesi (Kullanıcı isteğiyle tamamen kaldırıldı / sessiz)
+      this.soundEnabled = false;
 
       this.wheels = [];
       this.smokeParticles = [];
@@ -1125,19 +1124,20 @@
         this.nitro = Math.min(100, this.nitro + dt * 6.5);
       }
 
-      // Direksiyon: A = SOL (-1), D = SAĞ (+1)
+      // Direksiyon: A = SOL, D = SAĞ
+      // Three.js koordinat sisteminde yaw saatin tersi (+Y rotasyonu) sola, eksi ise sağa döndürür.
       let steerInput = 0;
-      if (inputKeys.KeyA || inputKeys.ArrowLeft) steerInput -= 1.0;
-      if (inputKeys.KeyD || inputKeys.ArrowRight) steerInput += 1.0;
+      if (inputKeys.KeyA || inputKeys.ArrowLeft) steerInput += 1.0;  // SOL (Pozitif Yaw)
+      if (inputKeys.KeyD || inputKeys.ArrowRight) steerInput -= 1.0; // SAĞ (Negatif Yaw)
 
       const currentSpeed = this.velocity.length();
       const steerSpeedFactor = Math.max(0.28, 1.0 - (currentSpeed / 65));
       const targetAngle = steerInput * this.maxSteerAngle * steerSpeedFactor;
       this.steeringAngle += (targetAngle - this.steeringAngle) * Math.min(1.0, dt * 10.0);
 
-      // Kokpit Direksiyon Simidini Döndür (360 derece direksiyon açısı)
+      // Kokpit Direksiyon Simidini Döndür (Sola çevirince direksiyon sola dönmeli)
       if (this.steeringWheelMesh) {
-        this.steeringWheelMesh.rotation.z = -this.steeringAngle * 2.8;
+        this.steeringWheelMesh.rotation.z = this.steeringAngle * 2.8;
       }
 
       // Vites Mantığı
