@@ -319,21 +319,44 @@
       }
 
       if (this.opts.detailTexture) {
-        const { texture: detailTex, path: detailPath } = this._getTerrainDetailTexture(info);
+        const { dust: dustTex, grass: grassTex, cliff: cliffTex, cacheKey } = this._getTerrainTextures(info);
         const repeatCount = this.opts.detailRepeat || 96;
-        const strength = this.opts.detailStrength !== undefined ? this.opts.detailStrength : 0.62;
 
         mat.onBeforeCompile = (shader) => {
-          shader.uniforms.detailMap = { value: detailTex };
-          shader.uniforms.detailRepeat = { value: new THREE.Vector2(repeatCount, repeatCount) };
-          shader.uniforms.detailStrength = { value: strength };
+          shader.uniforms.dustMap = { value: dustTex };
+          shader.uniforms.grassMap = { value: grassTex };
+          shader.uniforms.cliffMap = { value: cliffTex };
+          shader.uniforms.detailRepeat = { value: new THREE.Vector2(128.0, 128.0) };
+          shader.uniforms.cliffScale = { value: new THREE.Vector2(0.12, 0.15) };
+
+          shader.vertexShader = shader.vertexShader.replace(
+            '#include <common>',
+            `#include <common>
+            varying vec3 vWorldPosition;
+            `
+          );
+          shader.vertexShader = shader.vertexShader.replace(
+            '#include <worldpos_vertex>',
+            `#include <worldpos_vertex>
+            vWorldPosition = (modelMatrix * vec4(transformed, 1.0)).xyz;
+            `
+          );
+
+          shader.fragmentShader = shader.fragmentShader.replace(
+            '#include <common>',
+            `#include <common>
+            varying vec3 vWorldPosition;
+            `
+          );
 
           shader.fragmentShader = shader.fragmentShader.replace(
             '#include <map_pars_fragment>',
             `#include <map_pars_fragment>
-            uniform sampler2D detailMap;
+            uniform sampler2D dustMap;
+            uniform sampler2D grassMap;
+            uniform sampler2D cliffMap;
             uniform vec2 detailRepeat;
-            uniform float detailStrength;
+            uniform vec2 cliffScale;
             `
           );
 
@@ -341,16 +364,37 @@
             '#include <map_fragment>',
             `#include <map_fragment>
             #ifdef USE_MAP
-              vec4 dTex = texture2D( detailMap, vUv * detailRepeat );
-              // Standart Joymax arazi mikro-detay harmonisi:
-              // Ortalama parlaklik ~0.5 civari oldugundan 1.95 ile carpilarak 1.0 merkezlenir.
-              vec3 dMod = dTex.rgb * 1.95;
-              diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * dMod, detailStrength);
+              // 1. Egim tespiti (Ucurum & dik yamaclar)
+              float slope = clamp(1.0 - abs(vNormal.y), 0.0, 1.0);
+              float cliffWeight = smoothstep(0.18, 0.48, slope);
+
+              // 2. Cimen tespiti (Colormap'te yesil oranina gore)
+              vec3 baseRgb = diffuseColor.rgb;
+              float grassDetect = clamp((baseRgb.g - max(baseRgb.r, baseRgb.b) * 0.88) * 5.0, 0.0, 1.0);
+              float grassWeight = grassDetect * (1.0 - cliffWeight);
+
+              // 3. Yatay ve dikey UV koordinatlari
+              vec2 flatUv = vUv * detailRepeat;
+              // Ucurumlarda esnemeyi sifirlayan dikey kaya projeksiyonu
+              vec2 cliffUv = vec2(vWorldPosition.x + vWorldPosition.z, vWorldPosition.y) * cliffScale;
+
+              vec3 dDust  = texture2D(dustMap, flatUv).rgb;
+              vec3 dGrass = texture2D(grassMap, flatUv).rgb * vec3(0.95, 1.15, 0.90);
+              vec3 dCliff = texture2D(cliffMap, cliffUv).rgb;
+
+              // Cimen ve toprak harmanlamasi
+              vec3 groundDetail = mix(dDust, dGrass, grassWeight);
+              // Yamac / kaya harmanlamasi
+              vec3 finalDetail  = mix(groundDetail, dCliff, cliffWeight);
+
+              // Yuksek cozunurluklu mikro doku ile guclu harmanlama
+              vec3 dMod = finalDetail * 1.95;
+              diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * dMod, 0.84);
             #endif
             `
           );
         };
-        mat.customProgramCacheKey = () => 'terrain_detail_' + detailPath;
+        mat.customProgramCacheKey = () => 'terrain_multi_' + cacheKey;
       }
 
       const mesh = new THREE.Mesh(geo, mat);
@@ -359,6 +403,20 @@
       mesh.receiveShadow = true;
       mesh.userData.region = info;
       return mesh;
+    }
+
+    _loadRepeatTexture(relPath) {
+      if (this.detailTexCache.has(relPath)) return this.detailTexCache.get(relPath);
+      const tex = this.texLoader.load(this.opts.baseUrl + encodeURI(relPath));
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.wrapT = THREE.RepeatWrapping;
+      tex.anisotropy = 8;
+      tex.generateMipmaps = true;
+      tex.minFilter = THREE.LinearMipmapLinearFilter;
+      tex.magFilter = THREE.LinearFilter;
+      if (THREE.sRGBEncoding) tex.encoding = THREE.sRGBEncoding;
+      this.detailTexCache.set(relPath, tex);
+      return tex;
     }
 
     _getDetailTexturePath(info) {
@@ -381,21 +439,17 @@
       return 'textures/tile2d/asiaminor_dust_01.jpg';
     }
 
-    _getTerrainDetailTexture(info) {
-      const relPath = this._getDetailTexturePath(info);
-      if (this.detailTexCache.has(relPath)) {
-        return { texture: this.detailTexCache.get(relPath), path: relPath };
-      }
-      const tex = this.texLoader.load(this.opts.baseUrl + encodeURI(relPath));
-      tex.wrapS = THREE.RepeatWrapping;
-      tex.wrapT = THREE.RepeatWrapping;
-      tex.anisotropy = 8;
-      tex.generateMipmaps = true;
-      tex.minFilter = THREE.LinearMipmapLinearFilter;
-      tex.magFilter = THREE.LinearFilter;
-      if (THREE.sRGBEncoding) tex.encoding = THREE.sRGBEncoding;
-      this.detailTexCache.set(relPath, tex);
-      return { texture: tex, path: relPath };
+    _getTerrainTextures(info) {
+      const dustPath = this._getDetailTexturePath(info);
+      const grassPath = 'textures/tile2d/asiaminor_grass_01.jpg';
+      const cliffPath = (info.x >= 125 && info.x <= 145) ? 'textures/tile2d/oaho_dust_stone01.jpg' : 'textures/tile2d/asiaminor_stone01.jpg';
+
+      return {
+        dust: this._loadRepeatTexture(dustPath),
+        grass: this._loadRepeatTexture(grassPath),
+        cliff: this._loadRepeatTexture(cliffPath),
+        cacheKey: dustPath + '_' + cliffPath
+      };
     }
 
     _buildWater(info, heights, types, wh) {
@@ -538,21 +592,31 @@
           continue;
         }
 
+        // Parcacik, isik ve efekt objeleri poligon model olmadigindan kutu olarak cizilmemelidir
+        if (/\.cpd|compound\/particle|flame_|light_|hide_light|cobweb|pha_touch/i.test(path) ||
+            /waterfall|particle|flame|light/i.test(mName) ||
+            /waterfall|particle|flame|light/i.test(path)) {
+          continue;
+        }
+
         const pos = this.toThree(info.x, info.z, x, y, z);
 
-        if (this.opts.realModels && this.modelsIndex && this.modelsIndex[String(model)]) {
-          // Gercek 3D modeli yukle
-          this.loadModelMesh(model).then(mObj => {
-            if (mObj) {
-              const clone = mObj.clone();
-              clone.position.copy(pos);
-              clone.rotation.y = yaw;
-              clone.scale.set(s, s, s);
-              group.add(clone);
-            }
-          });
+        if (this.opts.realModels) {
+          if (this.modelsIndex && this.modelsIndex[String(model)]) {
+            // Gercek 3D modeli yukle
+            this.loadModelMesh(model).then(mObj => {
+              if (mObj) {
+                const clone = mObj.clone();
+                clone.position.copy(pos);
+                clone.rotation.y = yaw;
+                clone.scale.set(s, s, s);
+                group.add(clone);
+              }
+            });
+          }
+          // realModels acikken eksik objeleri kutu olarak cizme!
         } else {
-          // Yer tutucu kutu
+          // Yalnizca kullanici "Gercek 3D" kapatip kutu moduna gectiginde yer tutucu kutu ciz
           const big = /bldg|castle|wall|gate|bridge/i.test(path);
           const size = (big ? 120 : 30) * s;
           const box = new THREE.Mesh(this.objGeo, this.objMat);

@@ -115,6 +115,12 @@ async def run():
                         window.controls.target.set(pPos.x + 35, pPos.y + 10, pPos.z + 30);
                         window.camera.position.set(pPos.x + 30, pPos.y + 15, pPos.z + 42);
                         window.controls.update();
+                    } else if (mode === 'bridge_view') {
+                        // Kullanicinin screenshot'indaki kopru ve yamac/cimenler
+                        const bx = -6240, by = 15, bz = 590;
+                        window.controls.target.set(bx, by, bz);
+                        window.camera.position.set(bx + 45, by + 40, bz + 55);
+                        window.controls.update();
                     } else if (mode === 'jangan_ground') {
                         // Jangan meydan & zemin mikro dokusu
                         const t = window.controls.target;
