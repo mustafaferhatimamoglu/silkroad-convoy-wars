@@ -74,7 +74,7 @@ motor tork eğrisi + otomatik debriyaj + 5 ileri vites + hafif kilitli diferansi
 gövde çarpışma küreleri ve hasar. Testler:
 
 ```bat
-node --test tests/
+node --test
 ```
 
 ## Varlıkları yeniden üretme
