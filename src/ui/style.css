@@ -1,0 +1,134 @@
+:root {
+  --gold: #e8c170;
+  --gold-2: #b98a3e;
+  --ink: #0b0f16;
+  --panel: rgba(12, 16, 24, 0.82);
+  --panel-2: rgba(20, 26, 38, 0.92);
+  --line: rgba(232, 193, 112, 0.28);
+  --text: #e9e3d6;
+  --muted: #a99f8c;
+  --red: #e0584f;
+  --green: #6fcf7a;
+  --blue: #6fb6ff;
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: #000; color: var(--text); }
+#app { position: fixed; inset: 0; }
+#view { position: absolute; inset: 0; width: 100%; height: 100%; display: block; outline: none; }
+#ui { position: absolute; inset: 0; pointer-events: none; user-select: none; }
+#ui .interactive, #ui button, #ui input, #ui select { pointer-events: auto; }
+
+/* ---------- genel panel/buton ---------- */
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(6px);
+}
+.btn {
+  display: block;
+  width: 100%;
+  margin: 8px 0;
+  padding: 12px 18px;
+  background: linear-gradient(180deg, rgba(60, 46, 24, 0.95), rgba(32, 24, 12, 0.95));
+  color: var(--gold);
+  border: 1px solid var(--gold-2);
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.12s, background 0.12s, border-color 0.12s;
+}
+.btn:hover { transform: translateX(4px); border-color: var(--gold); background: linear-gradient(180deg, rgba(86, 64, 30, 0.98), rgba(44, 32, 14, 0.98)); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+.btn small { display: block; font-weight: 400; color: var(--muted); font-size: 12px; margin-top: 2px; letter-spacing: 0; }
+.btn.secondary { background: rgba(30, 36, 48, 0.9); color: var(--text); border-color: rgba(255, 255, 255, 0.15); }
+.row { display: flex; gap: 8px; align-items: center; }
+.hidden { display: none !important; }
+
+/* ---------- yukleme ekrani ---------- */
+#loading {
+  position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: radial-gradient(ellipse at center, #1c1710 0%, #07080b 75%);
+  transition: opacity 0.6s; z-index: 50;
+}
+#loading.fade { opacity: 0; pointer-events: none; }
+#loading h1 { font-family: Georgia, "Times New Roman", serif; color: var(--gold); font-size: 54px; letter-spacing: 6px; margin: 0; text-shadow: 0 4px 24px rgba(232, 193, 112, 0.35); }
+#loading .sub { color: var(--muted); letter-spacing: 8px; margin: 6px 0 40px; font-size: 13px; }
+#loading .bar { width: min(520px, 80vw); height: 6px; background: rgba(255, 255, 255, 0.08); border-radius: 3px; overflow: hidden; }
+#loading .bar > div { height: 100%; width: 0; background: linear-gradient(90deg, var(--gold-2), var(--gold)); transition: width 0.25s; }
+#loading .msg { margin-top: 14px; color: var(--muted); font-size: 13px; min-height: 18px; }
+#loading .tip { position: absolute; bottom: 40px; max-width: 640px; text-align: center; color: #8d8574; font-size: 13px; font-style: italic; padding: 0 20px; }
+
+/* ---------- ana menu ---------- */
+#menu {
+  position: absolute; inset: 0; display: flex; align-items: center; padding-left: 7vw;
+  background: linear-gradient(90deg, rgba(5, 6, 10, 0.88) 0%, rgba(5, 6, 10, 0.55) 38%, rgba(5, 6, 10, 0) 70%);
+  z-index: 40;
+}
+#menu .box { width: 380px; }
+#menu h1 { font-family: Georgia, "Times New Roman", serif; color: var(--gold); font-size: 46px; letter-spacing: 4px; margin: 0; line-height: 1.05; text-shadow: 0 4px 20px rgba(0, 0, 0, 0.6); }
+#menu .ver { color: var(--muted); letter-spacing: 6px; font-size: 12px; margin: 8px 0 28px; }
+#menu .foot { margin-top: 18px; font-size: 12px; color: var(--muted); line-height: 1.6; }
+
+/* alt pencereler (sehir secimi, garaj, ayarlar) */
+.dialog {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: min(720px, 92vw); max-height: 86vh; overflow: auto; padding: 22px 26px; z-index: 60;
+}
+.dialog h2 { margin: 0 0 14px; color: var(--gold); font-family: Georgia, serif; letter-spacing: 2px; font-weight: 500; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.card {
+  padding: 12px 14px; border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 8px; background: rgba(255, 255, 255, 0.03);
+  cursor: pointer; transition: border-color 0.12s, background 0.12s;
+}
+.card:hover, .card.sel { border-color: var(--gold); background: rgba(232, 193, 112, 0.08); }
+.card b { color: var(--gold); display: block; margin-bottom: 3px; }
+.card span { font-size: 12px; color: var(--muted); }
+.swatches { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 14px; }
+.swatch { width: 34px; height: 34px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.25); cursor: pointer; }
+.swatch.sel { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(232, 193, 112, 0.35); }
+.setting { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.06); }
+.setting label { color: var(--text); }
+.setting select, .setting input[type=range] { width: 200px; }
+select { background: #141a26; color: var(--text); border: 1px solid rgba(255, 255, 255, 0.18); border-radius: 6px; padding: 5px 8px; }
+
+/* ---------- oyun ici HUD ---------- */
+#hud { position: absolute; inset: 0; }
+#hud .tl { position: absolute; top: 14px; left: 16px; font-size: 13px; line-height: 1.5; text-shadow: 0 1px 3px #000; }
+#hud .tl .zone { font-family: Georgia, serif; color: var(--gold); font-size: 20px; letter-spacing: 1px; }
+#hud .tl .coord { color: var(--muted); font-size: 12px; }
+#minimap { position: absolute; top: 14px; right: 16px; width: 190px; height: 190px; border-radius: 50%; overflow: hidden; border: 2px solid var(--gold-2); box-shadow: 0 6px 24px rgba(0, 0, 0, 0.55); background: #000; }
+#minimap canvas { width: 100%; height: 100%; display: block; }
+#minimap .n { position: absolute; top: 2px; left: 50%; transform: translateX(-50%); color: var(--gold); font-weight: 700; font-size: 12px; text-shadow: 0 0 3px #000; }
+
+#dash { position: absolute; right: 22px; bottom: 18px; display: flex; align-items: flex-end; gap: 6px; }
+#dash canvas { display: block; }
+#gearbox { position: absolute; right: 30px; bottom: 214px; text-align: right; font-size: 12px; color: var(--muted); text-shadow: 0 1px 3px #000; }
+#controlsHelp { position: absolute; left: 16px; bottom: 14px; font-size: 12px; color: #cfc7b4; line-height: 1.7; text-shadow: 0 1px 3px #000; opacity: 0.85; }
+#controlsHelp kbd { display: inline-block; min-width: 20px; padding: 0 5px; border: 1px solid rgba(255, 255, 255, 0.35); border-bottom-width: 2px; border-radius: 4px; background: rgba(0, 0, 0, 0.35); font: 11px/16px Consolas, monospace; text-align: center; color: #fff; }
+#toast { position: absolute; top: 18%; left: 50%; transform: translateX(-50%); padding: 10px 22px; font-size: 16px; color: var(--gold); text-align: center; opacity: 0; transition: opacity 0.3s; }
+#toast.show { opacity: 1; }
+#damage { position: absolute; right: 236px; bottom: 26px; width: 120px; font-size: 11px; color: var(--muted); }
+#damage .bar { height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.12); overflow: hidden; margin-top: 3px; }
+#damage .bar > div { height: 100%; width: 100%; background: var(--green); transition: width 0.2s, background 0.2s; }
+
+#debug { position: absolute; left: 16px; top: 110px; font: 11px/1.45 Consolas, monospace; color: #9fe39f; background: rgba(0, 0, 0, 0.45); padding: 6px 9px; border-radius: 6px; white-space: pre; }
+
+/* ralli */
+#race { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); text-align: center; padding: 8px 22px; min-width: 360px; }
+#race .t { font: 700 26px Consolas, monospace; color: #fff; }
+#race .cp { font-size: 12px; color: var(--muted); }
+#race .bar { height: 5px; background: rgba(255, 255, 255, 0.1); border-radius: 3px; margin-top: 6px; overflow: hidden; }
+#race .bar > div { height: 100%; background: linear-gradient(90deg, var(--gold-2), var(--gold)); width: 0; }
+
+/* duraklat menusu */
+#pause { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.45); z-index: 45; }
+#pause .box { width: 360px; padding: 22px 24px; }
+#pause h2 { margin: 0 0 10px; color: var(--gold); font-family: Georgia, serif; letter-spacing: 3px; font-weight: 500; text-align: center; }

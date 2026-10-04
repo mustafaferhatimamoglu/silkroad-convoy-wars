@@ -1,0 +1,99 @@
+import * as THREE from 'three';
+import { Vehicle } from '../vehicle/Vehicle.js';
+import { VehicleCamera, CAMERA_NAMES } from '../vehicle/VehicleCamera.js';
+import { DriveHud } from '../ui/DriveHud.js';
+import { cityById } from '../data/cities.js';
+
+// Serbest surus modu: Silkroad dunyasinda Tofas Kartal.
+
+export class DriveMode {
+  constructor(app, opts = {}) {
+    this.app = app;
+    this.opts = opts;
+    this.focus = new THREE.Vector3();
+    this.ctl = { accel: 0, decel: 0, steer: 0, handbrake: 0, shiftUp: false, shiftDown: false };
+    this.paused = false;
+    this.onPause = opts.onPause || null;
+  }
+
+  enter() {
+    const app = this.app, s = app.settings;
+    this.vehicle = new Vehicle(app, { variant: this.opts.variant || s.get('vehicleVariant'), paint: this.opts.paint || s.get('vehicleColor') });
+    this.vehicle.sim.autoShift = s.get('transmission') !== 'manual';
+    this.applyAssists(s.get('assists'));
+    const city = this.opts.city ? cityById(this.opts.city) : cityById('hotan');
+    const p = app.world.toThree(city.rx, city.rz, city.lx, 0, city.lz, new THREE.Vector3());
+    this.vehicle.spawn(this.opts.x ?? p.x, this.opts.z ?? p.z, this.opts.yaw ?? city.heading);
+    this.camera = new VehicleCamera(app, this.vehicle, s.get('camera'));
+    this.hud = new DriveHud(app, app.ui);
+    this.hud.toast(`${city.name} — iyi yolculuklar!`, 3);
+    this.vehicle.headlights = app.sky.night > 0.5;
+    this.focus.copy(this.vehicle.position);
+  }
+
+  applyAssists(level) {
+    const a = this.vehicle.sim.assists;
+    a.abs = level !== 'kapali';
+    a.tcs = level === 'tam' || level === 'orta';
+    a.steer = level !== 'kapali';
+  }
+
+  _readControls(dt) {
+    const { input } = this.app;
+    const gp = input.gamepad;
+    const c = this.ctl;
+    const ramp = (cur, target, up, down) => (target > cur ? Math.min(target, cur + up * dt) : Math.max(target, cur - down * dt));
+    const kAccel = input.down('KeyW', 'ArrowUp') ? 1 : 0;
+    const kDecel = input.down('KeyS', 'ArrowDown') ? 1 : 0;
+    c.accel = Math.max(ramp(c.accel, kAccel, 4.5, 8), gp ? gp.throttle : 0);
+    c.decel = Math.max(ramp(c.decel, kDecel, 6, 10), gp ? gp.brake : 0);
+    let steer = (input.down('KeyD', 'ArrowRight') ? 1 : 0) - (input.down('KeyA', 'ArrowLeft') ? 1 : 0);
+    if (gp && Math.abs(gp.steer) > 0.02) steer = Math.sign(gp.steer) * Math.pow(Math.abs(gp.steer), 1.5);
+    c.steer = steer;
+    c.handbrake = input.down('Space') || (gp && gp.buttons[0] > 0.5) ? 1 : 0;
+    c.shiftUp = input.pressed('KeyE') || (gp && gp.pressed(5));
+    c.shiftDown = input.pressed('KeyQ') || (gp && gp.pressed(4));
+    return c;
+  }
+
+  update(dt) {
+    const { input, settings } = this.app;
+    const v = this.vehicle;
+    if (input.pressed('Escape') && this.onPause) { this.onPause(); }
+    if (this.paused) { this.camera.update(0, input); return; }
+    const c = this._readControls(dt);
+    // tus komutlari
+    if (input.pressed('KeyC') || (input.gamepad && input.gamepad.pressed(3))) {
+      const m = this.camera.next();
+      settings.set('camera', m);
+      this.hud.toast(`Kamera: ${CAMERA_NAMES[m]}`, 1.2);
+    }
+    if (input.pressed('KeyL')) { v.headlights = !v.headlights; this.hud.toast(v.headlights ? 'Farlar açık' : 'Farlar kapalı', 1.2); }
+    if (input.pressed('KeyR') || (input.gamepad && input.gamepad.pressed(2))) { v.recover(); this.hud.toast('Araç düzeltildi', 1.2); }
+    if (input.pressed('KeyT')) {
+      v.sim.autoShift = !v.sim.autoShift;
+      settings.set('transmission', v.sim.autoShift ? 'auto' : 'manual');
+      this.hud.toast(v.sim.autoShift ? 'Otomatik şanzıman' : 'Manuel şanzıman (Q / E)', 1.6);
+    }
+    if (input.pressed('F1')) this.hud.toggleHelp();
+
+    v.update(dt, c);
+    v.updateGauges(dt);
+    // carpismalarda kamera sarsintisi
+    if (v.sim.impacts.length) {
+      for (const im of v.sim.impacts) this.camera.addShake(Math.min(1, im.speed / 12));
+      this.lastImpacts = v.sim.impacts.splice(0);
+    }
+    // bozuk zeminde hafif sarsinti
+    const rough = v.sim.wheels.reduce((a, w) => a + (w.contact ? Math.abs(w.x - w.xPrev) : 0), 0);
+    if (rough > 0.004) this.camera.addShake(Math.min(0.15, rough * 3));
+    this.camera.update(dt, input);
+    this.hud.update(dt, v, this.camera.mode);
+    this.focus.copy(v.position);
+  }
+
+  dispose() {
+    this.vehicle.dispose();
+    this.hud.dispose();
+  }
+}

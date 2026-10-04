@@ -1,23 +1,11 @@
-# Browser profiles and logs
-tmp_profile/
-tmp_profile2/
-tmp_profile3/
-tmp_profile_cdp/
-*.log
+# Silkroad istemcisinden uretilen oyun varliklari (Joymax telifli, ~1.5 GB).
+# tools/ altindaki betiklerle C:\Silkroad\SRO_Client icindeki PK2 dosyalarindan yeniden uretilir.
+assets/
+
+# Gelistirme ciktilari
+.debug/
+node_modules/
 __pycache__/
-
-# Big extracted binary asset blobs (over 4GB total)
-MAP/regions/*.bin
-MAP/colormaps/*.jpg
-MODELS/geometry/
-MODELS/textures/
-MODELS/models/
-MINIMAP/world/
-MINIMAP/dungeon/
-MUSIC/*.ogg
-PARTICLES/skill/
-PARTICLES/textures/
-
-# Temporary screenshots / debug artifacts
-*.png
-*.jpg
+*.pyc
+*.log
+.claude/

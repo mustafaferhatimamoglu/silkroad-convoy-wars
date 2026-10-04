@@ -1,0 +1,753 @@
+import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { loft, sweep, roundRectProfile, lathe, smooth, lerp, canvasTexture, normalMapFromHeight, mergeInto } from './carkit.js';
+
+// Tofas Kartal (Fiat 131 Panorama tabanli station) prosedurel modeli.
+// Model "zemin uzayinda" kurulur: y=0 zemin, -z ileri (on), +x sag. Olculer metre.
+//   variant 'kartal80': 4 yuvarlak far, tam genislik izgara, krom tampon + kaucuk uclar, krom cam citalari
+//   variant 'kartal90': dikdortgen farlar, siyah plastik tampon ve yan citalar
+// Disari verilenler: root (Group), wheels (4 Group, fizik konumlandirir), lights (far/stop),
+// steeringWheel, gauges (kokpit gostergeleri), setPaint(), setLights().
+
+export const PAINTS = {
+  lacivert: { name: 'Lacivert', color: '#14254d' },
+  beyaz: { name: 'Beyaz', color: '#e8e5da' },
+  kirmizi: { name: 'Kırmızı', color: '#8c1515' },
+  bej: { name: 'Bej', color: '#c8b388' },
+  yesil: { name: 'Çağla Yeşili', color: '#55703a' },
+  gumus: { name: 'Gümüş', color: '#a7abb0', metal: 0.6 },
+  siyah: { name: 'Siyah', color: '#0c0d0f' },
+  hardal: { name: 'Hardal', color: '#b07a1c' },
+};
+
+// ---------------------------------------------------------------- olculer
+const ZF = -2.06, ZR = 2.06;          // sac gövde uclari
+export const AXF = -1.33, AXR = 1.16; // akslar (zemin uzayi)
+const WR = 0.287;                     // teker yaricapi
+const W = 0.815;                      // yari genislik
+const ARCH_R = 0.372, ARCH_CY = 0.30, WELL = 0.27;
+const ZWS0 = -0.62, ZWS1 = -0.17, ZRF = 1.97, ZTG = 2.045;
+const ROOF = 1.375;
+export const CG_Z = -0.184;           // kutle merkezinin zemin uzayi z'si (fizik ile ayni)
+
+function yTop(z) {
+  if (z < ZWS0) { const t = (z - ZF) / (ZWS0 - ZF); return 0.79 + 0.098 * Math.sin((t * Math.PI) / 2); }
+  const t = (z - ZWS0) / (ZR - ZWS0);
+  return 0.9 + 0.035 * t;
+}
+function yBot(z) {
+  if (z < ZF + 0.28) return lerp(0.37, 0.295, smooth((z - ZF) / 0.28));
+  if (z > ZR - 0.32) return lerp(0.295, 0.35, smooth((z - (ZR - 0.32)) / 0.32));
+  return 0.295;
+}
+function halfW(z) {
+  const rzF = 0.24, rxF = 0.07, rzR = 0.16, rxR = 0.05;
+  if (z < ZF + rzF) { const u = (ZF + rzF - z) / rzF; return W - rxF + rxF * Math.sqrt(Math.max(0, 1 - u * u)); }
+  if (z > ZR - rzR) { const u = (z - (ZR - rzR)) / rzR; return W - rxR + rxR * Math.sqrt(Math.max(0, 1 - u * u)); }
+  return W;
+}
+function hoodCrown(z) { return z < ZWS0 ? 0.018 : 0.0; }
+function yRoof(z) {
+  if (z <= ZWS0) return yTop(z);
+  if (z < ZWS1) { const t = (z - ZWS0) / (ZWS1 - ZWS0); return lerp(yTop(ZWS0), ROOF, t) + 0.02 * Math.sin(t * Math.PI); }
+  if (z < ZRF) { const t = (z - ZWS1) / (ZRF - ZWS1); return ROOF + 0.01 * Math.sin(t * Math.PI) - 0.012 * t; }
+  const t = Math.min(1, (z - ZRF) / (ZTG - ZRF));
+  return lerp(ROOF - 0.012, yTop(ZTG) + 0.004, smooth(t));
+}
+function archTop(z) {
+  let best = -Infinity;
+  for (const ax of [AXF, AXR]) {
+    const dz = z - ax;
+    if (Math.abs(dz) < ARCH_R) best = Math.max(best, ARCH_CY + Math.sqrt(ARCH_R * ARCH_R - dz * dz));
+  }
+  return best;
+}
+
+// ---------------------------------------------------------------- malzemeler
+function makeMaterials(paintId) {
+  const p = PAINTS[paintId] || PAINTS.lacivert;
+  const m = {};
+  m.paint = new THREE.MeshPhysicalMaterial({
+    color: p.color, metalness: p.metal || 0.0, roughness: p.metal ? 0.38 : 0.3,
+    clearcoat: 1.0, clearcoatRoughness: 0.05, envMapIntensity: 1.1,
+  });
+  m.chrome = new THREE.MeshPhysicalMaterial({ color: 0xf2f2f2, metalness: 1.0, roughness: 0.07, envMapIntensity: 1.4 });
+  m.blackPlastic = new THREE.MeshStandardMaterial({ color: 0x141516, roughness: 0.72, metalness: 0.0 });
+  m.rubber = new THREE.MeshStandardMaterial({ color: 0x0b0b0c, roughness: 0.85 });
+  m.well = new THREE.MeshStandardMaterial({ color: 0x0a0a0a, roughness: 0.95 });
+  m.under = new THREE.MeshStandardMaterial({ color: 0x17140f, roughness: 0.95 });
+  m.glass = new THREE.MeshPhysicalMaterial({
+    color: 0x0b1416, metalness: 0.0, roughness: 0.02, transparent: true, opacity: 0.42,
+    envMapIntensity: 2.0, side: THREE.DoubleSide, depthWrite: false, specularIntensity: 1, clearcoat: 1, clearcoatRoughness: 0.0,
+  });
+  m.liner = new THREE.MeshStandardMaterial({ color: 0xb9b09c, roughness: 1.0 });
+  m.interior = new THREE.MeshStandardMaterial({ color: 0x2a2420, roughness: 0.8 });
+  m.seat = new THREE.MeshStandardMaterial({ color: 0x3d2c22, roughness: 0.9 });
+  m.dash = new THREE.MeshStandardMaterial({ color: 0x1b1a19, roughness: 0.7 });
+  m.steel = new THREE.MeshStandardMaterial({ color: 0x9a9c9e, metalness: 0.6, roughness: 0.45 });
+  m.drum = new THREE.MeshStandardMaterial({ color: 0x2a2826, metalness: 0.5, roughness: 0.7 });
+  m.headLens = new THREE.MeshPhysicalMaterial({
+    color: 0xffffff, roughness: 0.05, metalness: 0, transmission: 0, transparent: true, opacity: 0.55,
+    emissive: 0xfff2d8, emissiveIntensity: 0, clearcoat: 1, envMapIntensity: 1.5, side: THREE.DoubleSide,
+  });
+  m.reflector = new THREE.MeshStandardMaterial({ color: 0xe8e8e8, metalness: 1, roughness: 0.18, emissive: 0xfff3dc, emissiveIntensity: 0, side: THREE.DoubleSide });
+  m.tail = new THREE.MeshPhysicalMaterial({ color: 0x8a0a0a, roughness: 0.25, emissive: 0xff1508, emissiveIntensity: 0.25, clearcoat: 1 });
+  m.amber = new THREE.MeshPhysicalMaterial({ color: 0xc66a00, roughness: 0.25, emissive: 0xff8a00, emissiveIntensity: 0.0, clearcoat: 1 });
+  m.reverse = new THREE.MeshPhysicalMaterial({ color: 0xdedede, roughness: 0.2, emissive: 0xffffff, emissiveIntensity: 0.0, clearcoat: 1 });
+  return m;
+}
+
+// ---------------------------------------------------------------- govde
+function lowerSection(z, variant) {
+  const a = halfW(z), yt = yTop(z), yb = yBot(z);
+  const rt = 0.05, rb = 0.085;
+  const half = [];
+  for (let k = 0; k <= 3; k++) half.push({ x: ((a - rb) * k) / 3, y: yb, part: 'bottom' });
+  for (let k = 1; k <= 4; k++) { const an = -Math.PI / 2 + (k / 4) * (Math.PI / 2); half.push({ x: a - rb + rb * Math.cos(an), y: yb + rb + rb * Math.sin(an), part: 'bcorner' }); }
+  // Yan yuzey iki bantta: [alt bant 8 nokta | ust bant 8 nokta]. Camurluk yayi bolgesinde
+  // bantlar yay yuksekliginde ayrilir ve alt bant ice (teker yuvasi) cekilir. Ayrim hep
+  // ayni indekste oldugu icin yay kenari kesitler arasinda atlamaz -> keskin, temiz dudak.
+  const at = archTop(z);
+  const inArch = at > yb + rb + 0.002;
+  const ySplit = inArch ? Math.min(at, yt - rt - 0.05) : lerp(yb + rb, yt - rt, 0.42);
+  const sideX = (t) => a + 0.008 * Math.sin(Math.PI * t) - 0.01 * t;
+  const tOf = (y) => (y - (yb + rb)) / Math.max(yt - rt - (yb + rb), 1e-4);
+  if (inArch) {
+    for (const p of half) if (p.part === 'bcorner' || (p.part === 'bottom' && p.x > a - WELL)) { p.x = Math.min(p.x, a - WELL); p.inner = true; }
+  }
+  for (let k = 1; k <= 8; k++) {
+    const y = lerp(yb + rb, ySplit, k / 8);
+    half.push({ x: inArch ? a - WELL : sideX(tOf(y)), y, part: 'side', inner: inArch });
+  }
+  for (let k = 0; k <= 7; k++) {
+    const y = lerp(ySplit, yt - rt, k / 7);
+    half.push({ x: sideX(tOf(y)), y: k === 0 && inArch ? ySplit + 0.0005 : y, part: 'side' });
+  }
+  const ax = a - 0.01 - rt;
+  for (let k = 1; k <= 5; k++) { const an = (k / 5) * (Math.PI / 2); half.push({ x: ax + rt * Math.cos(an), y: yt - rt + rt * Math.sin(an), part: 'tcorner' }); }
+  const crown = hoodCrown(z);
+  for (let k = 1; k <= 6; k++) { const x = ax * (1 - k / 6); half.push({ x, y: yt + crown * (1 - (x / a) ** 2), part: 'top' }); }
+  // tam halka: alt merkez -> sag -> ust merkez -> sol -> (alt merkeze kapanir)
+  const ring = [];
+  for (const p of half) ring.push({ ...p, side: 1 });
+  for (let k = half.length - 2; k >= 1; k--) { const p = half[k]; ring.push({ ...p, x: -p.x, side: -1 }); }
+  return ring.map((p) => Object.assign(new THREE.Vector3(p.x, p.y, z), { part: p.part, inner: !!p.inner, side: p.side }));
+}
+
+function greenSection(z) {
+  const yb = yTop(z);
+  const yr = Math.max(yRoof(z), yb + 0.0005);
+  const wB = halfW(z) - 0.028, wT = wB - 0.112;
+  const rc = Math.min(0.045, (yr - yb) * 0.45);
+  const yWT = yr - 0.055;
+  const ys = [yb, yb + 0.022, yb + 0.034];
+  for (let k = 1; k <= 6; k++) ys.push(lerp(yb + 0.034, yWT - 0.012, k / 7));
+  ys.push(yWT - 0.012, yWT, yr - rc);
+  for (let k = 1; k < ys.length; k++) ys[k] = Math.min(Math.max(ys[k], ys[k - 1]), yr - rc);
+  const half = [];
+  const xAt = (y) => lerp(wB, wT, (y - yb) / Math.max(yr - rc - yb, 1e-4));
+  for (const y of ys) half.push({ x: xAt(y), y, part: 'side' });
+  const cx = wT - rc;
+  for (let k = 1; k <= 5; k++) { const an = (k / 5) * (Math.PI / 2); half.push({ x: cx + rc * Math.cos(an), y: yr - rc + rc * Math.sin(an), part: 'corner' }); }
+  for (let k = 1; k <= 8; k++) { const x = cx * (1 - k / 8); half.push({ x, y: yr + 0.014 * (1 - (x / Math.max(cx, 0.01)) ** 2), part: 'top' }); }
+  const ring = [];
+  for (const p of half) ring.push(new THREE.Vector3(p.x, p.y, z));
+  for (let k = half.length - 2; k >= 0; k--) { const p = half[k]; ring.push(new THREE.Vector3(-p.x, p.y, z)); }
+  return { ring, yb, yr, yWT, wT, rc };
+}
+
+function stations(a, b, step, extra = []) {
+  const s = new Set();
+  for (let z = a; z <= b + 1e-6; z += step) s.add(+z.toFixed(4));
+  s.add(b);
+  for (const e of extra) if (e >= a && e <= b) s.add(+e.toFixed(4));
+  return [...s].sort((x, y) => x - y);
+}
+
+// pencere acikliklari (z araliklari) ve bolme citalari
+const OPEN = [
+  { z0: ZWS0 + 0.1, z1: 0.392, split: -0.355 }, // on kapi (on kelebek cam citasi 80'de)
+  { z0: 0.472, z1: 1.232, split: 1.075 },       // arka kapi (sabit cam bolmesi)
+  { z0: 1.298, z1: 1.912, split: null },        // arka yan cam
+];
+
+function buildBody(m, variant) {
+  const out = [];
+  const is80 = variant === 'kartal80';
+  // ----- alt govde
+  const archZ = [];
+  for (const ax of [AXF, AXR]) for (let k = -ARCH_R; k <= ARCH_R + 1e-6; k += 0.02) archZ.push(ax + k);
+  const zs = stations(ZF, ZR, 0.06, [...archZ, AXF - ARCH_R, AXF + ARCH_R, AXR - ARCH_R, AXR + ARCH_R, ZWS0, ZF + 0.01, ZF + 0.04, ZF + 0.1, ZR - 0.01, ZR - 0.04, ZR - 0.1]);
+  const secs = zs.map((z) => lowerSection(z, variant));
+  const lower = loft(secs, {
+    closedRing: true,
+    capStart: 'paint', capEnd: 'paint',
+    classify: (i, j, c, a, b, cc, d) => {
+      if (a.inner || b.inner || cc.inner || d.inner) return 'well';
+      if (a.part === 'bottom' && b.part === 'bottom') return 'under';
+      if (a.part === 'top' && b.part === 'top' && c.z > ZWS0 - 0.005) return null; // kabin/bagaj ust yuzu yok
+      return 'paint';
+    },
+  });
+  // ----- kabin (camlar, direkler, tavan)
+  const gz = stations(ZWS0, ZTG, 0.025, [
+    ZWS0 + 0.035, ZWS1 - 0.02, ZWS1, ZRF, ZRF + 0.01, ZRF + 0.03,
+    ...OPEN.flatMap((o) => [o.z0, o.z0 + 0.012, o.z1 - 0.012, o.z1, ...(o.split ? [o.split - 0.009, o.split + 0.009] : [])]),
+  ]);
+  const gsec = gz.map((z) => greenSection(z));
+  const tmpN = new THREE.Vector3(), e1 = new THREE.Vector3(), e2 = new THREE.Vector3();
+  const trimName = is80 ? 'chrome' : 'black';
+  const classifyGreen = (i, j, c, a, b, cc, d) => {
+      e1.subVectors(cc, a); e2.subVectors(b, d);
+      tmpN.crossVectors(e1, e2).normalize();
+      const g = gsec[i];
+      const z = c.z, y = c.y, ax = Math.abs(c.x);
+      const nx = Math.abs(tmpN.x), ny = Math.abs(tmpN.y), nz = Math.abs(tmpN.z);
+      // on cam
+      if (z < ZWS1 && ny > 0.35 && nx < 0.5) {
+        if (z < ZWS0 + 0.035 || z > ZWS1 - 0.02 || ax > g.wT - g.rc - 0.015) return z < ZWS0 + 0.035 ? 'black' : trimName;
+        return 'glass';
+      }
+      // arka (bagaj) cami
+      if (z > ZRF && nz > 0.45 && nx < 0.5) {
+        if (ax > g.wT - g.rc - 0.03) return 'paint';
+        if (z < ZRF + 0.012 || y < g.yb + 0.03) return trimName;
+        return 'glass';
+      }
+      if (nx > 0.5) {
+        // yan camlar
+        if (y < g.yb + 0.022 || y > g.yWT) return 'paint';
+        const band = y < g.yb + 0.034 || y > g.yWT - 0.012;
+        for (const o of OPEN) {
+          if (z < o.z0 || z > o.z1) continue;
+          if (band || z < o.z0 + 0.012 || z > o.z1 - 0.012) return trimName;
+          if (o.split && Math.abs(z - o.split) < 0.009 && (is80 || o.split > 0)) return trimName;
+          return 'glass';
+        }
+        return 'paint';
+      }
+      return 'paint';
+  };
+  const green = loft(gsec.map((g) => g.ring), { closedRing: false, classify: classifyGreen });
+  // ic kaplama (tavan dosemesi + direk kaplamalari): dis kabugun iceri otelenmis, ice bakan kopyasi
+  const inset = gsec.map((g) => {
+    const r = g.ring, out2 = [];
+    for (let j = 0; j < r.length; j++) {
+      const p0 = r[Math.max(0, j - 1)], p1 = r[Math.min(r.length - 1, j + 1)];
+      const tx = p1.x - p0.x, ty = p1.y - p0.y, l = Math.hypot(tx, ty) || 1;
+      out2.push(new THREE.Vector3(r[j].x - (ty / l) * 0.012, r[j].y + (tx / l) * 0.012, r[j].z));
+    }
+    return out2;
+  });
+  const liner = loft(inset, {
+    closedRing: false, flip: true,
+    classify: (i, j) => {
+      const R = gsec[i].ring, R2 = gsec[i + 1].ring;
+      const a = R[j], b = R[j + 1], cc = R2[j + 1], d = R2[j];
+      const c = new THREE.Vector3().copy(a).add(b).add(cc).add(d).multiplyScalar(0.25);
+      return classifyGreen(i, j, c, a, b, cc, d) === 'glass' ? null : 'liner';
+    },
+  });
+  for (const [k, geo] of lower) out.push([k, geo]);
+  for (const [k, geo] of green) out.push([k === 'black' ? 'blackTrim' : k, geo]);
+  for (const [k, geo] of liner) out.push([k, geo]);
+  return out;
+}
+
+// ---------------------------------------------------------------- ayrintilar
+function sidePoint(z, y, off = 0) {
+  // alt govde yan yuzeyinde (sag taraf) yaklasik x
+  const a = halfW(z), yt = yTop(z), yb = yBot(z);
+  const t = Math.min(1, Math.max(0, (y - (yb + 0.085)) / Math.max(yt - 0.05 - (yb + 0.085), 0.01)));
+  return a + 0.008 * Math.sin(Math.PI * t) - 0.01 * t + off;
+}
+
+function seamStrip(points, width = 0.0035) {
+  // yuzeye yakin ince koyu cizgi (kapi araliklari)
+  const prof = [{ x: -width / 2, y: -0.0007 }, { x: width / 2, y: -0.0007 }, { x: width / 2, y: 0.0007 }, { x: -width / 2, y: 0.0007 }];
+  return sweep(points, prof, { up: new THREE.Vector3(1, 0, 0), caps: false });
+}
+
+function buildSeams(variant) {
+  const geos = [];
+  const vLine = (z, y0, y1, side) => {
+    const pts = [];
+    for (let k = 0; k <= 12; k++) { const y = lerp(y0, y1, k / 12); pts.push(new THREE.Vector3(side * sidePoint(z, y, 0.0012), y, z)); }
+    return seamStrip(pts);
+  };
+  for (const s of [-1, 1]) {
+    geos.push(vLine(-0.69, 0.33, yTop(-0.69) - 0.02, s));       // on kapi on kenari
+    geos.push(vLine(0.44, 0.26, yTop(0.44) - 0.01, s));         // B
+    geos.push(vLine(1.255, archTop(1.255) + 0.02, yTop(1.255) - 0.01, s)); // arka kapi arka kenari
+    // kapi alt kenari (esik ustu)
+    const pts = [];
+    for (let k = 0; k <= 20; k++) { const z = lerp(-0.69, 0.78, k / 20); pts.push(new THREE.Vector3(s * sidePoint(z, 0.29, 0.0012), 0.29, z)); }
+    geos.push(seamStrip(pts));
+    // kaput kenari (camurluk ustu)
+    const hp = [];
+    for (let k = 0; k <= 20; k++) { const z = lerp(ZF + 0.02, ZWS0 - 0.03, k / 20); const x = halfW(z) - 0.075; hp.push(new THREE.Vector3(s * x, yTop(z) + hoodCrown(z) * (1 - (x / halfW(z)) ** 2) + 0.0012, z)); }
+    geos.push(sweep(hp, [{ x: -0.002, y: -0.0006 }, { x: 0.002, y: -0.0006 }, { x: 0.002, y: 0.0006 }, { x: -0.002, y: 0.0006 }], { caps: false }));
+    // bagaj kapagi yan kenari (arka panel)
+    const tp = [];
+    for (let k = 0; k <= 10; k++) { const y = lerp(0.36, yTop(ZR) - 0.01, k / 10); tp.push(new THREE.Vector3(s * 0.69, y, ZR + 0.0015)); }
+    geos.push(sweep(tp, [{ x: -0.002, y: -0.0006 }, { x: 0.002, y: -0.0006 }, { x: 0.002, y: 0.0006 }, { x: -0.002, y: 0.0006 }], { up: new THREE.Vector3(0, 0, 1), caps: false }));
+  }
+  // kaput arka (cowl) cizgisi
+  const cp = [];
+  for (let k = 0; k <= 16; k++) { const x = lerp(-0.73, 0.73, k / 16); cp.push(new THREE.Vector3(x, yTop(ZWS0 - 0.04) + 0.0015, ZWS0 - 0.04)); }
+  geos.push(sweep(cp, [{ x: -0.002, y: -0.0006 }, { x: 0.002, y: -0.0006 }, { x: 0.002, y: 0.0006 }, { x: -0.002, y: 0.0006 }], { caps: false }));
+  return mergeInto(geos);
+}
+
+function plateTexture(text) {
+  return canvasTexture(512, 112, (ctx, w, h) => {
+    ctx.fillStyle = '#f4f2ea'; ctx.fillRect(0, 0, w, h);
+    ctx.strokeStyle = '#111'; ctx.lineWidth = 6; ctx.strokeRect(4, 4, w - 8, h - 8);
+    ctx.fillStyle = '#121212';
+    ctx.font = 'bold 74px "Arial Narrow", Arial, sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(text, w / 2, h / 2 + 4);
+  });
+}
+
+function grilleTexture() {
+  return canvasTexture(512, 128, (ctx, w, h) => {
+    ctx.fillStyle = '#060606'; ctx.fillRect(0, 0, w, h);
+    ctx.strokeStyle = '#2b2b2b'; ctx.lineWidth = 2.2;
+    for (let y = 6; y < h; y += 10) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
+    ctx.strokeStyle = '#1c1c1c'; ctx.lineWidth = 1.4;
+    for (let x = 4; x < w; x += 9) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke(); }
+  }, { srgb: true });
+}
+
+function badgeTexture(text) {
+  return canvasTexture(256, 64, (ctx, w, h) => {
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = '#e6e6e6';
+    ctx.font = 'bold 40px Arial, sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(text, w / 2, h / 2 + 2);
+  });
+}
+
+function lensTexture() {
+  // far camindaki prizmatik dokular
+  return canvasTexture(128, 128, (ctx, w, h) => {
+    ctx.fillStyle = '#d8dde0'; ctx.fillRect(0, 0, w, h);
+    ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = 1;
+    for (let x = 0; x < w; x += 6) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke(); }
+    ctx.strokeStyle = 'rgba(90,100,110,0.35)';
+    for (let y = 0; y < h; y += 8) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
+  });
+}
+
+function tailTexture() {
+  return canvasTexture(64, 128, (ctx, w, h) => {
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, w, h);
+    ctx.strokeStyle = 'rgba(0,0,0,0.18)';
+    for (let y = 0; y < h; y += 5) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
+    for (let x = 0; x < w; x += 5) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke(); }
+  });
+}
+
+function mesh(geo, mat, cast = true) {
+  const o = new THREE.Mesh(geo, mat);
+  o.castShadow = cast; o.receiveShadow = true;
+  return o;
+}
+
+function buildFront(m, variant, g) {
+  const is80 = variant === 'kartal80';
+  const zFace = ZF - 0.004;
+  // izgara paneli
+  const grilleMat = new THREE.MeshStandardMaterial({ map: grilleTexture(), roughness: 0.6, metalness: 0.2 });
+  const gw = is80 ? 1.46 : 0.5, gh = is80 ? 0.26 : 0.16, gy = is80 ? 0.6 : 0.58;
+  const grille = mesh(new RoundedBoxGeometry(gw, gh, 0.03, 2, 0.01), grilleMat, false);
+  grille.position.set(0, gy, zFace - 0.006);
+  g.add(grille);
+  if (is80) {
+    // izgara krom cercevesi
+    const frame = sweep([new THREE.Vector3(-0.74, gy + gh / 2 + 0.008, zFace - 0.022), new THREE.Vector3(0.74, gy + gh / 2 + 0.008, zFace - 0.022)], roundRectProfile(0.012, 0.012, 0.004), { up: new THREE.Vector3(0, 0, -1) });
+    g.add(mesh(frame, m.chrome, false));
+  }
+  // farlar
+  const lamps = [];
+  const addRound = (x, y, r) => {
+    const lg = new THREE.Group();
+    const bezel = lathe([[r + 0.012, -0.004], [r + 0.014, 0.012], [r + 0.006, 0.02], [r - 0.002, 0.014]], 40, 'z');
+    lg.add(mesh(bezel, m.chrome, false));
+    const refl = lathe([[0.001, -0.05], [r * 0.4, -0.045], [r * 0.85, -0.02], [r, 0.0]], 32, 'z');
+    lg.add(mesh(refl, m.reflector, false));
+    const lensMat = m.headLens.clone(); lensMat.map = lensTexture();
+    const lens = lathe([[0.0005, 0.021], [r * 0.6, 0.019], [r * 0.95, 0.012], [r + 0.002, 0.004]], 40, 'z');
+    lg.add(mesh(lens, lensMat, false));
+    lens.userData.lens = true; lamps.push({ lens: lensMat, refl: m.reflector });
+    lg.rotation.y = Math.PI; // +z eksenli lathe -> one (-z) baksin
+    lg.position.set(x, y, zFace - 0.012);
+    g.add(lg);
+  };
+  if (is80) {
+    for (const s of [-1, 1]) { addRound(s * 0.615, 0.6, 0.082); addRound(s * 0.44, 0.6, 0.07); }
+  } else {
+    for (const s of [-1, 1]) {
+      const lg = new THREE.Group();
+      lg.add(mesh(new RoundedBoxGeometry(0.31, 0.15, 0.03, 2, 0.008), m.blackPlastic, false));
+      const lensMat = m.headLens.clone(); lensMat.map = lensTexture();
+      const lens = mesh(new RoundedBoxGeometry(0.29, 0.13, 0.02, 2, 0.006), lensMat, false);
+      lens.position.z = -0.012; lg.add(lens);
+      const refl = mesh(new THREE.PlaneGeometry(0.27, 0.11), m.reflector, false); refl.position.z = 0.002; refl.rotation.y = Math.PI; lg.add(refl);
+      lamps.push({ lens: lensMat, refl: m.reflector });
+      lg.position.set(s * 0.555, 0.585, zFace - 0.015);
+      g.add(lg);
+    }
+  }
+  // amblem
+  const emb = mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.01, 6), m.chrome, false);
+  emb.rotation.x = Math.PI / 2; emb.position.set(0, is80 ? 0.6 : 0.58, zFace - 0.026);
+  g.add(emb);
+  // tampon
+  const bumperPath = (zb, y) => {
+    const pts = [];
+    pts.push(new THREE.Vector3(-0.84, y, zb + 0.30));
+    for (let k = 0; k <= 8; k++) { const an = Math.PI - (k / 8) * (Math.PI / 2); pts.push(new THREE.Vector3(-0.66 + 0.18 * Math.cos(an), y, zb + 0.18 - 0.18 * Math.sin(an))); }
+    for (let k = 1; k < 10; k++) pts.push(new THREE.Vector3(lerp(-0.66, 0.66, k / 10), y, zb - 0.004 * Math.sin((k / 10) * Math.PI)));
+    for (let k = 0; k <= 8; k++) { const an = Math.PI / 2 - (k / 8) * (Math.PI / 2); pts.push(new THREE.Vector3(0.66 + 0.18 * Math.cos(an), y, zb + 0.18 - 0.18 * Math.sin(an))); }
+    pts.push(new THREE.Vector3(0.84, y, zb + 0.30));
+    return pts;
+  };
+  if (is80) {
+    const bar = sweep(bumperPath(ZF - 0.05, 0.43), [{ x: -0.025, y: -0.05 }, { x: 0.02, y: -0.056 }, { x: 0.032, y: -0.02 }, { x: 0.034, y: 0.03 }, { x: 0.02, y: 0.055 }, { x: -0.025, y: 0.05 }]);
+    g.add(mesh(bar, m.chrome));
+    // kaucuk uclar ve tampon babalari
+    for (const s of [-1, 1]) {
+      const cap = mesh(new RoundedBoxGeometry(0.1, 0.12, 0.26, 2, 0.03), m.rubber);
+      cap.position.set(s * 0.79, 0.43, ZF + 0.06); g.add(cap);
+      const ov = mesh(new RoundedBoxGeometry(0.06, 0.14, 0.05, 2, 0.02), m.rubber);
+      ov.position.set(s * 0.33, 0.43, ZF - 0.09); g.add(ov);
+      // alt sinyal lambalari
+      const sig = mesh(new RoundedBoxGeometry(0.15, 0.045, 0.03, 2, 0.008), m.amber, false);
+      sig.position.set(s * 0.6, 0.355, ZF - 0.04); g.add(sig);
+    }
+  } else {
+    const bar = sweep(bumperPath(ZF - 0.045, 0.41), [{ x: -0.03, y: -0.085 }, { x: 0.025, y: -0.09 }, { x: 0.04, y: -0.04 }, { x: 0.042, y: 0.05 }, { x: 0.02, y: 0.08 }, { x: -0.03, y: 0.075 }]);
+    g.add(mesh(bar, m.blackPlastic));
+    for (const s of [-1, 1]) {
+      const sig = mesh(new RoundedBoxGeometry(0.12, 0.05, 0.02, 2, 0.008), m.amber, false);
+      sig.position.set(s * 0.67, 0.45, ZF - 0.085); g.add(sig);
+    }
+  }
+  // plaka
+  const plate = mesh(new THREE.PlaneGeometry(0.52, 0.114), new THREE.MeshStandardMaterial({ map: plateTexture('34 TK 1980'), roughness: 0.5 }), false);
+  plate.rotation.y = Math.PI; plate.position.set(0, is80 ? 0.43 : 0.4, ZF - (is80 ? 0.087 : 0.09));
+  g.add(plate);
+  return lamps;
+}
+
+function buildRear(m, variant, g) {
+  const is80 = variant === 'kartal80';
+  const zFace = ZR + 0.004;
+  const tails = { tail: [], amber: [], reverse: [] };
+  for (const s of [-1, 1]) {
+    const grp = new THREE.Group();
+    const tex = tailTexture();
+    const segs = [['amber', 0.82, 0.07], ['tail', 0.69, 0.15], ['reverse', 0.585, 0.055]];
+    for (const [kind, y, h] of segs) {
+      const mat = m[kind === 'tail' ? 'tail' : kind].clone();
+      mat.map = tex;
+      const lamp = mesh(new RoundedBoxGeometry(0.13, h, 0.03, 2, 0.008), mat, false);
+      lamp.position.set(0, y, 0);
+      grp.add(lamp);
+      tails[kind].push(mat);
+    }
+    const housing = mesh(new RoundedBoxGeometry(0.145, 0.32, 0.026, 2, 0.01), m.blackPlastic, false);
+    housing.position.set(0, 0.72, 0.006); grp.add(housing);
+    grp.position.set(s * 0.715, 0, zFace);
+    g.add(grp);
+  }
+  // plaka + isigi
+  const plate = mesh(new THREE.PlaneGeometry(0.52, 0.114), new THREE.MeshStandardMaterial({ map: plateTexture('34 TK 1980'), roughness: 0.5 }), false);
+  plate.position.set(0, 0.64, zFace + 0.003);
+  g.add(plate);
+  const plateLamp = mesh(new RoundedBoxGeometry(0.2, 0.035, 0.04, 2, 0.01), is80 ? m.chrome : m.blackPlastic, false);
+  plateLamp.position.set(0, 0.72, zFace + 0.012); g.add(plateLamp);
+  // bagaj kolu
+  const handle = mesh(new RoundedBoxGeometry(0.16, 0.03, 0.03, 2, 0.01), m.chrome, false);
+  handle.position.set(0, 0.79, zFace + 0.01); g.add(handle);
+  // yazilar
+  const badgeMat = (t) => new THREE.MeshStandardMaterial({ map: badgeTexture(t), transparent: true, metalness: 1, roughness: 0.2, color: 0xffffff });
+  const b1 = mesh(new THREE.PlaneGeometry(0.2, 0.05), badgeMat('TOFAŞ'), false); b1.position.set(-0.4, 0.86, zFace + 0.003); g.add(b1);
+  const b2 = mesh(new THREE.PlaneGeometry(0.22, 0.055), badgeMat('KARTAL'), false); b2.position.set(0.4, 0.86, zFace + 0.003); g.add(b2);
+  // tampon
+  const pts = [];
+  pts.push(new THREE.Vector3(-0.84, 0.0, ZR - 0.3));
+  for (let k = 0; k <= 8; k++) { const an = Math.PI + (k / 8) * (Math.PI / 2); pts.push(new THREE.Vector3(-0.68 + 0.16 * Math.cos(an), 0, ZR - 0.16 - 0.16 * Math.sin(an))); }
+  for (let k = 1; k < 10; k++) pts.push(new THREE.Vector3(lerp(-0.68, 0.68, k / 10), 0, ZR + 0.004 * Math.sin((k / 10) * Math.PI)));
+  for (let k = 0; k <= 8; k++) { const an = -Math.PI / 2 + (k / 8) * (Math.PI / 2); pts.push(new THREE.Vector3(0.68 + 0.16 * Math.cos(an), 0, ZR - 0.16 - 0.16 * Math.sin(an))); }
+  pts.push(new THREE.Vector3(0.84, 0, ZR - 0.3));
+  const y = is80 ? 0.42 : 0.4;
+  for (const p of pts) { p.z += 0.05; p.y = y; }
+  if (is80) {
+    g.add(mesh(sweep(pts, [{ x: -0.025, y: -0.05 }, { x: 0.02, y: -0.056 }, { x: 0.032, y: -0.02 }, { x: 0.034, y: 0.03 }, { x: 0.02, y: 0.055 }, { x: -0.025, y: 0.05 }].map((q) => ({ x: -q.x, y: q.y }))), m.chrome));
+    for (const s of [-1, 1]) {
+      const cap = mesh(new RoundedBoxGeometry(0.1, 0.12, 0.24, 2, 0.03), m.rubber);
+      cap.position.set(s * 0.79, y, ZR - 0.05); g.add(cap);
+    }
+  } else {
+    g.add(mesh(sweep(pts, [{ x: -0.03, y: -0.085 }, { x: 0.025, y: -0.09 }, { x: 0.04, y: -0.04 }, { x: 0.042, y: 0.05 }, { x: 0.02, y: 0.08 }, { x: -0.03, y: 0.075 }].map((q) => ({ x: -q.x, y: q.y }))), m.blackPlastic));
+  }
+  // egzoz
+  const ex = mesh(new THREE.CylinderGeometry(0.024, 0.024, 0.2, 12, 1, true), m.drum);
+  ex.rotation.x = Math.PI / 2; ex.position.set(0.45, 0.2, ZR - 0.02); g.add(ex);
+  return tails;
+}
+
+function buildSideDetails(m, variant, g) {
+  const is80 = variant === 'kartal80';
+  for (const s of [-1, 1]) {
+    // yan cita
+    const y = is80 ? 0.795 : 0.52;
+    const pts = [];
+    for (let k = 0; k <= 30; k++) {
+      const z = lerp(AXF + ARCH_R + 0.02, AXR - ARCH_R - 0.02 + (is80 ? 0 : 0), k / 30);
+      pts.push(new THREE.Vector3(s * sidePoint(z, y, 0.004), y, z));
+    }
+    const prof = is80 ? roundRectProfile(0.012, 0.008, 0.003) : roundRectProfile(0.045, 0.016, 0.006);
+    g.add(mesh(sweep(pts, prof, { up: new THREE.Vector3(1, 0, 0) }), is80 ? m.chrome : m.blackPlastic));
+    // kapi kollari
+    for (const z of [0.31, 1.13]) {
+      const h = mesh(new RoundedBoxGeometry(0.13, 0.026, 0.03, 2, 0.01), m.chrome, false);
+      h.position.set(s * (sidePoint(z, 0.835, 0.012)), 0.835, z);
+      g.add(h);
+    }
+    // ayna
+    const mirror = new THREE.Group();
+    const arm = mesh(new RoundedBoxGeometry(0.03, 0.03, 0.08, 2, 0.01), is80 ? m.chrome : m.blackPlastic, false);
+    arm.position.set(0, 0, 0.0); mirror.add(arm);
+    if (is80) {
+      const head = mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.03, 24), m.chrome, false);
+      head.rotation.x = Math.PI / 2; head.position.set(s * 0.04, 0.04, -0.03); mirror.add(head);
+    } else {
+      const head = mesh(new RoundedBoxGeometry(0.14, 0.09, 0.05, 2, 0.015), m.blackPlastic, false);
+      head.position.set(s * 0.07, 0.04, -0.01); mirror.add(head);
+    }
+    mirror.position.set(s * (halfW(-0.45) + 0.0), yTop(-0.45) + 0.06, -0.45);
+    g.add(mirror);
+    // ust bagaj rayi
+    const rail = [];
+    for (let k = 0; k <= 16; k++) { const z = lerp(0.05, 1.9, k / 16); rail.push(new THREE.Vector3(s * 0.58, yRoof(z) + 0.035, z)); }
+    g.add(mesh(sweep(rail, roundRectProfile(0.022, 0.018, 0.006)), is80 ? m.chrome : m.blackPlastic));
+    for (const z of [0.07, 1.88]) {
+      const foot = mesh(new RoundedBoxGeometry(0.04, 0.045, 0.06, 2, 0.01), m.blackPlastic, false);
+      foot.position.set(s * 0.58, yRoof(z) + 0.02, z); g.add(foot);
+    }
+  }
+  // depo kapagi (sag arka)
+  const cap = mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.006, 24), m.paint, false);
+  cap.rotation.z = Math.PI / 2; cap.position.set(sidePoint(1.62, 0.8, 0.003), 0.8, 1.62); g.add(cap);
+  // silecekler
+  for (const x of [-0.42, 0.12]) {
+    const wiper = mesh(new RoundedBoxGeometry(0.46, 0.012, 0.018, 1, 0.004), m.rubber, false);
+    wiper.position.set(x + 0.17, yTop(ZWS0) + 0.035, ZWS0 + 0.05); wiper.rotation.set(-0.85, 0, 0.12); g.add(wiper);
+  }
+  // anten
+  const ant = mesh(new THREE.CylinderGeometry(0.003, 0.004, 0.8, 6), m.chrome, false);
+  ant.position.set(-0.72, yTop(-0.9) + 0.4, -0.9); ant.rotation.x = 0.12; g.add(ant);
+}
+
+// ---------------------------------------------------------------- ic mekan
+function gaugeTexture() {
+  const c = document.createElement('canvas');
+  c.width = 512; c.height = 256;
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const draw = (speed = 0, rpm = 900, fuel = 0.75, temp = 0.5) => {
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#0a0a0a'; ctx.fillRect(0, 0, 512, 256);
+    const dial = (cx, val, max, step, label) => {
+      ctx.save(); ctx.translate(cx, 128);
+      ctx.fillStyle = '#121212'; ctx.beginPath(); ctx.arc(0, 0, 112, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#7d7d7d'; ctx.lineWidth = 3; ctx.stroke();
+      ctx.fillStyle = '#e8e8e8'; ctx.font = 'bold 18px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      for (let v = 0; v <= max; v += step) {
+        const a = Math.PI * 0.75 + (v / max) * Math.PI * 1.5;
+        ctx.strokeStyle = '#ddd'; ctx.lineWidth = 3; ctx.beginPath();
+        ctx.moveTo(Math.cos(a) * 92, Math.sin(a) * 92); ctx.lineTo(Math.cos(a) * 106, Math.sin(a) * 106); ctx.stroke();
+        ctx.fillText(String(label ? v / 1000 : v), Math.cos(a) * 74, Math.sin(a) * 74);
+      }
+      const a = Math.PI * 0.75 + (Math.min(val, max) / max) * Math.PI * 1.5;
+      ctx.strokeStyle = '#ff6a1a'; ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a) * 96, Math.sin(a) * 96); ctx.stroke();
+      ctx.fillStyle = '#333'; ctx.beginPath(); ctx.arc(0, 0, 10, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    };
+    dial(128, speed, 180, 20, false);
+    dial(384, rpm, 7000, 1000, true);
+    tex.needsUpdate = true;
+  };
+  draw();
+  return { tex, draw };
+}
+
+function buildInterior(m, g) {
+  const parts = {};
+  // taban, kapi panelleri
+  const floor = mesh(new THREE.BoxGeometry(1.48, 0.02, 2.62), m.interior, false); floor.position.set(0, 0.34, 0.7); g.add(floor);
+  for (const s of [-1, 1]) {
+    const door = mesh(new THREE.BoxGeometry(0.02, 0.52, 2.62), m.interior, false);
+    door.position.set(s * 0.74, 0.64, 0.7); g.add(door);
+  }
+  // torpido
+  const dash = mesh(new RoundedBoxGeometry(1.5, 0.2, 0.38, 3, 0.05), m.dash, false);
+  dash.position.set(0, 0.84, ZWS0 + 0.2); g.add(dash);
+  const hood = mesh(new RoundedBoxGeometry(0.42, 0.07, 0.16, 2, 0.03), m.dash, false);
+  hood.position.set(-0.36, 0.955, ZWS0 + 0.29); g.add(hood);
+  // gostergeler
+  const gauges = gaugeTexture();
+  const gp = mesh(new THREE.PlaneGeometry(0.34, 0.17), new THREE.MeshBasicMaterial({ map: gauges.tex, toneMapped: false }), false);
+  gp.position.set(-0.36, 0.905, ZWS0 + 0.375); gp.rotation.x = -0.25;
+  g.add(gp);
+  parts.gauges = gauges;
+  // direksiyon (sol direksiyonlu)
+  const sw = new THREE.Group();
+  const rim = mesh(new THREE.TorusGeometry(0.19, 0.016, 10, 40), m.rubber, false); sw.add(rim);
+  for (let k = 0; k < 3; k++) {
+    const sp = mesh(new THREE.BoxGeometry(0.17, 0.025, 0.012), m.dash, false);
+    const a = -Math.PI / 2 + k * ((2 * Math.PI) / 3) + Math.PI / 6;
+    sp.position.set(Math.cos(a) * 0.09, Math.sin(a) * 0.09, 0); sp.rotation.z = a; sw.add(sp);
+  }
+  const hub = mesh(new THREE.CylinderGeometry(0.045, 0.05, 0.04, 16), m.dash, false); hub.rotation.x = Math.PI / 2; sw.add(hub);
+  const swHolder = new THREE.Group();
+  swHolder.add(sw);
+  swHolder.position.set(-0.36, 0.9, ZWS0 + 0.53);
+  swHolder.rotation.x = -0.42;
+  g.add(swHolder);
+  parts.steeringWheel = sw;
+  // koltuklar
+  for (const x of [-0.36, 0.36]) {
+    const cushion = mesh(new RoundedBoxGeometry(0.5, 0.13, 0.5, 3, 0.05), m.seat, false); cushion.position.set(x, 0.46, 0.18); g.add(cushion);
+    const back = mesh(new RoundedBoxGeometry(0.5, 0.58, 0.12, 3, 0.05), m.seat, false); back.position.set(x, 0.78, 0.47); back.rotation.x = 0.16; g.add(back);
+    const head = mesh(new RoundedBoxGeometry(0.26, 0.16, 0.1, 2, 0.04), m.seat, false); head.position.set(x, 1.12, 0.53); head.rotation.x = 0.16; g.add(head);
+  }
+  const bench = mesh(new RoundedBoxGeometry(1.36, 0.13, 0.5, 3, 0.05), m.seat, false); bench.position.set(0, 0.46, 1.05); g.add(bench);
+  const bback = mesh(new RoundedBoxGeometry(1.36, 0.52, 0.12, 3, 0.05), m.seat, false); bback.position.set(0, 0.74, 1.32); bback.rotation.x = 0.14; g.add(bback);
+  // vites kolu
+  const lever = mesh(new THREE.CylinderGeometry(0.008, 0.01, 0.25, 8), m.chrome, false); lever.position.set(0, 0.5, -0.12); lever.rotation.x = -0.25; g.add(lever);
+  const knob = mesh(new THREE.SphereGeometry(0.025, 12, 10), m.dash, false); knob.position.set(0, 0.62, -0.15); g.add(knob);
+  // dikiz aynasi
+  const rv = mesh(new RoundedBoxGeometry(0.22, 0.065, 0.025, 2, 0.01), m.dash, false); rv.position.set(0, 1.27, ZWS1 + 0.12); g.add(rv);
+  return parts;
+}
+
+// ---------------------------------------------------------------- tekerlekler
+function tireTextures() {
+  const normal = normalMapFromHeight(512, 128, (u, v) => {
+    // v: profil boyunca (0..1), u: cevre boyunca
+    if (v < 0.36 || v > 0.64) return 0.5 + 0.03 * Math.sin(u * 600); // yanak
+    const w = (v - 0.36) / 0.28;
+    let h = 1;
+    for (const g of [0.25, 0.5, 0.75]) if (Math.abs(w - g) < 0.035) h = 0;   // cevresel oluklar
+    const block = (u * 72) % 1;
+    if (block < 0.12) h *= 0.3;                                             // enine oluklar
+    if (Math.abs(((u * 144 + w * 2) % 1) - 0.5) < 0.04) h *= 0.6;           // sipe
+    return h;
+  }, 3.5);
+  return { normal };
+}
+
+function buildWheel(m, side, tires) {
+  const g = new THREE.Group();
+  const spin = new THREE.Group();
+  g.add(spin);
+  const tireMat = new THREE.MeshStandardMaterial({ color: 0x161616, roughness: 0.92, normalMap: tires.normal, normalScale: new THREE.Vector2(0.8, 0.8) });
+  const tire = lathe([
+    [0.176, -0.068], [0.2, -0.079], [0.24, -0.083], [0.268, -0.079], [0.281, -0.068], [0.2865, -0.05],
+    [0.287, -0.02], [0.287, 0.02], [0.2865, 0.05], [0.281, 0.068], [0.268, 0.079], [0.24, 0.083], [0.2, 0.079], [0.176, 0.068],
+  ], 48, 'x');
+  spin.add(mesh(tire, tireMat));
+  // celik jant: dis cember + gobek diski
+  const rim = lathe([[0.172, -0.072], [0.178, -0.066], [0.166, -0.06], [0.164, 0.04], [0.176, 0.05], [0.172, 0.058], [0.16, 0.055], [0.15, 0.03], [0.12, 0.022], [0.07, 0.03], [0.04, 0.032]], 40, 'x');
+  spin.add(mesh(rim, m.steel));
+  // krom jant kapagi
+  const cap = lathe([[0.128, 0.034], [0.124, 0.046], [0.11, 0.054], [0.08, 0.06], [0.04, 0.064], [0.001, 0.065]], 40, 'x');
+  spin.add(mesh(cap, m.chrome, false));
+  // bijonlar (kapak uzerinde kabartma)
+  for (let k = 0; k < 4; k++) {
+    const a = (k / 4) * Math.PI * 2 + Math.PI / 4;
+    const nut = mesh(new THREE.CylinderGeometry(0.011, 0.011, 0.012, 6), m.chrome, false);
+    nut.rotation.z = Math.PI / 2; nut.position.set(0.064, Math.cos(a) * 0.075, Math.sin(a) * 0.075);
+    spin.add(nut);
+  }
+  // fren kampanasi (donmez)
+  const drum = mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.09, 24), m.drum, false);
+  drum.rotation.z = Math.PI / 2; drum.position.x = -0.03;
+  g.add(drum);
+  if (side < 0) g.scale.x = -1;
+  return { group: g, spin };
+}
+
+// ---------------------------------------------------------------- ana sinif
+export class KartalModel {
+  constructor({ variant = 'kartal80', paint = 'lacivert' } = {}) {
+    this.variant = variant;
+    this.root = new THREE.Group();
+    this.root.name = 'TofasKartal';
+    this.body = new THREE.Group();     // zemin uzayi
+    this.root.add(this.body);
+    const m = (this.mats = makeMaterials(paint));
+    // govde
+    for (const [name, geo] of buildBody(m, variant)) {
+      const mat = { paint: m.paint, well: m.well, under: m.under, glass: m.glass, chrome: m.chrome, blackTrim: m.rubber, black: m.rubber, liner: m.liner }[name] || m.paint;
+      const o = mesh(geo, mat, name !== 'glass');
+      if (name === 'glass') o.renderOrder = 5;
+      this.body.add(o);
+    }
+    const seams = buildSeams(variant);
+    if (seams) this.body.add(mesh(seams, new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 0.9 }), false));
+    this.headLamps = buildFront(m, variant, this.body);
+    this.tails = buildRear(m, variant, this.body);
+    buildSideDetails(m, variant, this.body);
+    const parts = buildInterior(m, this.body);
+    this.steeringWheel = parts.steeringWheel;
+    this.gauges = parts.gauges;
+    // tekerlekler (fizik konumlandirir; govde-yerel)
+    const tires = tireTextures();
+    this.wheels = [];
+    for (const s of [-1, 1, -1, 1]) {
+      const w = buildWheel(m, s, tires);
+      this.root.add(w.group);
+      this.wheels.push(w);
+    }
+    // farlar icin spot isiklar
+    this.spots = [];
+    for (const s of [-1, 1]) {
+      const sp = new THREE.SpotLight(0xfff1d6, 0, 70, 0.42, 0.55, 1.6);
+      sp.position.set(s * 0.55, 0.6, ZF - 0.05);
+      sp.target.position.set(s * 0.8, 0.0, ZF - 25);
+      sp.castShadow = false;
+      this.body.add(sp, sp.target);
+      this.spots.push(sp);
+    }
+    this.root.traverse((o) => { if (o.isMesh) o.frustumCulled = true; });
+  }
+
+  /** Zemin uzayini fizik govde uzayina hizalar (CG orijin). */
+  alignToPhysics(cgHeight) {
+    this.body.position.set(0, -cgHeight, -CG_Z);
+  }
+
+  setPaint(id) {
+    const p = PAINTS[id];
+    if (!p) return;
+    this.mats.paint.color.set(p.color);
+    this.mats.paint.metalness = p.metal || 0;
+    this.mats.paint.roughness = p.metal ? 0.38 : 0.3;
+  }
+
+  setLights({ head = false, brake = 0, reverse = false, tail = false } = {}) {
+    for (const l of this.headLamps) { l.lens.emissiveIntensity = head ? 2.2 : 0; }
+    this.mats.reflector.emissiveIntensity = head ? 1.5 : 0;
+    for (const sp of this.spots) sp.intensity = head ? 60 : 0;
+    const tailI = (tail || head ? 0.9 : 0.15) + brake * 3.2;
+    for (const t of this.tails.tail) t.emissiveIntensity = tailI;
+    for (const t of this.tails.reverse) t.emissiveIntensity = reverse ? 2.5 : 0;
+  }
+}

@@ -2,141 +2,26 @@
 <html lang="tr">
 <head>
 <meta charset="UTF-8">
-<title>Silkroad Online V3 — Web & Three.js Asset Hub</title>
-<style>
-  * { box-sizing: border-box; }
-  body {
-    margin: 0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    background: #090e17;
-    color: #e2e8f0;
-    line-height: 1.6;
-    padding: 30px 20px;
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Silkroad: Convoy Wars V4</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="src/ui/style.css">
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three/three.module.js",
+    "three/addons/": "./vendor/three/addons/",
+    "three-mesh-bvh": "./vendor/three-mesh-bvh/src/index.js"
   }
-  .container { max-width: 1100px; margin: 0 auto; }
-  h1 { color: #f6ad55; font-size: 2.2rem; margin-bottom: 0.4rem; }
-  .subtitle { color: #94a3b8; font-size: 1.1rem; margin-bottom: 2rem; }
-  .grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: 20px;
-    margin-bottom: 30px;
-  }
-  .card {
-    background: #131c2e;
-    border: 1px solid #1e293b;
-    border-radius: 12px;
-    padding: 24px;
-    transition: transform 0.2s, border-color 0.2s;
-  }
-  .card:hover {
-    transform: translateY(-3px);
-    border-color: #f6ad55;
-  }
-  .card h2 { color: #fbd38d; font-size: 1.3rem; margin-top: 0; display: flex; align-items: center; gap: 10px; }
-  .badge {
-    background: #2b6cb0;
-    color: #fff;
-    padding: 2px 8px;
-    border-radius: 999px;
-    font-size: 0.75rem;
-    font-weight: bold;
-  }
-  .card p { color: #94a3b8; font-size: 0.95rem; margin-bottom: 18px; }
-  .btn {
-    display: inline-block;
-    background: #dd6b20;
-    color: #fff;
-    text-decoration: none;
-    padding: 8px 18px;
-    border-radius: 6px;
-    font-weight: bold;
-    font-size: 0.9rem;
-    transition: background 0.2s;
-  }
-  .btn:hover { background: #ed8936; }
-  .btn-secondary { background: #2d3748; }
-  .btn-secondary:hover { background: #4a5568; }
-  .stats-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 15px;
-    background: #0f172a;
-    padding: 20px;
-    border-radius: 10px;
-    border: 1px solid #1e293b;
-    margin-bottom: 30px;
-  }
-  .stat-item { text-align: center; }
-  .stat-value { font-size: 1.8rem; font-weight: bold; color: #38bdf8; }
-  .stat-label { font-size: 0.85rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; }
-</style>
+}
+</script>
 </head>
 <body>
-<div class="container">
-  <h1>Silkroad Online V3 — Web & Three.js Asset Hub</h1>
-  <div class="subtitle">PK2 arşivlerinden (Map, Data, Media, Music, Particles) dönüştürülmüş tam oyun veritabanı</div>
-
-  <div class="stats-grid">
-    <div class="stat-item">
-      <div class="stat-value">4.595</div>
-      <div class="stat-label">Arazi Bölgesi (.bin)</div>
-    </div>
-    <div class="stat-item">
-      <div class="stat-value">28</div>
-      <div class="stat-label">Silkroad Zindanı (.dof)</div>
-    </div>
-    <div class="stat-item">
-      <div class="stat-value">3.216</div>
-      <div class="stat-label">3D Bina & Obje Modeli</div>
-    </div>
-    <div class="stat-item">
-      <div class="stat-value">7.880</div>
-      <div class="stat-label">Orijinal Mini Harita</div>
-    </div>
-    <div class="stat-item">
-      <div class="stat-value">47</div>
-      <div class="stat-label">Orijinal Silkroad Müziği</div>
-    </div>
-  </div>
-
-  <div class="grid">
-    <div class="card">
-      <h2>🌍 3D Dünya & Zindanlar <span class="badge">Three.js</span></h2>
-      <p>4.595 bölge arazi akışı, 28 zindan (Donwhang Cave, Qin Tomb, Pharaoh Tomb vb.), yükseklik haritaları, su düzlemleri ve gerçek 3D modeller.</p>
-      <a class="btn" href="MAP/viewer.html" target="_blank">3D Görüntüleyiciyi Aç &rarr;</a>
-    </div>
-
-    <div class="card">
-      <h2>🎵 Müzik & Sesler <span class="badge">47 OGG</span></h2>
-      <p>Silkroad Online'ın tüm resmi oyun içi müzikleri (Jangan, Donwhang, Hotan, Constantinople, Roc Mountain, Zindanlar, Fortress War).</p>
-      <a class="btn btn-secondary" href="MUSIC/music_index.json" target="_blank">Müzik Kataloğu &rarr;</a>
-    </div>
-
-    <div class="card">
-      <h2>🗺️ Mini Harita Atlası <span class="badge">7.880 JPG</span></h2>
-      <p>Media.pk2 içindeki tüm dünya bölgeleri (Jangan, Taklamakan, Karakoram...) ve zindanların orijinal Joymax mini harita karoları.</p>
-      <a class="btn btn-secondary" href="MINIMAP/minimap_index.json" target="_blank">Mini Harita İndeksi &rarr;</a>
-    </div>
-
-    <div class="card">
-      <h2>🏛️ 3D Modeller & Dokular <span class="badge">14.510 Mesh</span></h2>
-      <p>Data.pk2'den dönüştürülmüş Three.js BufferGeometry JSON modelleri ve JPG dokuları (binalar, tapınaklar, zindan blokları, ağaçlar, prop objeler).</p>
-      <a class="btn btn-secondary" href="MODELS/models_index.json" target="_blank">Model İndeksi &rarr;</a>
-    </div>
-
-    <div class="card">
-      <h2>✨ Efektler & Parçacıklar <span class="badge">4.704 Dosya</span></h2>
-      <p>Particles.pk2 içindeki tüm efekt tanımları (.efp), şeffaf PNG parçacık dokuları (büyü, alev, parlama, duman) ve 3D parçacık meshleri.</p>
-      <a class="btn btn-secondary" href="PARTICLES/particles_index.json" target="_blank">Parçacık Kataloğu &rarr;</a>
-    </div>
-
-    <div class="card">
-      <h2>📄 README & Entegrasyon <span class="badge">Kılavuz</span></h2>
-      <p>Three.js projenize `SilkroadMap.js` kütüphanesini ve asset klasörlerini nasıl entegre edeceğinizi anlatan dokümantasyon.</p>
-      <a class="btn btn-secondary" href="MAP/README.md" target="_blank">README.md Oku &rarr;</a>
-    </div>
-  </div>
+<div id="app">
+  <canvas id="view"></canvas>
+  <div id="ui"></div>
 </div>
+<noscript>Bu oyun JavaScript gerektirir.</noscript>
+<script type="module" src="src/main.js"></script>
 </body>
 </html>
