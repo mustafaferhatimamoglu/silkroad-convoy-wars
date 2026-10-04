@@ -60,15 +60,22 @@ export class Vehicle {
 
   /**
    * Araci (x,z) noktasinda zemine yerlestirir. yaw: 0 = kuzey.
-   * above: zemin arama isini yHint'in ne kadar ustunden baslasin (kopru alti, kemer
-   * altinda kisa tutulur ki arac catinin ustune konmasin).
+   * yHint: bilinen zemin yuksekligi (findSpawn); yoksa arazi yuksekligi esas alinir.
+   * above: zemin arama isini bu yuksekligin ne kadar ustunden baslasin. Ipucu varsa kisa
+   * tutulur ki arac kemer/cati ustune konmasin; ipucu yoksa 30 m (findSpawn ile ayni kural).
+   * (Eskiden isin sabit y=60'tan atiliyordu: zemini 86 m'de olan Iskenderiye'de arac
+   * arazinin altina konup bir platformun altina sikisiyordu.)
    */
-  spawn(x, z, yaw = 0, yHint = null, above = 60) {
+  spawn(x, z, yaw = 0, yHint = null, above = null) {
     let y = yHint;
     if (this.ground) {
-      const o = new V3(x, (yHint ?? 0) + above, z), d = new V3(0, -1, 0);
-      const hit = this.ground.raycast(o, d, 400);
+      const terrain = this.app.world ? this.app.world.heightAt(x, z) : null;
+      const base = yHint ?? terrain ?? 0;
+      const up = above ?? (yHint !== null && yHint !== undefined ? 2 : 30);
+      const o = new V3(x, base + up, z), d = new V3(0, -1, 0);
+      const hit = this.ground.raycast(o, d, up + 60);
       if (hit) y = hit.point.y;
+      else if (y === null || y === undefined) y = base;
     }
     if (y === null || y === undefined) y = 0;
     this.sim.reset(x, y + this.params.cgHeight + 0.06, z, yaw);

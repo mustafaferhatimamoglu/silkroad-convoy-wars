@@ -168,7 +168,7 @@ export class Game {
     this.menu.clear();
     await this.loadArea(pos, `${city.name} yükleniyor…`);
     const sp = this.findSpawn(pos, city.heading);
-    const mode = new DriveMode(app, { city: id, x: sp.x, z: sp.z, yaw: sp.heading, onPause: () => this.pauseDrive() });
+    const mode = new DriveMode(app, { city: id, x: sp.x, y: sp.y, z: sp.z, yaw: sp.heading, onPause: () => this.pauseDrive() });
     app.setMode(mode);
     this.drive = mode;
     this._hideOverlay();

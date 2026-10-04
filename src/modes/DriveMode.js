@@ -26,7 +26,7 @@ export class DriveMode {
     this.applyAssists(s.get('assists'));
     const city = this.opts.city ? cityById(this.opts.city) : cityById('hotan');
     const p = app.world.toThree(city.rx, city.rz, city.lx, 0, city.lz, new THREE.Vector3());
-    this.vehicle.spawn(this.opts.x ?? p.x, this.opts.z ?? p.z, this.opts.yaw ?? city.heading);
+    this.vehicle.spawn(this.opts.x ?? p.x, this.opts.z ?? p.z, this.opts.yaw ?? city.heading, this.opts.y ?? null);
     this.camera = new VehicleCamera(app, this.vehicle, s.get('camera'));
     this.hud = new DriveHud(app, app.ui);
     this.hud.toast(`${city.name} — iyi yolculuklar!`, 3);
