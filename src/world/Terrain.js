@@ -125,11 +125,13 @@ export class TerrainMaterials {
     mat.onBeforeCompile = (shader) => {
       Object.assign(shader.uniforms, shared, uniforms);
       shader.vertexShader = shader.vertexShader
-        .replace('#include <common>', '#include <common>\nvarying vec2 vCell;')
-        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvCell = vec2(position.x, -position.z) * ' + (1 / CELL_M).toFixed(6) + ';');
+        .replace('#include <common>', '#include <common>\nvarying vec2 vCell;\nvarying vec3 vTerrN;\nvarying float vHCell;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvCell = vec2(position.x, -position.z) * ' + (1 / CELL_M).toFixed(6) + ';\nvTerrN = normal;\nvHCell = position.y * ' + (1 / CELL_M).toFixed(6) + ';');
       shader.fragmentShader = shader.fragmentShader
         .replace('#include <common>', `#include <common>
 varying vec2 vCell;
+varying vec3 vTerrN;
+varying float vHCell;
 uniform highp sampler2DArray tTiles;
 uniform sampler2D tIndex;
 uniform sampler2D tColormap;
@@ -138,6 +140,14 @@ uniform vec2 uFar;
 uniform float uSharp;
 uniform float uBlendDepth;
 uniform vec4 uLayerLum[${cap4}];
+
+// yan izdusum (ucurum): baskin karonun dokusu, yatay eksen + yukseklik ile
+// (turevler dallanma disinda hesaplanip verilir: tekdüze olmayan akista dFdx tanimsiz)
+vec3 sideTap(vec4 id, vec2 uv, vec2 dx, vec2 dy) {
+  int layer = int(id.r * 255.0 + 0.5);
+  float inv = 1.0 / (4.0 * exp2(floor(id.g * 255.0 + 0.5)));
+  return textureGrad(tTiles, vec3(uv * inv, float(layer)), dx * inv, dy * inv).rgb;
+}
 
 vec3 splatTap(vec4 id, vec2 g, vec2 gdx, vec2 gdy, out float h) {
   int layer = int(id.r * 255.0 + 0.5);
@@ -159,6 +169,7 @@ vec3 splatTap(vec4 id, vec2 g, vec2 gdx, vec2 gdy, out float h) {
   vec4 i11 = texelFetch(tIndex, ci + ivec2(1, 1), 0);
   vec2 g = uCellOffset + vCell;
   vec2 gdx = dFdx(vCell), gdy = dFdy(vCell);
+  float hdx = dFdx(vHCell), hdy = dFdy(vHCell);
   vec3 splat;
   float h0, h1, h2, h3;
   if (i00 == i10 && i00 == i01 && i00 == i11) {
@@ -175,6 +186,24 @@ vec3 splatTap(vec4 id, vec2 g, vec2 gdx, vec2 gdy, out float h) {
     vec4 b = max(hw - vec4(ma), vec4(0.0));
     vec3 hb = (c0 * b.x + c1 * b.y + c2 * b.z + c3 * b.w) / max(b.x + b.y + b.z + b.w, 1e-4);
     splat = mix(lin, hb, uSharp);
+  }
+  // Dik yamaclarda ustten izdusum dokuyu dikey cizgilere uzatir: yandan (triplanar)
+  // izdusume gec. Yalnizca dik piksellerde calisir; duz zeminin maliyeti degismez.
+  vec3 tn = normalize(vTerrN);
+  float steep = smoothstep(0.78, 0.5, tn.y);
+  if (steep > 0.0) {
+    vec4 w4 = vec4((1.0 - f.x) * (1.0 - f.y), f.x * (1.0 - f.y), (1.0 - f.x) * f.y, f.x * f.y);
+    vec4 dom = i00; float dw = w4.x;
+    if (w4.y > dw) { dom = i10; dw = w4.y; }
+    if (w4.z > dw) { dom = i01; dw = w4.z; }
+    if (w4.w > dw) { dom = i11; }
+    vec2 aw = pow(abs(tn.xz), vec2(3.0));
+    aw /= max(aw.x + aw.y, 1e-4);
+    vec3 side = vec3(0.0);
+    float sw = 0.0;
+    if (aw.x > 0.02) { side += sideTap(dom, vec2(g.y, vHCell), vec2(gdx.y, hdx), vec2(gdy.y, hdy)) * aw.x; sw += aw.x; }
+    if (aw.y > 0.02) { side += sideTap(dom, vec2(g.x, vHCell), vec2(gdx.x, hdx), vec2(gdy.x, hdy)) * aw.y; sw += aw.y; }
+    splat = mix(splat, side / max(sw, 1e-4), steep);
   }
   float farT = smoothstep(uFar.x, uFar.y, length(vViewPosition));
   if (farT > 0.0) {
