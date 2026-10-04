@@ -110,6 +110,26 @@ float dirtMask() {
   m.interior = new THREE.MeshStandardMaterial({ color: 0x2a2420, roughness: 0.8 });
   m.seat = new THREE.MeshStandardMaterial({ color: 0x3d2c22, roughness: 0.9 });
   m.dash = new THREE.MeshStandardMaterial({ color: 0x1b1a19, roughness: 0.7 });
+  // kabin ortam golgesi: kapali kabine gokyuzu isigi (IBL) az ulasir; dogrudan gunes
+  // golge haritasiyla zaten kesilir. Bu olmadan tavan dosemesi camlardan bembeyaz gorunur.
+  const cabinAO = { value: 0.3 };
+  for (const k of ['liner', 'interior', 'seat', 'dash']) {
+    m[k].onBeforeCompile = (shader) => {
+      shader.uniforms.uCabinAO = cabinAO;
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', '#include <common>\nuniform float uCabinAO;')
+        .replace('#include <aomap_fragment>', '#include <aomap_fragment>\nreflectedLight.indirectDiffuse *= uCabinAO;\nreflectedLight.indirectSpecular *= uCabinAO;');
+    };
+    m[k].customProgramCacheKey = () => 'kartal-cabin';
+  }
+  // 90'lar on maskesi, izgara, amblem, jant kapagi
+  m.bucket = new THREE.MeshStandardMaterial({ color: 0x0c0d0e, roughness: 0.85, side: THREE.BackSide });
+  m.grilleFrame = new THREE.MeshStandardMaterial({ color: 0x1e1f21, roughness: 0.55 });
+  m.emblem = new THREE.MeshPhysicalMaterial({ color: 0x1f56b8, metalness: 0.3, roughness: 0.25, clearcoat: 1 });
+  m.hubcap = new THREE.MeshStandardMaterial({ color: 0xb4b8bc, metalness: 0.35, roughness: 0.32 });
+  m.slot = new THREE.MeshStandardMaterial({ color: 0x070707, roughness: 0.9 });
+  m.sigRefl = new THREE.MeshStandardMaterial({ color: 0xd8d8d8, metalness: 1, roughness: 0.22, side: THREE.DoubleSide });
+  m.mirror = new THREE.MeshStandardMaterial({ color: 0xc8ccd0, metalness: 1, roughness: 0.03 });
   m.steel = new THREE.MeshStandardMaterial({ color: 0x9a9c9e, metalness: 0.6, roughness: 0.45 });
   m.drum = new THREE.MeshStandardMaterial({ color: 0x2a2826, metalness: 0.5, roughness: 0.7 });
   m.headLens = new THREE.MeshPhysicalMaterial({
@@ -207,7 +227,7 @@ function buildBody(m, variant) {
   const secs = zs.map((z) => lowerSection(z, variant));
   const lower = loft(secs, {
     closedRing: true,
-    capStart: 'paint', capEnd: 'paint',
+    capStart: is80 ? 'paint' : null, capEnd: 'paint',
     classify: (i, j, c, a, b, cc, d) => {
       if (a.inner || b.inner || cc.inner || d.inner) return 'well';
       if (a.part === 'bottom' && b.part === 'bottom') return 'under';
@@ -277,7 +297,29 @@ function buildBody(m, variant) {
   for (const [k, geo] of lower) out.push([k, geo]);
   for (const [k, geo] of green) out.push([k === 'black' ? 'blackTrim' : k, geo]);
   for (const [k, geo] of liner) out.push([k, geo]);
+  if (!is80) out.push(['paint', frontCapWithOpening(secs[0])]);
   return out;
+}
+
+// 90'lar on yuzu: far + izgara bandi govdede bir aciklik; arkasinda siyah "kova" ve icinde
+// derinligi olan reflektorlu farlar durur (orijinaldeki gibi kaput kenari farlarin ustune tasar).
+export const FRONT90 = { hx: 0.672, y0: 0.522, y1: 0.715, depth: 0.1 };
+
+function frontCapWithOpening(ring) {
+  const shape = new THREE.Shape(ring.map((p) => new THREE.Vector2(p.x, p.y)));
+  const { hx, y0, y1 } = FRONT90, r = 0.018;
+  const hole = new THREE.Path();
+  hole.moveTo(-hx + r, y0);
+  hole.lineTo(hx - r, y0); hole.quadraticCurveTo(hx, y0, hx, y0 + r);
+  hole.lineTo(hx, y1 - r); hole.quadraticCurveTo(hx, y1, hx - r, y1);
+  hole.lineTo(-hx + r, y1); hole.quadraticCurveTo(-hx, y1, -hx, y1 - r);
+  hole.lineTo(-hx, y0 + r); hole.quadraticCurveTo(-hx, y0, -hx + r, y0);
+  shape.holes.push(hole);
+  const geo = new THREE.ShapeGeometry(shape, 3);
+  geo.deleteAttribute('uv');
+  geo.rotateY(Math.PI);           // simetrik: x aynasi sorun degil, normal -z (one)
+  geo.translate(0, 0, ring[0].z);
+  return geo;
 }
 
 // ---------------------------------------------------------------- ayrintilar
@@ -382,22 +424,125 @@ function mesh(geo, mat, cast = true) {
   return o;
 }
 
+function meshTexture() {
+  // 90'lar izgara petek agi (alfa testli)
+  return canvasTexture(256, 160, (ctx, w, h) => {
+    ctx.clearRect(0, 0, w, h);
+    ctx.strokeStyle = '#3a3b3d'; ctx.lineWidth = 3.2;
+    for (let k = -h; k < w + h; k += 14) {
+      ctx.beginPath(); ctx.moveTo(k, 0); ctx.lineTo(k + h * 0.6, h); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(k, h); ctx.lineTo(k + h * 0.6, 0); ctx.stroke();
+    }
+  });
+}
+
+function rectLensTexture() {
+  // dikdortgen far cami: dikey prizma oluklari, yatay bolmeler, altta buzlu bant
+  return canvasTexture(256, 128, (ctx, w, h) => {
+    ctx.fillStyle = '#e4e9ee'; ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = '#ffffff';
+    for (let x = 0; x < w; x += 7) ctx.fillRect(x, 0, 2, h);
+    ctx.fillStyle = '#aab3bb';
+    for (let y = 10; y < h; y += 18) ctx.fillRect(0, y, w, 1);
+    for (let x = 0; x < w; x += 32) ctx.fillRect(x, 0, 1, h);
+  });
+}
+
+/** One (-z) bakan icbukey reflektor: kenarlar z=0, merkez +depth (govde icine). */
+function dishGeometry(w, h, depth, sx = 14, sy = 8) {
+  const g = new THREE.PlaneGeometry(w, h, sx, sy);
+  const p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    const u = p.getX(i) / (w / 2), v = p.getY(i) / (h / 2);
+    p.setZ(i, -depth * (1 - u * u) * (1 - v * v));
+  }
+  g.rotateY(Math.PI);
+  g.computeVertexNormals();
+  return g;
+}
+
+/** One dogru hafif bombeli far cami. */
+function lensGeometry(w, h, bulge) {
+  const g = new THREE.PlaneGeometry(w, h, 10, 5);
+  const p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    const u = p.getX(i) / (w / 2), v = p.getY(i) / (h / 2);
+    p.setZ(i, bulge * (1 - 0.8 * u * u) * (1 - 0.8 * v * v));
+  }
+  g.rotateY(Math.PI);
+  g.computeVertexNormals();
+  return g;
+}
+
+/** 90'lar on yuzu (1994 Kartal SL fotograflarina gore). */
+function buildFront90(m, g, lamps) {
+  const { hx, y0, y1, depth } = FRONT90;
+  const yc = (y0 + y1) / 2, hh = y1 - y0;
+  // aciklik arkasindaki koyu kova (ic yuzleri gorunur)
+  const bucket = mesh(new THREE.BoxGeometry(hx * 2, hh, depth), m.bucket, false);
+  bucket.position.set(0, yc, ZF + depth / 2);
+  g.add(bucket);
+  const zL = ZF + 0.006;                  // cam duzlemi (kaput kenarindan 6 mm iceride)
+  const lh = hh - 0.014, ly = yc;
+  for (const s of [-1, 1]) {
+    const lensMat = new THREE.MeshPhysicalMaterial({
+      color: 0xffffff, map: rectLensTexture(), transparent: true, opacity: 0.26, roughness: 0.04,
+      clearcoat: 1, clearcoatRoughness: 0.03, envMapIntensity: 1.6, emissive: 0xfff2d8, emissiveIntensity: 0, depthWrite: false,
+    });
+    // ana far
+    const mx = s * 0.4115, mw = 0.307;
+    const refl = mesh(dishGeometry(mw - 0.006, lh - 0.006, 0.058), m.reflector, false);
+    refl.position.set(mx, ly, zL + 0.012); g.add(refl);
+    const bulb = mesh(new THREE.SphereGeometry(0.013, 12, 8), m.chrome, false);
+    bulb.position.set(mx, ly, zL + 0.046); g.add(bulb);
+    const shield = mesh(new THREE.CylinderGeometry(0.017, 0.015, 0.012, 14), m.chrome, false);
+    shield.rotation.x = Math.PI / 2; shield.position.set(mx, ly, zL + 0.03); g.add(shield);
+    // kose sinyali: seffaf cam arkasinda turuncu ampul
+    const ix = s * 0.6215, iw = 0.093;
+    const sr = mesh(dishGeometry(iw - 0.006, lh - 0.006, 0.035), m.sigRefl, false);
+    sr.position.set(ix, ly, zL + 0.012); g.add(sr);
+    const ab = mesh(new THREE.SphereGeometry(0.017, 12, 8), m.amber, false);
+    ab.position.set(ix, ly - 0.01, zL + 0.032); g.add(ab);
+    // iki cam tek cizim cagrisinda
+    const lg1 = lensGeometry(mw, lh, 0.005).translate(mx, ly, zL);
+    const lg2 = lensGeometry(iw, lh, 0.004).translate(ix, ly, zL);
+    const lens = mesh(mergeInto([lg1, lg2]), lensMat, false);
+    lens.renderOrder = 6;
+    g.add(lens);
+    lamps.push({ lens: lensMat, refl: m.reflector, x: mx, opacity: lensMat.opacity });
+  }
+  // izgara: cerceve + iki petek ag + orta dikme ve mavi T amblemi
+  const gw = 0.496, gh = hh - 0.026;
+  const zg = ZF + 0.002;
+  const bar = (w, h, d, x, y, z, mat = m.grilleFrame) => { const o = mesh(new RoundedBoxGeometry(w, h, d, 2, Math.min(w, h) * 0.3), mat, false); o.position.set(x, y, z); g.add(o); };
+  bar(gw, 0.016, 0.03, 0, yc + gh / 2 - 0.008, zg);
+  bar(gw, 0.016, 0.03, 0, yc - gh / 2 + 0.008, zg);
+  for (const s of [-1, 1]) bar(0.016, gh, 0.03, s * (gw / 2 - 0.008), yc, zg);
+  bar(0.05, gh, 0.034, 0, yc, zg - 0.002);
+  const meshMat = new THREE.MeshStandardMaterial({ map: meshTexture(), alphaTest: 0.45, roughness: 0.6, side: THREE.DoubleSide });
+  const mg = [-1, 1].map((s) => { const p = new THREE.PlaneGeometry(0.2, gh - 0.02); p.rotateY(Math.PI); p.translate(s * 0.1225, yc, ZF + 0.016); return p; });
+  g.add(mesh(mergeInto(mg), meshMat, false));
+  bar(0.052, 0.011, 0.008, 0, yc + 0.016, zg - 0.022, m.emblem);
+  bar(0.013, 0.04, 0.008, 0, yc - 0.004, zg - 0.022, m.emblem);
+}
+
 function buildFront(m, variant, g) {
   const is80 = variant === 'kartal80';
   const zFace = ZF - 0.004;
-  // izgara paneli
-  const grilleMat = new THREE.MeshStandardMaterial({ map: grilleTexture(), roughness: 0.6, metalness: 0.2 });
-  const gw = is80 ? 1.46 : 0.5, gh = is80 ? 0.26 : 0.16, gy = is80 ? 0.6 : 0.58;
-  const grille = mesh(new RoundedBoxGeometry(gw, gh, 0.03, 2, 0.01), grilleMat, false);
-  grille.position.set(0, gy, zFace - 0.006);
-  g.add(grille);
+  const lamps = [];
   if (is80) {
-    // izgara krom cercevesi
+    // izgara paneli + krom cercevesi
+    const grilleMat = new THREE.MeshStandardMaterial({ map: grilleTexture(), roughness: 0.6, metalness: 0.2 });
+    const gw = 1.46, gh = 0.26, gy = 0.6;
+    const grille = mesh(new RoundedBoxGeometry(gw, gh, 0.03, 2, 0.01), grilleMat, false);
+    grille.position.set(0, gy, zFace - 0.006);
+    g.add(grille);
     const frame = sweep([new THREE.Vector3(-0.74, gy + gh / 2 + 0.008, zFace - 0.022), new THREE.Vector3(0.74, gy + gh / 2 + 0.008, zFace - 0.022)], roundRectProfile(0.012, 0.012, 0.004), { up: new THREE.Vector3(0, 0, -1) });
     g.add(mesh(frame, m.chrome, false));
+  } else {
+    buildFront90(m, g, lamps);
   }
   // farlar
-  const lamps = [];
   const addRound = (x, y, r) => {
     const lg = new THREE.Group();
     const bezel = lathe([[r + 0.012, -0.004], [r + 0.014, 0.012], [r + 0.006, 0.02], [r - 0.002, 0.014]], 40, 'z');
@@ -407,38 +552,25 @@ function buildFront(m, variant, g) {
     const lensMat = m.headLens.clone(); lensMat.map = lensTexture();
     const lens = lathe([[0.0005, 0.021], [r * 0.6, 0.019], [r * 0.95, 0.012], [r + 0.002, 0.004]], 40, 'z');
     lg.add(mesh(lens, lensMat, false));
-    lens.userData.lens = true; lamps.push({ lens: lensMat, refl: m.reflector, x });
+    lens.userData.lens = true; lamps.push({ lens: lensMat, refl: m.reflector, x, opacity: lensMat.opacity });
     lg.rotation.y = Math.PI; // +z eksenli lathe -> one (-z) baksin
     lg.position.set(x, y, zFace - 0.012);
     g.add(lg);
   };
   if (is80) {
     for (const s of [-1, 1]) { addRound(s * 0.615, 0.6, 0.082); addRound(s * 0.44, 0.6, 0.07); }
-  } else {
-    for (const s of [-1, 1]) {
-      const lg = new THREE.Group();
-      lg.add(mesh(new RoundedBoxGeometry(0.31, 0.15, 0.03, 2, 0.008), m.blackPlastic, false));
-      const lensMat = m.headLens.clone(); lensMat.map = lensTexture();
-      const lens = mesh(new RoundedBoxGeometry(0.29, 0.13, 0.02, 2, 0.006), lensMat, false);
-      lens.position.z = -0.012; lg.add(lens);
-      const refl = mesh(new THREE.PlaneGeometry(0.27, 0.11), m.reflector, false); refl.position.z = 0.002; refl.rotation.y = Math.PI; lg.add(refl);
-      lamps.push({ lens: lensMat, refl: m.reflector, x: s * 0.555 });
-      lg.position.set(s * 0.555, 0.585, zFace - 0.015);
-      g.add(lg);
-    }
+    const emb = mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.01, 6), m.chrome, false);
+    emb.rotation.x = Math.PI / 2; emb.position.set(0, 0.6, zFace - 0.026);
+    g.add(emb);
   }
-  // amblem
-  const emb = mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.01, 6), m.chrome, false);
-  emb.rotation.x = Math.PI / 2; emb.position.set(0, is80 ? 0.6 : 0.58, zFace - 0.026);
-  g.add(emb);
   // tampon
-  const bumperPath = (zb, y) => {
+  const bumperPath = (zb, y, tail = 0.30) => {
     const pts = [];
-    pts.push(new THREE.Vector3(-0.84, y, zb + 0.30));
+    pts.push(new THREE.Vector3(-0.84, y, zb + tail));
     for (let k = 0; k <= 8; k++) { const an = Math.PI - (k / 8) * (Math.PI / 2); pts.push(new THREE.Vector3(-0.66 + 0.18 * Math.cos(an), y, zb + 0.18 - 0.18 * Math.sin(an))); }
     for (let k = 1; k < 10; k++) pts.push(new THREE.Vector3(lerp(-0.66, 0.66, k / 10), y, zb - 0.004 * Math.sin((k / 10) * Math.PI)));
     for (let k = 0; k <= 8; k++) { const an = Math.PI / 2 - (k / 8) * (Math.PI / 2); pts.push(new THREE.Vector3(0.66 + 0.18 * Math.cos(an), y, zb + 0.18 - 0.18 * Math.sin(an))); }
-    pts.push(new THREE.Vector3(0.84, y, zb + 0.30));
+    pts.push(new THREE.Vector3(0.84, y, zb + tail));
     return pts;
   };
   if (is80) {
@@ -455,16 +587,19 @@ function buildFront(m, variant, g) {
       sig.position.set(s * 0.6, 0.355, ZF - 0.04); g.add(sig);
     }
   } else {
-    const bar = sweep(bumperPath(ZF - 0.045, 0.41), [{ x: -0.03, y: -0.085 }, { x: 0.025, y: -0.09 }, { x: 0.04, y: -0.04 }, { x: 0.042, y: 0.05 }, { x: 0.02, y: 0.08 }, { x: -0.03, y: 0.075 }]);
+    // buyuk, yanlara (camurluk yayina kadar) sarilan siyah plastik tampon; sinyaller farda
+    const bar = sweep(bumperPath(ZF - 0.045, 0.4, 0.36), [{ x: -0.03, y: -0.11 }, { x: 0.03, y: -0.115 }, { x: 0.046, y: -0.06 }, { x: 0.05, y: 0.06 }, { x: 0.034, y: 0.1 }, { x: -0.03, y: 0.098 }]);
     g.add(mesh(bar, m.blackPlastic));
-    for (const s of [-1, 1]) {
-      const sig = mesh(new RoundedBoxGeometry(0.12, 0.05, 0.02, 2, 0.008), m.amber, false);
-      sig.position.set(s * 0.67, 0.45, ZF - 0.085); g.add(sig);
-    }
+    // alt hava girisi
+    const slot = mesh(new RoundedBoxGeometry(0.56, 0.038, 0.006, 2, 0.003), m.slot, false);
+    slot.position.set(0, 0.317, ZF - 0.085); g.add(slot);
+    const slat = mesh(new RoundedBoxGeometry(0.54, 0.007, 0.008, 1, 0.002), m.blackPlastic, false);
+    slat.position.set(0, 0.317, ZF - 0.088); g.add(slat);
   }
   // plaka
   const plate = mesh(new THREE.PlaneGeometry(0.52, 0.114), new THREE.MeshStandardMaterial({ map: plateTexture('34 TK 1980'), roughness: 0.5 }), false);
-  plate.rotation.y = Math.PI; plate.position.set(0, is80 ? 0.43 : 0.4, ZF - (is80 ? 0.087 : 0.09));
+  // tampon yuzunun (orta bombe dahil) 4 mm onunde
+  plate.rotation.y = Math.PI; plate.position.set(0, is80 ? 0.43 : 0.41, ZF - (is80 ? 0.092 : 0.103));
   g.add(plate);
   return lamps;
 }
@@ -522,8 +657,8 @@ function buildRear(m, variant, g) {
     g.add(mesh(sweep(pts, [{ x: -0.03, y: -0.085 }, { x: 0.025, y: -0.09 }, { x: 0.04, y: -0.04 }, { x: 0.042, y: 0.05 }, { x: 0.02, y: 0.08 }, { x: -0.03, y: 0.075 }].map((q) => ({ x: -q.x, y: q.y }))), m.blackPlastic));
   }
   // egzoz
-  const ex = mesh(new THREE.CylinderGeometry(0.024, 0.024, 0.2, 12, 1, true), m.drum);
-  ex.rotation.x = Math.PI / 2; ex.position.set(0.45, 0.2, ZR - 0.02); g.add(ex);
+  const ex = mesh(new THREE.CylinderGeometry(0.024, 0.024, 0.14, 12, 1, true), m.drum);
+  ex.rotation.x = Math.PI / 2; ex.position.set(0.45, 0.24, ZR + 0.01); g.add(ex);
   return tails;
 }
 
@@ -541,7 +676,7 @@ function buildSideDetails(m, variant, g) {
     g.add(mesh(sweep(pts, prof, { up: new THREE.Vector3(1, 0, 0) }), is80 ? m.chrome : m.blackPlastic));
     // kapi kollari
     for (const z of [0.31, 1.13]) {
-      const h = mesh(new RoundedBoxGeometry(0.13, 0.026, 0.03, 2, 0.01), m.chrome, false);
+      const h = mesh(new RoundedBoxGeometry(0.13, 0.026, 0.03, 2, 0.01), is80 ? m.chrome : m.blackPlastic, false);
       h.position.set(s * (sidePoint(z, 0.835, 0.012)), 0.835, z);
       g.add(h);
     }
@@ -552,9 +687,13 @@ function buildSideDetails(m, variant, g) {
     if (is80) {
       const head = mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.03, 24), m.chrome, false);
       head.rotation.x = Math.PI / 2; head.position.set(s * 0.04, 0.04, -0.03); mirror.add(head);
+      const gl = mesh(new THREE.CircleGeometry(0.052, 24), m.mirror, false);
+      gl.position.set(s * 0.04, 0.04, -0.0145); mirror.add(gl);
     } else {
       const head = mesh(new RoundedBoxGeometry(0.14, 0.09, 0.05, 2, 0.015), m.blackPlastic, false);
       head.position.set(s * 0.07, 0.04, -0.01); mirror.add(head);
+      const gl = mesh(new THREE.PlaneGeometry(0.122, 0.074), m.mirror, false);
+      gl.position.set(s * 0.07, 0.04, 0.0155); mirror.add(gl);
     }
     mirror.position.set(s * (halfW(-0.45) + 0.0), yTop(-0.45) + 0.06, -0.45);
     g.add(mirror);
@@ -565,6 +704,20 @@ function buildSideDetails(m, variant, g) {
     for (const z of [0.07, 1.88]) {
       const foot = mesh(new RoundedBoxGeometry(0.04, 0.045, 0.06, 2, 0.01), m.blackPlastic, false);
       foot.position.set(s * 0.58, yRoof(z) + 0.02, z); g.add(foot);
+    }
+  }
+  if (!is80) {
+    // marspiyel: iki camurluk arasinda, alt govde kosesine sarilan siyah plastik esik kaplamasi
+    const cx = W - 0.085, cy = 0.295 + 0.085, R = 0.085;
+    const prof = [];
+    for (let k = 0; k <= 6; k++) { const an = -1.3 + (1.3 * k) / 6; prof.push({ x: cx + (R + 0.012) * Math.cos(an), y: cy + (R + 0.012) * Math.sin(an) }); }
+    prof.push({ x: cx + R + 0.012, y: cy + 0.024 }, { x: cx + R - 0.004, y: cy + 0.024 });
+    for (let k = 6; k >= 0; k--) { const an = -1.3 + (1.3 * k) / 6; prof.push({ x: cx + (R - 0.004) * Math.cos(an), y: cy + (R - 0.004) * Math.sin(an) }); }
+    const z0 = AXF + ARCH_R + 0.012, z1 = AXR - ARCH_R - 0.012;
+    for (const s of [-1, 1]) {
+      const path = [];
+      for (let k = 0; k <= 12; k++) path.push(new THREE.Vector3(0, 0, s > 0 ? lerp(z0, z1, k / 12) : lerp(z1, z0, k / 12)));
+      g.add(mesh(sweep(path, prof), m.blackPlastic));
     }
   }
   // pacaliklar (camurluk tozluklari) - her tekerin arkasinda
@@ -634,26 +787,29 @@ function buildInterior(m, g) {
   // torpido
   const dash = mesh(new RoundedBoxGeometry(1.5, 0.2, 0.38, 3, 0.05), m.dash, false);
   dash.position.set(0, 0.84, ZWS0 + 0.2); g.add(dash);
-  const hood = mesh(new RoundedBoxGeometry(0.42, 0.07, 0.16, 2, 0.03), m.dash, false);
-  hood.position.set(-0.36, 0.955, ZWS0 + 0.29); g.add(hood);
-  // gostergeler
+  // gosterge yuvasi (direksiyonun ust yarisindan gorunur) ve gunluk siperi
+  const binnacle = mesh(new RoundedBoxGeometry(0.42, 0.16, 0.1, 2, 0.03), m.dash, false);
+  binnacle.position.set(-0.36, 0.95, ZWS0 + 0.32); g.add(binnacle);
+  const hood = mesh(new RoundedBoxGeometry(0.44, 0.035, 0.15, 2, 0.012), m.dash, false);
+  hood.position.set(-0.36, 1.035, ZWS0 + 0.35); hood.rotation.x = 0.1; g.add(hood);
+  // gostergeler: surucunun gozune donuk
   const gauges = gaugeTexture();
   const gp = mesh(new THREE.PlaneGeometry(0.34, 0.17), new THREE.MeshBasicMaterial({ map: gauges.tex, toneMapped: false }), false);
-  gp.position.set(-0.36, 0.905, ZWS0 + 0.375); gp.rotation.x = -0.25;
+  gp.position.set(-0.36, 0.95, ZWS0 + 0.415); gp.rotation.x = -0.35;
   g.add(gp);
   parts.gauges = gauges;
   // direksiyon (sol direksiyonlu)
   const sw = new THREE.Group();
   const rim = mesh(new THREE.TorusGeometry(0.19, 0.016, 10, 40), m.rubber, false); sw.add(rim);
-  for (let k = 0; k < 3; k++) {
+  // T kollu (3, 9 ve 6 yonu): ust yarida gostergeleri kapatan kol yok
+  for (const a of [0, Math.PI, -Math.PI / 2]) {
     const sp = mesh(new THREE.BoxGeometry(0.17, 0.025, 0.012), m.dash, false);
-    const a = -Math.PI / 2 + k * ((2 * Math.PI) / 3) + Math.PI / 6;
     sp.position.set(Math.cos(a) * 0.09, Math.sin(a) * 0.09, 0); sp.rotation.z = a; sw.add(sp);
   }
   const hub = mesh(new THREE.CylinderGeometry(0.045, 0.05, 0.04, 16), m.dash, false); hub.rotation.x = Math.PI / 2; sw.add(hub);
   const swHolder = new THREE.Group();
   swHolder.add(sw);
-  swHolder.position.set(-0.36, 0.9, ZWS0 + 0.53);
+  swHolder.position.set(-0.36, 0.88, ZWS0 + 0.53);
   swHolder.rotation.x = -0.42;
   g.add(swHolder);
   parts.steeringWheel = sw;
@@ -669,7 +825,15 @@ function buildInterior(m, g) {
   const lever = mesh(new THREE.CylinderGeometry(0.008, 0.01, 0.25, 8), m.chrome, false); lever.position.set(0, 0.5, -0.12); lever.rotation.x = -0.25; g.add(lever);
   const knob = mesh(new THREE.SphereGeometry(0.025, 12, 10), m.dash, false); knob.position.set(0, 0.62, -0.15); g.add(knob);
   // dikiz aynasi
-  const rv = mesh(new RoundedBoxGeometry(0.22, 0.065, 0.025, 2, 0.01), m.dash, false); rv.position.set(0, 1.27, ZWS1 + 0.12); g.add(rv);
+  // ic dikiz aynasi: surucu ile arka cam arasini gosterecek aciyla dondurulmus ayna yuzeyi
+  const rvg = new THREE.Group();
+  rvg.add(mesh(new RoundedBoxGeometry(0.19, 0.056, 0.025, 2, 0.01), m.dash, false));
+  const rglass = mesh(new THREE.PlaneGeometry(0.176, 0.044), m.mirror, false);
+  rglass.position.z = 0.0135; rvg.add(rglass);
+  rvg.position.set(0, 1.29, ZWS1 + 0.09); rvg.rotation.set(0.15, -0.41, 0, 'YXZ');
+  g.add(rvg);
+  const stem = mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.07, 8), m.dash, false);
+  stem.position.set(0, 1.335, ZWS1 + 0.075); g.add(stem);
   return parts;
 }
 
@@ -689,7 +853,7 @@ function tireTextures() {
   return { normal };
 }
 
-function buildWheel(m, side, tires) {
+function buildWheel(m, side, tires, variant) {
   const g = new THREE.Group();
   const spin = new THREE.Group();
   g.add(spin);
@@ -702,15 +866,35 @@ function buildWheel(m, side, tires) {
   // celik jant: dis cember + gobek diski
   const rim = lathe([[0.172, -0.072], [0.178, -0.066], [0.166, -0.06], [0.164, 0.04], [0.176, 0.05], [0.172, 0.058], [0.16, 0.055], [0.15, 0.03], [0.12, 0.022], [0.07, 0.03], [0.04, 0.032]], 40, 'x');
   spin.add(mesh(rim, m.steel));
-  // krom jant kapagi
-  const cap = lathe([[0.128, 0.034], [0.124, 0.046], [0.11, 0.054], [0.08, 0.06], [0.04, 0.064], [0.001, 0.065]], 40, 'x');
-  spin.add(mesh(cap, m.chrome, false));
-  // bijonlar (kapak uzerinde kabartma)
-  for (let k = 0; k < 4; k++) {
-    const a = (k / 4) * Math.PI * 2 + Math.PI / 4;
-    const nut = mesh(new THREE.CylinderGeometry(0.011, 0.011, 0.012, 6), m.chrome, false);
-    nut.rotation.z = Math.PI / 2; nut.position.set(0.064, Math.cos(a) * 0.075, Math.sin(a) * 0.075);
-    spin.add(nut);
+  if (variant === 'kartal90') {
+    // 90'lar: jantin tamamini orten gumus plastik kapak, cevresinde havalandirma yariklari
+    const cover = lathe([[0.171, 0.046], [0.17, 0.054], [0.163, 0.06], [0.14, 0.0625], [0.1, 0.0635], [0.072, 0.067], [0.045, 0.069], [0.001, 0.0695]], 40, 'x');
+    spin.add(mesh(cover, m.hubcap, false));
+    const slots = [];
+    for (let k = 0; k < 16; k++) {
+      const a = (k / 16) * Math.PI * 2;
+      const sg = new THREE.BoxGeometry(0.004, 0.026, 0.011);
+      sg.rotateX(a);
+      sg.translate(0.0635, Math.cos(a) * 0.124, Math.sin(a) * 0.124);
+      slots.push(sg);
+    }
+    const logo = new THREE.CylinderGeometry(0.024, 0.024, 0.004, 20);
+    logo.rotateZ(Math.PI / 2); logo.translate(0.0705, 0, 0);
+    slots.push(logo);
+    spin.add(mesh(mergeInto(slots), m.slot, false));
+  } else {
+    // krom jant kapagi
+    const cap = lathe([[0.128, 0.034], [0.124, 0.046], [0.11, 0.054], [0.08, 0.06], [0.04, 0.064], [0.001, 0.065]], 40, 'x');
+    spin.add(mesh(cap, m.chrome, false));
+    // bijonlar (kapak uzerinde kabartma), tek geometri
+    const nuts = [];
+    for (let k = 0; k < 4; k++) {
+      const a = (k / 4) * Math.PI * 2 + Math.PI / 4;
+      const nut = new THREE.CylinderGeometry(0.011, 0.011, 0.012, 6);
+      nut.rotateZ(Math.PI / 2); nut.translate(0.064, Math.cos(a) * 0.075, Math.sin(a) * 0.075);
+      nuts.push(nut);
+    }
+    spin.add(mesh(mergeInto(nuts), m.chrome, false));
   }
   // fren kampanasi (donmez)
   const drum = mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.09, 24), m.drum, false);
@@ -748,7 +932,7 @@ export class KartalModel {
     const tires = tireTextures();
     this.wheels = [];
     for (const s of [-1, 1, -1, 1]) {
-      const w = buildWheel(m, s, tires);
+      const w = buildWheel(m, s, tires, variant);
       this.root.add(w.group);
       this.wheels.push(w);
     }
@@ -756,8 +940,9 @@ export class KartalModel {
     this.spots = [];
     for (const s of [-1, 1]) {
       const sp = new THREE.SpotLight(0xfff1d6, 0, 70, 0.42, 0.55, 1.6);
-      sp.position.set(s * 0.55, 0.6, ZF - 0.05);
-      sp.target.position.set(s * 0.8, 0.0, ZF - 25);
+      const lx = variant === 'kartal80' ? 0.55 : 0.41;
+      sp.position.set(s * lx, 0.6, ZF - 0.05);
+      sp.target.position.set(s * (lx + 0.25), 0.0, ZF - 25);
       sp.castShadow = false;
       this.body.add(sp, sp.target);
       this.spots.push(sp);
@@ -885,7 +1070,7 @@ export class KartalModel {
         g.attributes.normal.needsUpdate = true;
       }
     }
-    for (const l of this.headLamps) { l.lens.color.set(0xffffff); l.lens.opacity = 0.55; l.dead = false; }
+    for (const l of this.headLamps) { l.lens.color.set(0xffffff); l.lens.opacity = l.opacity ?? 0.55; l.dead = false; }
     const g = this.mats.glass;
     g.roughness = 0.02; g.opacity = 0.42; g.color.set(0x0b1416); g.clearcoatRoughness = 0;
     this.broken = { L: false, R: false, glass: false };
@@ -899,7 +1084,7 @@ export class KartalModel {
 
   /** Dinamik yansima haritasi alacak malzemeler. */
   reflectiveMaterials() {
-    const set = new Set([this.mats.paint, this.mats.chrome, this.mats.glass, this.mats.reflector, this.mats.steel]);
+    const set = new Set([this.mats.paint, this.mats.chrome, this.mats.glass, this.mats.reflector, this.mats.steel, this.mats.hubcap, this.mats.sigRefl, this.mats.emblem, this.mats.mirror]);
     for (const l of this.headLamps) set.add(l.lens);
     for (const k of ['tail', 'amber', 'reverse']) for (const m of this.tails[k]) set.add(m);
     return [...set];

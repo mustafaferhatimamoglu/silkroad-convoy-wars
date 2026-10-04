@@ -96,7 +96,7 @@ export class VehicleCamera {
       cam.position.x += shx; cam.position.y += shy;
       cam.lookAt(_look);
     } else if (this.mode === 'hood' || this.mode === 'cockpit') {
-      const local = this.mode === 'hood' ? _off.set(0, 0.47, -0.42) : _off.set(-0.36, 0.66, 0.47);
+      const local = this.mode === 'hood' ? _off.set(0, 0.47, -0.42) : _off.set(-0.36, 0.70, 0.47);
       cam.position.copy(local).applyQuaternion(v.quaternion).add(pos);
       _e.set(this.lookPitch - (this.mode === 'cockpit' ? 0.07 : 0.03), this.lookYaw, 0, 'YXZ');
       _q.setFromEuler(_e);
