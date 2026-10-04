@@ -32,7 +32,7 @@ Hızlı test adresleri:
 | C | Kamera: takip, uzak, kaput, kokpit, sinematik |
 | Sağ fare tuşu | Etrafa bakma |
 | L | Farlar |
-| R | Aracı düzelt / kurtar |
+| R | Aracı düzelt; iki kez basınca (ya da suya/çukura düşünce) son güvenli noktaya dön |
 | T | Otomatik / manuel şanzıman (manuelde Q / E vites) |
 | Esc | Menü |
 

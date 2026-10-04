@@ -58,11 +58,15 @@ export class Vehicle {
     return m;
   }
 
-  /** Araci (x,z) noktasinda zemine yerlestirir. yaw: 0 = kuzey. */
-  spawn(x, z, yaw = 0, yHint = null) {
+  /**
+   * Araci (x,z) noktasinda zemine yerlestirir. yaw: 0 = kuzey.
+   * above: zemin arama isini yHint'in ne kadar ustunden baslasin (kopru alti, kemer
+   * altinda kisa tutulur ki arac catinin ustune konmasin).
+   */
+  spawn(x, z, yaw = 0, yHint = null, above = 60) {
     let y = yHint;
     if (this.ground) {
-      const o = new V3(x, (yHint ?? 0) + 60, z), d = new V3(0, -1, 0);
+      const o = new V3(x, (yHint ?? 0) + above, z), d = new V3(0, -1, 0);
       const hit = this.ground.raycast(o, d, 400);
       if (hit) y = hit.point.y;
     }
@@ -72,11 +76,51 @@ export class Vehicle {
     this._sync(1);
   }
 
-  /** Takla atmis/sikismis araci duzeltir (R). */
+  /**
+   * R: takla atmis/sikismis araci duzeltir. Suya ya da derin bir yere dusmusse veya
+   * 4 sn icinde ikinci kez basilirsa son guvenli noktaya (yolda, dik, su disi) geri dondurur.
+   * Donus: 'upright' | 'safe'
+   */
   recover() {
-    const b = this.sim.body;
-    const yaw = this.sim.yaw;
-    this.spawn(b.pos.x, b.pos.z, yaw, b.pos.y);
+    const b = this.sim.body, now = performance.now();
+    const list = this._safe || (this._safe = []);
+    const groundY = b.pos.y - this.params.cgHeight;
+    const wl = this.app.world ? this.app.world.waterAt(b.pos.x, b.pos.z) : null;
+    const inWater = wl !== null && wl !== undefined && wl > groundY + 0.35;
+    const last = list[list.length - 1];
+    const fell = last && last.y - groundY > 4;
+    const again = this._lastRecover && now - this._lastRecover < 4000;
+    this._lastRecover = now;
+    if ((inWater || fell || again) && list.length) {
+      // en yeni kayit dusus kenarina cok yakin olabilir: bir oncekini sec, sonrakileri at
+      const i = Math.max(0, list.length - 2);
+      const p = list[i];
+      list.length = i;   // tekrar basilirsa daha geriye gider
+      this.sim.reset(p.x, p.y + this.params.cgHeight + 0.06, p.z, p.yaw);
+      this.acc = 0;
+      this._sync(1);
+      return 'safe';
+    }
+    this.spawn(b.pos.x, b.pos.z, this.sim.yaw, b.pos.y, 2.5);
+    return 'upright';
+  }
+
+  /** Guvenli nokta gecmisi (yarim saniyede bir, en az 3 m arayla, ~40 sn). */
+  _trackSafe(dt) {
+    this._safeT = (this._safeT || 0) + dt;
+    if (this._safeT < 0.5) return;
+    this._safeT = 0;
+    const s = this.sim, b = s.body, q = b.q;
+    if (1 - 2 * (q.x * q.x + q.z * q.z) < 0.93) return;
+    for (const w of s.wheels) if (!w.contact || w.normal.y < 0.87) return;
+    const groundY = b.pos.y - this.params.cgHeight;
+    const wl = this.app.world ? this.app.world.waterAt(b.pos.x, b.pos.z) : null;
+    if (wl !== null && wl !== undefined && wl > groundY - 0.1) return;
+    const list = this._safe || (this._safe = []);
+    const last = list[list.length - 1];
+    if (last && Math.hypot(last.x - b.pos.x, last.z - b.pos.z) < 3) return;
+    list.push({ x: b.pos.x, y: groundY, z: b.pos.z, yaw: s.yaw });
+    if (list.length > 80) list.shift();
   }
 
   update(dt, controls) {
@@ -95,6 +139,7 @@ export class Vehicle {
     }
     if (n >= 24) this.acc = 0;
     this.steps = n;
+    if (ground) this._trackSafe(dt);
     this._sync(this.acc / STEP);
     this._reflPos.copy(this.position).y += 0.6;
     this.reflections.update(this._reflPos, [this.root, this.shadow]);

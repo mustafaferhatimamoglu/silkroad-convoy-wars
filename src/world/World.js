@@ -25,6 +25,7 @@ export class World {
     }, opts);
     this.data = new WorldData('assets/');
     this.regions = new Map();
+    this.bvhRegions = [];   // obje carpisma agaci hazir bolgeler
     this.group = new THREE.Group(); this.group.name = 'World';
     this.terrainGroup = new THREE.Group();
     this.objectGroup = new THREE.Group();
@@ -312,6 +313,11 @@ export class World {
         const t0 = performance.now();
         near.bvh = new MeshBVH(built.collision, { maxLeafSize: 12 });
         near.bvhMs = performance.now() - t0;
+        // dunya XZ siniri: objeler bolge sinirini asabilir (merdiven, kopru), sorgular buna bakar
+        built.collision.computeBoundingBox();
+        const bb = built.collision.boundingBox;
+        near.bvhBox = { x0: bb.min.x + r.origin.x, x1: bb.max.x + r.origin.x, z0: bb.min.z + r.origin.z, z1: bb.max.z + r.origin.z };
+        this.bvhRegions.push(r);
       }
     } catch (e) {
       console.warn('Objeler kurulamadi', r.key, e);
@@ -370,7 +376,11 @@ export class World {
       n.objects.group.traverse((o) => { if (o.geometry) o.geometry.dispose(); });
       for (const tk of n.objects.textures) this.objPool.release(tk);
     }
-    if (n.bvh) { n.bvh.geometry.dispose(); n.bvh = null; }
+    if (n.bvh) {
+      n.bvh.geometry.dispose(); n.bvh = null;
+      const i = this.bvhRegions.indexOf(r);
+      if (i >= 0) this.bvhRegions.splice(i, 1);
+    }
     r.near = null;
     if (r.lod === 'near') r.lod = null;
   }
@@ -453,15 +463,14 @@ export class World {
   }
 
   /** x,z cevresindeki (yaricap m) yakin bolgelerin carpisma BVH'lari. */
+  /** Sorgu karesine (x+-radius, z+-radius) obje carpisma siniri degen bolgeler. Bellek ayirmaz. */
   bvhsNear(x, z, radius, out) {
     out.length = 0;
-    const p0 = this.fromThree(x - radius, z + radius);
-    const p1 = this.fromThree(x + radius, z - radius);
-    for (let rz = p0.rz; rz <= p1.rz; rz++) {
-      for (let rx = p0.rx; rx <= p1.rx; rx++) {
-        const r = this.regions.get(this.data.key(rx, rz));
-        if (r && r.near && r.near.bvh) out.push(r);
-      }
+    const list = this.bvhRegions;
+    for (let i = 0; i < list.length; i++) {
+      const b = list[i].near.bvhBox;
+      if (x + radius < b.x0 || x - radius > b.x1 || z + radius < b.z0 || z - radius > b.z1) continue;
+      out.push(list[i]);
     }
     return out;
   }
