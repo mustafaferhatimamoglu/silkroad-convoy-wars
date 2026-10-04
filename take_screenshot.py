@@ -74,13 +74,23 @@ async def run():
         await asyncio.sleep(3)
 
         # Teleport to city if requested
-        city = sys.argv[1] if len(sys.argv) > 1 else '135,92'
+        arg1 = sys.argv[1] if len(sys.argv) > 1 else '135,92'
+        arg2 = sys.argv[2] if len(sys.argv) > 2 else 'plaza'
+
+        mode = arg2
+        city = arg1
+        if arg1 in ['kartal_drive', 'kartal_race', 'plaza', 'ground_close', 'bridge_view', 'jangan_ground']:
+            mode = arg1
+            city = '168,97' if 'jangan' in mode or 'kartal' in mode else '135,92'
+
         res = await call('Runtime.evaluate', {
             'expression': f'''
                 (function() {{
                     const sel = document.getElementById('sel-city');
-                    sel.value = '{city}';
-                    sel.dispatchEvent(new Event('change'));
+                    if (sel) {{
+                        sel.value = '{city}';
+                        sel.dispatchEvent(new Event('change'));
+                    }}
                     return 'Teleported to {city}';
                 }})()
             '''
@@ -92,8 +102,8 @@ async def run():
 
         # Raycast and check plaza & castle positions
         ray_res = await call('Runtime.evaluate', {
-            'expression': '''
-                (function() {
+            'expression': f'''
+                (function() {{
                     const plazaObj = window.scene.getObjectByName('model_685_oas_hot_plaza01');
                     const castleObj = window.scene.getObjectByName('model_681_oas_hot_c1_castle');
                     
@@ -104,45 +114,75 @@ async def run():
                     if (castleObj) castleObj.getWorldPosition(cPos);
 
                     // Kamerayi amaca uygun ayarla
-                    const mode = "''' + (sys.argv[2] if len(sys.argv) > 2 and sys.argv[2] else 'plaza') + '''";
-                    if (mode === 'plaza' && plazaObj) {
+                    const mode = "{mode}";
+                    if (mode === 'plaza' && plazaObj) {{
                         // Hotan meydani ve mermer kaplama temiz sinematik aci (palmiye engelsiz)
                         window.controls.target.set(pPos.x, pPos.y + 8, pPos.z);
                         window.camera.position.set(pPos.x - 15, pPos.y + 45, pPos.z + 65);
                         window.controls.update();
-                    } else if (mode === 'ground_close' && plazaObj) {
+                    }} else if (mode === 'ground_close' && plazaObj) {{
                         // Zemin mikro dokusuna cok yakindan bakis (detail texture)
                         window.controls.target.set(pPos.x + 35, pPos.y + 10, pPos.z + 30);
                         window.camera.position.set(pPos.x + 30, pPos.y + 15, pPos.z + 42);
                         window.controls.update();
-                    } else if (mode === 'bridge_view') {
+                    }} else if (mode === 'bridge_view') {{
                         // Kullanicinin screenshot'indaki kopru ve yamac/cimenler
                         const bx = -6240, by = 15, bz = 590;
                         window.controls.target.set(bx, by, bz);
                         window.camera.position.set(bx + 45, by + 40, bz + 55);
                         window.controls.update();
-                    } else if (mode === 'jangan_ground') {
+                    }} else if (mode === 'jangan_ground') {{
                         // Jangan meydan & zemin mikro dokusu
                         const t = window.controls.target;
                         window.camera.position.set(t.x - 30, t.y + 14, t.z + 35);
                         window.controls.update();
-                    }
+                    }} else if (mode === 'kartal_drive') {{
+                        // Tofas Kartal surus modunu baslat
+                        document.getElementById('btn-car-mode').click();
+                        // Araba bir miktar gaz versin
+                        window.keys['KeyW'] = true;
+                    }} else if (mode === 'kartal_race') {{
+                        // Jangan -> Hotan yarisini baslat
+                        document.getElementById('btn-start-race').click();
+                        window.keys['KeyW'] = true;
+                    }}
 
-                    return JSON.stringify({
+                    return JSON.stringify({{
                         plazaFound: !!plazaObj,
                         plazaWorldPos: plazaObj ? pPos : null,
                         castleFound: !!castleObj,
                         castleWorldPos: castleObj ? cPos : null,
                         cameraPos: window.camera.position,
-                        target: window.controls.target
-                    });
-                })()
+                        target: window.controls.target,
+                        isCarMode: window.isCarMode,
+                        vehiclePos: window.vehicle ? window.vehicle.position : null,
+                        vehicleYaw: window.vehicle ? window.vehicle.yaw : null
+                    }});
+                }})()
             '''
         })
         print('SCENE & CAMERA STATUS:', ray_res, flush=True)
 
         # Wait a moment for controls/camera to settle and render
         await asyncio.sleep(2)
+
+        inspect_res = await call('Runtime.evaluate', {
+            'expression': '''
+                (function() {
+                    const v = window.vehicle;
+                    const c = window.camera;
+                    return JSON.stringify({
+                        isCarMode: window.isCarMode,
+                        camPos: c ? c.position : null,
+                        vehPos: v ? v.position : null,
+                        vehYaw: v ? v.yaw : null,
+                        speed: v ? v.speedKmh : 0,
+                        dist: (v && c) ? c.position.distanceTo(v.position) : null
+                    });
+                })()
+            '''
+        })
+        print('INSPECT BEFORE SHOT:', inspect_res.get('result', {}).get('result', {}).get('value'), flush=True)
 
         shot = await call('Page.captureScreenshot', {'format': 'png'})
         out_name = sys.argv[3] if len(sys.argv) > 3 and sys.argv[3] else 'screenshot.png'
