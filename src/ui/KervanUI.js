@@ -102,7 +102,7 @@ export class KervanUI {
       if (b && !b.disabled) {
         const code = b.dataset.b;
         const n = s.buy(code, +b.dataset.q, buyPrice(code, city, s.day));
-        if (n) { onChange && onChange(`${n} birim ${GOODS[code].tr} alındı`); this.mode.sfx && this.mode.sfx('coin'); }
+        if (n) { s.boughtIn = city; onChange && onChange(`${n} birim ${GOODS[code].tr} alındı`); this.mode.sfx && this.mode.sfx('coin'); }
         render();
       }
       if (e.target.closest('[data-back]')) this.mode.openNpc(npc);

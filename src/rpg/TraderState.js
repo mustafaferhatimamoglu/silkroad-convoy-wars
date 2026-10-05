@@ -41,8 +41,8 @@ export class TraderState {
 
   save() {
     try {
-      const { gold, cargo, cost, transport, transportHp, tradeXp, level, xp, maxHp, hp, potions, weapon, armor, playTime, city, stats, tutorial } = this;
-      localStorage.setItem(KEY, JSON.stringify({ gold, cargo, cost, transport, transportHp, tradeXp, level, xp, maxHp, hp, potions, weapon, armor, playTime, city, stats, tutorial }));
+      const { gold, cargo, cost, transport, transportHp, tradeXp, level, xp, maxHp, hp, potions, weapon, armor, playTime, city, stats, tutorial, look, boughtIn } = this;
+      localStorage.setItem(KEY, JSON.stringify({ gold, cargo, cost, transport, transportHp, tradeXp, level, xp, maxHp, hp, potions, weapon, armor, playTime, city, stats, tutorial, look, boughtIn }));
     } catch { /* gizli pencere vb. */ }
   }
 

@@ -43,7 +43,7 @@ export class Menu {
       if (act === 'drive') this.cityPicker('drive');
       else if (act === 'explore') this.cityPicker('explore');
       else if (act === 'rally') this.game.startRally();
-      else if (act === 'kervan') this.cityPicker('kervan');
+      else if (act === 'kervan') this.kervanMenu();
       else if (act === 'garage') this.garage();
       else if (act === 'settings') this.settings(() => this.main());
     });
@@ -72,6 +72,38 @@ export class Menu {
     el.addEventListener('dblclick', (e) => {
       const c = e.target.closest('[data-c]');
       if (c) { this.game.app.settings.set('lastCity', c.dataset.c); this.clear(); this._start(kind, c.dataset.c); }
+    });
+    this.root.appendChild(el);
+    this.layer = el;
+  }
+
+  /** Kervan RPG: kayitli oyuna devam ya da yeni kervan (gorunum secimi). */
+  kervanMenu() {
+    this.clear();
+    const s = this.game.app.settings;
+    let save = null;
+    try { save = JSON.parse(localStorage.getItem('sro-v4-kervan') || 'null'); } catch { /* */ }
+    const looks = [['player_ch_m', 'Çinli tüccar', 'Jangan doğumlu'], ['player_ch_w', 'Çinli tüccar kadın', 'Jangan doğumlu'],
+      ['player_eu_m', 'Avrupalı tüccar', 'Konstantiniyye kökenli'], ['player_eu_w', 'Avrupalı tüccar kadın', 'Konstantiniyye kökenli']];
+    let look = s.get('kervanLook') || 'player_ch_m';
+    const cityName = (id) => (CITIES.find((c) => c.id === id) || CITIES[0]).name;
+    const el = h(`<div class="panel dialog interactive">
+      <h2>Kervan RPG</h2>
+      ${save ? `<button class="btn" data-a="continue">Devam et<small>${cityName(save.city)} · ${Math.round(save.gold).toLocaleString('tr-TR')} altın · seviye ${save.level} · ${save.stats ? save.stats.trips : 0} sefer</small></button>` : ''}
+      <div style="color:var(--muted);font-size:13px;margin:${save ? 14 : 0}px 0 6px">${save ? 'ya da yeni bir kervan kur:' : 'Görünümünü seç:'}</div>
+      <div class="grid2">${looks.map(([k, n, d]) => `<div class="card ${k === look ? 'sel' : ''}" data-l="${k}"><b>${n}</b><span>${d}</span></div>`).join('')}</div>
+      <div class="row" style="margin-top:14px"><button class="btn secondary" data-a="back" style="width:auto">← Geri</button><div style="flex:1"></div>
+      <button class="btn" data-a="new" style="width:auto">Yeni kervan · Jangan →</button></div>
+      ${save ? '<div class="note" style="font-size:12px;color:var(--muted);margin-top:8px">Yeni kervan kurmak kayıtlı ilerlemeni siler.</div>' : ''}
+    </div>`);
+    el.addEventListener('click', (e) => {
+      const l = e.target.closest('[data-l]');
+      if (l) { look = l.dataset.l; el.querySelectorAll('[data-l]').forEach((x) => x.classList.toggle('sel', x === l)); return; }
+      const a = e.target.closest('[data-a]');
+      if (!a) return;
+      if (a.dataset.a === 'back') this.main();
+      if (a.dataset.a === 'continue') { this.clear(); this.game.startKervan(save.city || 'jangan', { look: save.look || look }); }
+      if (a.dataset.a === 'new') { s.set('kervanLook', look); this.clear(); this.game.startKervan('jangan', { fresh: true, look }); }
     });
     this.root.appendChild(el);
     this.layer = el;

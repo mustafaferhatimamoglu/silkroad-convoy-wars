@@ -188,13 +188,13 @@ export class Game {
   }
 
   /** Kervan RPG: sehirde yaya tuccar olarak basla. */
-  async startKervan(id) {
+  async startKervan(id, { fresh = false, look = null } = {}) {
     const { KervanMode } = await import('./modes/KervanMode.js');
     const app = this.app;
     const { city, pos } = this.cityPos(id);
     this.menu.clear();
     await this.loadArea(pos, `${city.name} yükleniyor…`);
-    const mode = new KervanMode(app, { city: id, look: app.settings.get('kervanLook') || 'player_ch_m', onPause: () => this.pauseKervan() });
+    const mode = new KervanMode(app, { city: id, fresh, look: look || app.settings.get('kervanLook') || 'player_ch_m', onPause: () => this.pauseKervan() });
     app.setMode(mode);
     this.kervan = mode;
     this._hideOverlay();
@@ -208,7 +208,7 @@ export class Game {
     const resume = () => { this.menu.clear(); mode.paused = false; };
     this.menu.pause({
       onResume: resume,
-      onTeleport: (id) => { this.menu.clear(); this.startKervan(id); },
+      onTeleport: null,
       onSettings: () => this.menu.settings(() => { mode.paused = false; this.pauseKervan(); }),
       onMain: () => { this.menu.clear(); this.showMainMenu(); },
     });

@@ -192,3 +192,5 @@ select { background: #141a26; color: var(--text); border: 1px solid rgba(255, 25
 @media (max-width: 640px) { #kStatus { width: calc(100vw - 32px); } .kTable td small { display: none; } }
 #kervanHud .zone .dest { display: block; margin-top: 6px; color: #ffd36a; font-style: normal; font-size: 12px; }
 #kervanHud #minimap { pointer-events: none; }
+#kervanHud .zone .goal { display: block; margin-top: 4px; max-width: 34vw; color: #f2e9d8; font-style: normal; font-size: 13px; }
+#kervanHud .zone .goal::before { content: '▸ '; color: var(--gold); }

@@ -53,6 +53,7 @@ export class KervanMode {
     this.data = app.gameData || (app.gameData = await new GameData().load());
     this.state = this.fresh ? new TraderState() : new TraderState().restore();
     this.state.city = this.cityId;
+    this.state.look = this.look;
     this.lastCity = this.cityId;
     this.nearCity = this.cityId;
     const city = cityById(this.cityId);
@@ -87,7 +88,7 @@ export class KervanMode {
     const el = document.createElement('div');
     el.id = 'kervanHud';
     el.innerHTML = `
-      <div class="zone"><b></b><span></span><i class="dest"></i></div>
+      <div class="zone"><b></b><span></span><i class="dest"></i><i class="goal"></i></div>
       <div class="prompt hidden"></div>
       <div class="toast hidden"></div>
       <div class="help"><kbd>WASD</kbd> hareket · <kbd>Shift</kbd> yürü · <kbd>E</kbd> konuş · <kbd>Boşluk</kbd> saldır · <kbd>Tab</kbd> hedef · <kbd>Q</kbd> iksir · sağ fare: kamera · <kbd>Esc</kbd> menü</div>`;
@@ -98,6 +99,88 @@ export class KervanMode {
     this.hudPrompt = el.querySelector('.prompt');
     this.hudToast = el.querySelector('.toast');
     this.hudDest = el.querySelector('.zone .dest');
+    this.hudGoal = el.querySelector('.zone .goal');
+  }
+
+  /** Siradaki adim (yeni oyuncu icin rehber): metin + ilgili NPC rolu. */
+  objective() {
+    const s = this.state;
+    const here = cityById(this.nearCity).name, dest = cityById(this.dest).name;
+    if (this.dead) return { text: 'Bayıldın, şehre taşınıyorsun…' };
+    if (s.transport === 'none' && s.gold >= TRANSPORTS.donkey.price && this.inCity) return { text: "Ahır Sorumlusu'ndan bir yük eşeği al", role: 'stable' };
+    if (!s.load && this.inCity) return { text: `Özel Ürün Tüccarı'ndan ${here} malı yükle`, role: 'special' };
+    if (!s.load) return { text: 'Bir şehre gidip mal yükle' };
+    if (this.inCity && this.nearCity === s.boughtIn) return { text: `Yükü ${dest} şehrine götür (H: hedef değiştir)` };
+    if (this.inCity) return { text: "Özel Ürün Tüccarı'na git ve yükünü sat", role: 'special' };
+    return { text: `${dest} yolundasın: kervanını haydutlardan koru` };
+  }
+
+  _updateGoal() {
+    const o = this.objective();
+    this.goal = o;
+    this.hudGoal.textContent = o.text;
+    // hedef NPC'nin ustunde "!" isareti
+    let target = null;
+    if (o.role) {
+      let bd = Infinity;
+      for (const e of this.population.entities.values()) {
+        if (e.kind !== 'npc' || e.def.role !== o.role || !e.char) continue;
+        const d = Math.hypot(e.pos.x - this.mover.pos.x, e.pos.z - this.mover.pos.z);
+        if (d < bd) { bd = d; target = e; }
+      }
+    }
+    if (!this.goalMark) {
+      const c = document.createElement('canvas');
+      c.width = 64; c.height = 96;
+      const ctx = c.getContext('2d');
+      ctx.font = 'bold 84px Georgia, serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.lineWidth = 8; ctx.strokeStyle = 'rgba(0,0,0,0.85)'; ctx.strokeText('!', 32, 50);
+      ctx.fillStyle = '#ffd36a'; ctx.fillText('!', 32, 50);
+      const tex = new THREE.CanvasTexture(c);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      this.goalMark = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
+      this.goalMark.scale.set(0.45, 0.68, 1);
+      this.goalMark.renderOrder = 21;
+    }
+    if (target !== this.goalTarget) {
+      this.goalMark.removeFromParent();
+      if (target) { this.goalMark.position.set(0, (target.char.type.height || 1.8) + 0.95, 0); target.char.root.add(this.goalMark); }
+      this.goalTarget = target;
+    }
+  }
+
+  /** Isinlanma (askerler): yukle isinlanilamaz. */
+  teleportMenu(npc) {
+    const s = this.state;
+    const opts = CITIES.filter((c) => c.id !== this.nearCity).map((c) => {
+      const cost = 200 + 150 * Math.max(1, Math.abs(ROUTE.indexOf(c.id) - ROUTE.indexOf(this.nearCity)));
+      return { label: `${c.name} — ${cost} altın`, small: s.load ? 'Yüklü kervanla ışınlanamazsın' : c.desc, fn: () => {
+        if (s.load) { this.toast('Yükün varken ışınlanma yasak: malı yolda taşımalısın.', 3); this.sfx('error'); return; }
+        if (s.gold < cost) { this.toast('Altının yetmiyor', 2); this.sfx('error'); return; }
+        s.gold -= cost;
+        this.ui.close();
+        this.teleportTo(c.id);
+      } };
+    });
+    this.ui.talk(npc, opts);
+  }
+
+  async teleportTo(id) {
+    const city = cityById(id);
+    const p = this.app.world.toThree(city.rx, city.rz, city.lx, 0, city.lz, new THREE.Vector3());
+    this.paused = true;
+    this.focus.copy(p);
+    await this.app.game.loadArea(p, `${city.name}'e ışınlanılıyor…`);
+    this.app.game._hideOverlay();
+    this.mover.place(p.x, p.z);
+    if (this.caravan) this.caravan.mover.place(p.x + 2, p.z + 2, this.mover.pos.y);
+    this.camera.initialized = false;
+    this.lastCity = id; this.nearCity = id; this.state.city = id;
+    this.dest = this._defaultDest(id);
+    this.paused = false;
+    this.sfx('gate');
+    this.toast(city.name, 2.5);
+    this.saveSoon();
   }
 
   /** Varsayilan hedef: guzergahta bir sonraki sehir (sonda geri doner). */
@@ -117,6 +200,7 @@ export class KervanMode {
     const marks = [];
     const col = { special: '#ffd36a', stable: '#e7b37a', potion: '#9fe08a', smith: '#d0d0d0', armor: '#d0d0d0', traderGuild: '#ffd36a' };
     for (const e of this.population.entities.values()) {
+      if (e === this.goalTarget) marks.push({ x: e.pos.x, z: e.pos.z, color: '#ffffff', r: 9 });
       if (e.kind === 'npc') { if (col[e.def.role]) marks.push({ x: e.pos.x, z: e.pos.z, color: col[e.def.role], r: 5 }); }
       else if (e.alive) marks.push({ x: e.pos.x, z: e.pos.z, color: '#ff5a4a', r: 3.5 });
     }
@@ -229,6 +313,8 @@ export class KervanMode {
       opts.push({ label: 'Silahımı güçlendir', fn: () => this.ui.upgrade(npc, s, 'weapon', say) });
     } else if (role === 'armor') {
       opts.push({ label: 'Zırhımı güçlendir', fn: () => this.ui.upgrade(npc, s, 'armor', say) });
+    } else if (role === 'guard' && /Teleport/i.test(npc.name)) {
+      opts.push({ label: 'Başka şehre ışınlan', small: 'Ücretli; yük taşırken olmaz', fn: () => this.teleportMenu(npc) });
     } else if (role === 'traderGuild' || role === 'merchant') {
       opts.push({ label: 'Ticaret tavsiyesi', fn: () => this.ui.talk({ ...npc, name: npc.name, def: { ...npc.def, talk: [this._advice()] } }, []) });
     }
@@ -410,6 +496,7 @@ export class KervanMode {
       if (!this.inCity && was && s.load) this.toast('Şehirden çıktın. Yollar haydutlarla dolu, dikkatli ol!', 3);
       this.hudZone.textContent = this.inCity ? city.name : 'İpek Yolu';
       this.hudSub.textContent = this.inCity ? 'şehir · güvenli' : `${city.name} ${Math.round(dist)} m`;
+      this._updateGoal();
       this.app.audio.playMusic(musicForRegion(region.rx, region.rz));
     }
   }
