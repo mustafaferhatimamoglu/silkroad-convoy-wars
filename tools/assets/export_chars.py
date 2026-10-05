@@ -463,14 +463,46 @@ def city_npc_resources():
     return sorted(res)
 
 
+ROUTE = [(168, 97), (153, 102), (135, 92), (108, 106), (79, 105), (48, 90)]   # Jangan -> ... -> Iskenderiye
+
+
+def corridor_mob_resources(data_pk2, width=3):
+    """assets/data (export_gamedata.py) uzerinden: Ipek Yolu koridorunda dogan canavarlarin modelleri."""
+    import math
+    dpath = os.path.join(ROOT, "assets", "data")
+    table = json.load(open(os.path.join(dpath, "chars.json"), encoding="utf-8"))
+    spawns = json.load(open(os.path.join(dpath, "spawns.json"), encoding="utf-8"))
+
+    def dseg(p, a, b):
+        dx, dz = b[0] - a[0], b[1] - a[1]
+        t = max(0.0, min(1.0, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dz) / (dx * dx + dz * dz)))
+        return math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dz))
+    want = set()
+    for k, v in spawns.items():
+        rz, rx = map(int, k.split("_"))
+        if min(dseg((rx, rz), ROUTE[i], ROUTE[i + 1]) for i in range(len(ROUTE) - 1)) > width:
+            continue
+        for e in v:
+            d = table[e[0]]
+            if d["role"] == "mob" and d["model"]:
+                want.add(d["model"])
+    by_key = {key_of(p): p for p in data_pk2.files if p.startswith("res/mob/") and p.endswith(".bsr")}
+    return sorted(by_key[k] for k in want if k in by_key)
+
+
 def main():
     os.makedirs(OUT, exist_ok=True)
     data = open_pk2("Data")
     tex = TextureStore(data, OUT)
     args = sys.argv[1:]
     outfits = OUTFITS if not args or "--outfits" in args else {}
-    args = [a for a in args if a != "--outfits"]
-    targets = [jmx.norm_path(a) for a in args] if args else (DEFAULT + city_npc_resources())
+    corridor = "--corridor" in args or not args
+    args = [a for a in args if a not in ("--outfits", "--corridor")]
+    targets = [jmx.norm_path(a) for a in args]
+    if not targets and not (outfits and len(sys.argv) > 1 and not corridor):
+        targets = DEFAULT + city_npc_resources()
+    if corridor and os.path.exists(os.path.join(ROOT, "assets", "data", "chars.json")):
+        targets += [p for p in corridor_mob_resources(data) if p not in targets]
     index_path = os.path.join(OUT, "index.json")
     index = json.load(open(index_path, encoding="utf-8")) if os.path.exists(index_path) else {}
     for i, path in enumerate(targets):

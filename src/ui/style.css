@@ -132,3 +132,63 @@ select { background: #141a26; color: var(--text); border: 1px solid rgba(255, 25
 #pause { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.45); z-index: 45; }
 #pause .box { width: 360px; padding: 22px 24px; }
 #pause h2 { margin: 0 0 10px; color: var(--gold); font-family: Georgia, serif; letter-spacing: 3px; font-weight: 500; text-align: center; }
+
+/* ---------------------------------------------------------------- Kervan RPG */
+#kervanHud { position: absolute; inset: 0; pointer-events: none; font-size: 14px; }
+#kervanHud .zone { position: absolute; left: 18px; top: 14px; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9); }
+#kervanHud .zone b { display: block; color: var(--gold); font-family: Georgia, serif; font-size: 22px; letter-spacing: 1px; font-weight: 500; }
+#kervanHud .zone span { color: var(--muted); font-size: 12px; }
+#kervanHud .prompt { position: absolute; left: 50%; bottom: 120px; transform: translateX(-50%); background: var(--panel); border: 1px solid var(--gold-2);
+  border-radius: 6px; padding: 8px 14px; color: #f2e9d8; white-space: nowrap; }
+#kervanHud .prompt b { color: var(--gold); font-weight: 600; }
+#kervanHud .toast { position: absolute; left: 50%; top: 70px; transform: translateX(-50%); background: var(--panel); border: 1px solid var(--gold-2);
+  border-radius: 6px; padding: 9px 18px; color: #f2e9d8; max-width: 70vw; text-align: center; }
+#kervanHud .help { position: absolute; right: 18px; bottom: 14px; max-width: 30vw; text-align: right; line-height: 1.9; color: var(--muted); font-size: 12px; text-shadow: 0 1px 3px #000; }
+@media (max-width: 900px) { #kervanHud .help { display: none; } }
+#kervanHud kbd, .dialog kbd { display: inline-block; min-width: 18px; padding: 1px 5px; border: 1px solid rgba(232, 193, 112, 0.55); border-radius: 3px;
+  background: rgba(0, 0, 0, 0.5); color: var(--gold); font: 600 11px Consolas, monospace; text-align: center; }
+#kervanHud .hidden { display: none; }
+#kStatus { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); width: 360px; background: var(--panel); border: 1px solid rgba(232, 193, 112, 0.35);
+  border-radius: 8px; padding: 9px 12px 8px; pointer-events: none; font-size: 12px; color: #e9dfcc; }
+#kStatus .row { display: flex; align-items: center; gap: 8px; margin: 3px 0; }
+#kStatus .lbl { width: 54px; color: var(--muted); }
+#kStatus .hidden { display: none; }
+.bar { position: relative; flex: 1; height: 14px; background: rgba(0, 0, 0, 0.55); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 3px; overflow: hidden; }
+.bar > div { height: 100%; width: 50%; transition: width 0.18s; }
+.bar > span { position: absolute; inset: 0; text-align: center; font-size: 10px; line-height: 14px; color: #fff; text-shadow: 0 1px 2px #000; }
+.bar.hp > div { background: linear-gradient(180deg, #d24a3a, #8f2018); }
+.bar.xp > div { background: linear-gradient(180deg, #e8c170, #a57a2c); }
+.bar.thp > div { background: linear-gradient(180deg, #6fae5a, #3c6e2c); }
+.bar.ehp > div { background: linear-gradient(180deg, #e0583f, #8f2018); }
+#kStatus .info { display: flex; justify-content: space-between; margin-top: 6px; color: #f2e9d8; }
+#kStatus .info .gold { color: var(--gold); font-weight: 600; }
+#kStatus .lvl { position: absolute; right: 10px; top: -18px; color: var(--muted); font-size: 11px; text-shadow: 0 1px 3px #000; }
+#kStatus .lvl b { color: var(--gold); }
+#kTarget { position: absolute; left: 50%; top: 14px; transform: translateX(-50%); width: 300px; background: var(--panel); border: 1px solid rgba(224, 88, 63, 0.5);
+  border-radius: 6px; padding: 6px 10px; pointer-events: none; text-align: center; font-size: 12px; color: #f2e9d8; }
+#kTarget.hidden { display: none; }
+#kTarget .bar { margin-top: 4px; }
+.kDialog { width: 520px; max-width: calc(100vw - 32px); }
+.kDialog.wide { width: 760px; }
+.kDialog .speech { color: #e9dfcc; line-height: 1.55; font-style: italic; margin: 0 0 14px; }
+.kDialog .speech.info { font-style: normal; }
+.kDialog .opts .btn { margin-bottom: 8px; }
+.kDialog .foot { margin: 12px 0 4px; color: var(--muted); font-size: 13px; }
+.kDialog .foot b { color: var(--gold); }
+.kDialog .grid1 { display: grid; gap: 10px; }
+.kDialog .price { color: var(--gold); font-weight: 600; }
+.kTable { width: 100%; border-collapse: collapse; font-size: 13px; }
+.kTable th { text-align: left; color: var(--muted); font-weight: 500; padding: 4px 6px; border-bottom: 1px solid rgba(232, 193, 112, 0.25); }
+.kTable td { padding: 5px 6px; border-bottom: 1px solid rgba(255, 255, 255, 0.06); vertical-align: middle; }
+.kTable td img { width: 34px; height: 34px; image-rendering: auto; border: 1px solid rgba(232, 193, 112, 0.35); border-radius: 4px; display: block; }
+.kTable td b { color: #f2e9d8; font-weight: 600; display: block; }
+.kTable td small { color: var(--muted); font-size: 11px; }
+.kTable td.num { text-align: right; white-space: nowrap; color: #f2e9d8; }
+.kTable td.pos { color: #8fdc6a; } .kTable td.neg { color: #ff8a70; }
+.kTable td.empty { text-align: center; color: var(--muted); padding: 18px; }
+.btn.mini { width: auto; display: inline-block; padding: 4px 9px; font-size: 12px; margin: 0 0 0 4px; }
+.btn.mini:hover { transform: none; }
+.btn:disabled { opacity: 0.45; cursor: default; }
+@media (max-width: 640px) { #kStatus { width: calc(100vw - 32px); } .kTable td small { display: none; } }
+#kervanHud .zone .dest { display: block; margin-top: 6px; color: #ffd36a; font-style: normal; font-size: 12px; }
+#kervanHud #minimap { pointer-events: none; }

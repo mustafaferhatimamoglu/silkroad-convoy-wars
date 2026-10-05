@@ -50,6 +50,7 @@ export class Input {
     const btn = gp.buttons.map((b) => b.value);
     this.gamepad = {
       steer: dz(gp.axes[0] || 0),
+      moveX: dz(gp.axes[0] || 0), moveY: dz(gp.axes[1] || 0),
       lookX: dz(gp.axes[2] || 0), lookY: dz(gp.axes[3] || 0),
       throttle: btn[7] || 0, brake: btn[6] || 0,
       buttons: btn,

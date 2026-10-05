@@ -75,6 +75,7 @@ async function main() {
   else if (mode === 'explore') game.startExplore(city || 'jangan');
   else if (mode === 'rally') game.startRally();
   else if (mode === 'garage') game.menu.garage();
+  else if (mode === 'kervan') game.startKervan(city || 'jangan');
   else if (mode === 'chars') game.startCharView(city || 'jangan', params.get('keys') ? params.get('keys').split(',') : null);
 }
 

@@ -30,7 +30,7 @@ export class Menu {
       <button class="btn" data-a="drive">Serbest Sürüş<small>Silkroad dünyasında Tofaş Kartal ile dolaş</small></button>
       <button class="btn" data-a="rally">Ralli: Hotan → Taklamakan<small>Kontrol noktalı zamana karşı yarış</small></button>
       <button class="btn" data-a="garage">Garaj<small>Sürüm ve renk seçimi</small></button>
-      <button class="btn" disabled>Kervan RPG<small>Geliştiriliyor — sıradaki büyük güncelleme</small></button>
+      <button class="btn" data-a="kervan">Kervan RPG<small>Tüccar ol: mal al, kervanla şehirden şehre taşı, haydutlara karşı koy</small></button>
       <button class="btn secondary" data-a="explore">Dünya Gezgini<small>Serbest kamera ile haritayı gez</small></button>
       <button class="btn secondary" data-a="settings">Ayarlar</button>
       <div class="foot">Araç: <b>${VARIANTS[s.get('vehicleVariant')]?.name || ''}</b> · ${PAINTS[s.get('vehicleColor')]?.name || ''}<br>
@@ -43,6 +43,7 @@ export class Menu {
       if (act === 'drive') this.cityPicker('drive');
       else if (act === 'explore') this.cityPicker('explore');
       else if (act === 'rally') this.game.startRally();
+      else if (act === 'kervan') this.cityPicker('kervan');
       else if (act === 'garage') this.garage();
       else if (act === 'settings') this.settings(() => this.main());
     });
@@ -54,7 +55,7 @@ export class Menu {
     this.clear();
     const last = this.game.app.settings.get('lastCity') || 'hotan';
     const el = h(`<div class="panel dialog interactive">
-      <h2>${kind === 'drive' ? 'Nereden başlayalım?' : 'Nereyi gezelim?'}</h2>
+      <h2>${kind === 'explore' ? 'Nereyi gezelim?' : kind === 'kervan' ? 'Ticarete nereden başlayalım?' : 'Nereden başlayalım?'}</h2>
       <div class="grid3">${CITIES.map((c) => `<div class="card ${c.id === last ? 'sel' : ''}" data-c="${c.id}"><b>${c.name}</b><span>${c.desc}</span></div>`).join('')}</div>
       <div class="row" style="margin-top:16px"><button class="btn secondary" data-a="back" style="width:auto">← Geri</button><div style="flex:1"></div>
       <button class="btn" data-a="go" style="width:auto">Başla →</button></div>
@@ -66,14 +67,20 @@ export class Menu {
       const a = e.target.closest('[data-a]');
       if (!a) return;
       if (a.dataset.a === 'back') this.main();
-      if (a.dataset.a === 'go') { this.game.app.settings.set('lastCity', sel); this.clear(); kind === 'drive' ? this.game.startDrive(sel) : this.game.startExplore(sel); }
+      if (a.dataset.a === 'go') { this.game.app.settings.set('lastCity', sel); this.clear(); this._start(kind, sel); }
     });
     el.addEventListener('dblclick', (e) => {
       const c = e.target.closest('[data-c]');
-      if (c) { this.game.app.settings.set('lastCity', c.dataset.c); this.clear(); kind === 'drive' ? this.game.startDrive(c.dataset.c) : this.game.startExplore(c.dataset.c); }
+      if (c) { this.game.app.settings.set('lastCity', c.dataset.c); this.clear(); this._start(kind, c.dataset.c); }
     });
     this.root.appendChild(el);
     this.layer = el;
+  }
+
+  _start(kind, city) {
+    if (kind === 'drive') this.game.startDrive(city);
+    else if (kind === 'kervan') this.game.startKervan(city);
+    else this.game.startExplore(city);
   }
 
   garage(onBack = () => this.main()) {

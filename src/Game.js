@@ -187,6 +187,33 @@ export class Game {
     this._hideOverlay();
   }
 
+  /** Kervan RPG: sehirde yaya tuccar olarak basla. */
+  async startKervan(id) {
+    const { KervanMode } = await import('./modes/KervanMode.js');
+    const app = this.app;
+    const { city, pos } = this.cityPos(id);
+    this.menu.clear();
+    await this.loadArea(pos, `${city.name} yükleniyor…`);
+    const mode = new KervanMode(app, { city: id, look: app.settings.get('kervanLook') || 'player_ch_m', onPause: () => this.pauseKervan() });
+    app.setMode(mode);
+    this.kervan = mode;
+    this._hideOverlay();
+  }
+
+  pauseKervan() {
+    const mode = this.app.mode;
+    if (!mode) return;
+    if (mode.paused) { this.menu.clear(); mode.paused = false; return; }
+    mode.paused = true;
+    const resume = () => { this.menu.clear(); mode.paused = false; };
+    this.menu.pause({
+      onResume: resume,
+      onTeleport: (id) => { this.menu.clear(); this.startKervan(id); },
+      onSettings: () => this.menu.settings(() => { mode.paused = false; this.pauseKervan(); }),
+      onMain: () => { this.menu.clear(); this.showMainMenu(); },
+    });
+  }
+
   /** Gelistirici: donusturulmus karakterleri sehirde sirala (?mode=chars). */
   async startCharView(id, keys = null) {
     const { CharViewMode } = await import('./modes/CharViewMode.js');
