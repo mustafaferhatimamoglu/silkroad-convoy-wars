@@ -180,7 +180,7 @@ export class DriveHud {
     const s = vehicle.sim;
     lamp(560, 40, vehicle.headlights, '#4aa3ff', 'FAR');
     lamp(608, 40, s.input.handbrake > 0 || s.holding, '#e0584f', 'FREN');
-    lamp(560, 92, s.tcsCut > 0.05, '#ffb84a', 'TCS');
+    if (s.assists.tcs) lamp(560, 92, s.tcsCut > 0.05, '#ffb84a', 'TCS');
   }
 
   dispose() { this.root.remove(); }

@@ -54,8 +54,10 @@ export class DriveMode {
 
   applyAssists(level) {
     const a = this.vehicle.sim.assists;
-    a.abs = level !== 'kapali';
-    a.tcs = level === 'tam' || level === 'orta';
+    const eq = this.vehicle.params.equipment || {};
+    a.abs = level !== 'kapali' && eq.abs !== false;
+    a.tcs = (level === 'tam' || level === 'orta') && eq.tcs !== false;
+    if (!a.tcs) this.vehicle.sim.tcsCut = 0;
     a.steer = level !== 'kapali';
   }
 
@@ -125,6 +127,7 @@ export class DriveMode {
     const rough = v.sim.wheels.reduce((a, w) => a + (w.contact ? Math.abs(w.x - w.xPrev) : 0), 0);
     if (rough > 0.004) this.camera.addShake(Math.min(0.15, rough * 3));
     this.camera.update(dt, input);
+    this.sound.setView(this.camera.mode);
     this.sound.update(dt);
     this.effects.update(dt);
     this.hud.update(dt, v, this.camera.mode);

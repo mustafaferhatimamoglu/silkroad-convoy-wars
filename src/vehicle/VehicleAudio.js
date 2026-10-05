@@ -2,6 +2,18 @@ import { surfaceInfo } from './presets.js';
 
 // Arac sesleri: motor (AudioWorklet), lastik cigligi, ruzgar, zemin ugultusu, carpisma,
 // vites, korna. Hepsi efekt kanalina baglidir.
+//
+// Motor sesi fiziksel modeldir (src/audio/engine-worklet.js) ve dort ayri cikis verir:
+// egzoz, emme/turbo, mekanik, govde titresimi. Kamera konumu karisimi belirler: disaridan
+// egzoz baskindir; kokpitte egzoz kabinden bogularak gelir, emme ve govde ugultusu one cikar.
+
+const VIEW_MIX = {
+  // [egzoz, emme, mekanik, titresim], egzozun alcak geciren frekansi (Hz)
+  ext: { g: [1.0, 0.45, 0.5, 0.12], lp: 16000 },
+  hood: { g: [0.62, 0.95, 0.9, 0.45], lp: 3500 },
+  int: { g: [0.6, 1.0, 0.7, 1.0], lp: 850 },
+};
+const viewKey = (mode) => (mode === 'cockpit' ? 'int' : mode === 'hood' ? 'hood' : 'ext');
 
 export class VehicleAudio {
   constructor(audio, vehicle, { engine = true } = {}) {
@@ -21,10 +33,20 @@ export class VehicleAudio {
     this.out.gain.value = 0.9;
     this.out.connect(a.sfx);
     try {
-      this.engine = new AudioWorkletNode(ctx, 'sro-engine', { numberOfOutputs: 1, outputChannelCount: [2] });
+      const P = this.vehicle.params;
+      const profile = (P.engine && P.engine.sound) || P.id || 'kartal';
+      this.engine = new AudioWorkletNode(ctx, 'sro-engine', {
+        numberOfInputs: 0, numberOfOutputs: 4, outputChannelCount: [1, 1, 1, 1], processorOptions: { profile },
+      });
       this.engineGain = ctx.createGain();
       this.engineGain.gain.value = this.engineOn ? 1 : 0;
-      this.engine.connect(this.engineGain).connect(this.out);
+      this.exLp = ctx.createBiquadFilter(); this.exLp.type = 'lowpass'; this.exLp.Q.value = 0.6;
+      this.engMix = [0, 1, 2, 3].map((i) => { const g = ctx.createGain(); this.engine.connect(g, i); return g; });
+      this.engMix[0].connect(this.exLp).connect(this.engineGain);
+      for (let i = 1; i < 4; i++) this.engMix[i].connect(this.engineGain);
+      this.engineGain.connect(this.out);
+      this._mixKey = null;
+      this.setView(this.view || 'chase');
     } catch (e) { console.warn('Motor sesi kullanilamiyor', e); }
     const chain = (filterType, f, q, gain = 0) => {
       const src = a.noiseSource();
@@ -41,6 +63,18 @@ export class VehicleAudio {
     this.gravel = chain('bandpass', 1200, 1.2);
   }
 
+  /** Kamera kipine gore motor sesi karisimi (disaridan / kaputtan / kokpitten). */
+  setView(mode) {
+    this.view = mode;
+    const k = viewKey(mode);
+    if (!this.engMix || k === this._mixKey) return;
+    const first = this._mixKey === null;
+    this._mixKey = k;
+    const m = VIEW_MIX[k], t = this.ctx.currentTime;
+    this.engMix.forEach((g, i) => { if (first) g.gain.value = m.g[i]; else g.gain.setTargetAtTime(m.g[i], t, 0.08); });
+    if (first) this.exLp.frequency.value = m.lp; else this.exLp.frequency.setTargetAtTime(m.lp, t, 0.08);
+  }
+
   setEngine(on) {
     this.engineOn = on;
     if (this.engineGain) this.engineGain.gain.setTargetAtTime(on ? 1 : 0, this.ctx.currentTime, 0.05);
@@ -54,9 +88,9 @@ export class VehicleAudio {
     const speed = v.velocity.length();
     if (this.engine) {
       const p = this.engine.parameters;
-      const slipRev = sim.locked ? 0 : 0.15 * sim.input.throttle;
+      // yuk = motora giden gercek gaz (vites gecisinde ve cekis kontrolunde kesilir)
       p.get('rpm').setValueAtTime(sim.rpm, t);
-      p.get('load').setValueAtTime(Math.min(1, sim.input.throttle * (0.7 + 0.3 * sim.clutch) + slipRev), t);
+      p.get('load').setValueAtTime(Math.min(1, Math.max(0, sim.engine.load)), t);
       p.get('level').setValueAtTime(0.55, t);
     }
     // lastik cigligi: sert zeminde kayma
@@ -140,7 +174,7 @@ export class VehicleAudio {
     if (!this.ctx) return;
     this.horn(false);
     for (const c of [this.squeal, this.squeal2, this.wind, this.rumble, this.gravel]) if (c) c.src.stop();
-    if (this.engine) this.engine.disconnect();
+    if (this.engine) { this.engine.disconnect(); this.engine.port.postMessage({ stop: true }); }
     this.out.disconnect();
   }
 }

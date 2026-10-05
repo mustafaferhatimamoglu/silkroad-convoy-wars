@@ -30,6 +30,7 @@ export const KARTAL = {
     rolling: 0.012,
   },
   engine: {
+    sound: 'kartal',                // motor sesi profili (src/audio/engine-worklet.js)
     idle: 850, redline: 6200, limiter: 6350,
     inertia: 0.16,
     // tork egrisi (rpm, Nm) - 1585 cc ~75 BG
@@ -45,6 +46,9 @@ export const KARTAL = {
   },
   diff: { lsd: 25 },               // hafif viskoz kilitlemeli (Nm / rad/s)
   brakes: { front: 1350, rear: 650, handbrake: 1900, abs: true },
+  // fabrika donanimi: ayarlardaki surus yardimlari yalnizca aracta var olani acar.
+  // Kartal'da cekis kontrolu (gaz kesme) yoktu; patinaj surucunun ayagindadir.
+  equipment: { tcs: false },
   steering: { maxAngle: 0.62, speedReduce: 0.62, rate: 2.3, returnRate: 3.4, ackermann: 0.95 },
   aero: { cdA: 0.84, rho: 1.2 },
   // carpisma kureleri (govde ekseni, CG'ye gore)

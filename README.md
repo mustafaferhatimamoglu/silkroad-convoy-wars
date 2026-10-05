@@ -107,6 +107,23 @@ gövde çarpışma küreleri ve hasar. Testler:
 node --test
 ```
 
+## Motor sesi
+
+`src/audio/engine-worklet.js` kayit kullanmayan fiziksel bir modeldir (DasEtwas/enginesound ve
+Antonio-R1/engine-sound-generator calismalarindaki dalga kilavuzu fikrinden esinlenildi):
+silindir basinci krank acisina gore hesaplanir, supaplar orifis akisi olarak manifold
+kollarina, kollektore, borulara, susturucu odalarina ve egzoz ucuna baglanir; duyulan ses
+uctaki akisin turevidir. Emme hatti, gaz kelebegi, dizel yanma takirtisi, turbo isligi,
+supap tikirtisi, yakit kesme ve geri tepme de modeldedir. Arac profilleri: `kartal`
+(1.6 karburatorlu), `hilux` (2.8 turbo dizel), `f150` (5.0 V8, capraz duzlem krank).
+
+```bat
+node tools/enginelab.mjs all <klasor>
+```
+
+senaryolari (rolanti, gaz pompalama, tam gaz, motor freni, seyir, devir siniri) cevrimdisi
+isler; seviyeleri olcer, WAV ve spektrogram yazar.
+
 ## Varlıkları yeniden üretme
 
 Varlıklar `C:\Silkroad\SRO_Client\*.pk2` dosyalarından üretilir (bkz. `tools/`).
