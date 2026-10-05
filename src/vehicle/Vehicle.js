@@ -1,8 +1,10 @@
 import * as THREE from 'three';
 import { VehicleSim } from './physics/VehicleSim.js';
 import { V3 } from './physics/math.js';
-import { KARTAL, surfaceInfo } from './presets.js';
+import { presetFor, surfaceInfo } from './presets.js';
 import { KartalModel } from './model/KartalModel.js';
+import { CarModel } from './model/CarModel.js';
+import { SPECS } from './model/specs/index.js';
 import { WorldGround } from './WorldGround.js';
 import { VehicleReflections } from './Reflections.js';
 
@@ -16,14 +18,15 @@ const _p = new THREE.Vector3();
 const _d = new THREE.Vector3();
 
 export class Vehicle {
-  constructor(app, { variant = 'kartal80', paint = 'lacivert', params = KARTAL } = {}) {
+  constructor(app, { variant = 'kartal80', paint = 'lacivert', prep = null, params = null } = {}) {
     this.app = app;
-    this.params = params;
+    this.prep = prep || (app.settings ? app.settings.get('vehiclePrep') : 'ralli') || 'ralli';
+    this.params = params || presetFor(variant, this.prep);
     this.variant = variant;
-    this.sim = new VehicleSim(params);
+    this.sim = new VehicleSim(this.params);
     this.ground = app.collision ? new WorldGround(app.collision) : null;
-    this.model = new KartalModel({ variant, paint });
-    this.model.alignToPhysics(params.cgHeight);
+    this.model = SPECS[variant] ? new CarModel(SPECS[variant], { paint }) : new KartalModel({ variant, paint });
+    this.model.alignToPhysics(this.params.cgHeight);
     this.root = this.model.root;
     app.scene.add(this.root);
     this.acc = 0;

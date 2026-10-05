@@ -74,8 +74,9 @@ export class VehicleCamera {
     let fovTarget = this.baseFov + Math.min(kmh / 160, 1.2) * 11;
     if (this.mode === 'chase' || this.mode === 'far') {
       const far = this.mode === 'far';
-      const dist = (far ? 9.5 : 5.4) + Math.min(kmh, 160) * (far ? 0.012 : 0.008);
-      const height = (far ? 3.2 : 1.85) + Math.min(kmh, 160) * 0.002;
+      const sc = (v.model.cam && v.model.cam.chase) || 1;
+      const dist = ((far ? 9.5 : 5.4) + Math.min(kmh, 160) * (far ? 0.012 : 0.008)) * sc;
+      const height = ((far ? 3.2 : 1.85) + Math.min(kmh, 160) * 0.002) * sc;
       const yaw = this.heading + this.lookYaw;
       _target.set(pos.x + Math.sin(yaw) * dist, pos.y + height + this.lookPitch * dist * 0.6, pos.z + Math.cos(yaw) * dist);
       _look.set(pos.x - Math.sin(yaw) * 2.2, pos.y + 0.9, pos.z - Math.cos(yaw) * 2.2);
@@ -96,7 +97,10 @@ export class VehicleCamera {
       cam.position.x += shx; cam.position.y += shy;
       cam.lookAt(_look);
     } else if (this.mode === 'hood' || this.mode === 'cockpit') {
-      const local = this.mode === 'hood' ? _off.set(0, 0.47, -0.42) : _off.set(-0.36, 0.70, 0.47);
+      const cm = v.model.cam;
+      const local = this.mode === 'hood'
+        ? (cm ? _off.fromArray(cm.hood) : _off.set(0, 0.47, -0.42))
+        : (cm ? _off.fromArray(cm.cockpit) : _off.set(-0.36, 0.70, 0.47));
       cam.position.copy(local).applyQuaternion(v.quaternion).add(pos);
       _e.set(this.lookPitch - (this.mode === 'cockpit' ? 0.07 : 0.03), this.lookYaw, 0, 'YXZ');
       _q.setFromEuler(_e);

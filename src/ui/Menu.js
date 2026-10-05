@@ -10,6 +10,14 @@ const h = (html) => { const t = document.createElement('template'); t.innerHTML 
 export const VARIANTS = {
   kartal80: { name: 'Kartal 1980', desc: '4 yuvarlak far, krom tampon ve çıtalar' },
   kartal90: { name: 'Kartal 90\'lar', desc: 'Dikdörtgen farlar, siyah plastik tampon' },
+  hilux: { name: 'Toyota Hilux', desc: '2.8 dizel turbo, 4x4, çift kabin' },
+  f150: { name: 'Ford F-150', desc: '5.0 V8, 10 ileri otomatik, 4x4 SuperCrew' },
+  rs6: { name: 'Audi RS 6 Avant', desc: '4.0 V8 çift turbo, 600 BG, quattro' },
+  tank: { name: 'Rezvani Tank', desc: '6.4 V8, 37 inç lastik, kilitli 4x4' },
+};
+export const PREPS = {
+  ralli: { name: 'Ralli hazırlığı', desc: '~130 BG, +6 cm yükseklik, uzun yollu süspansiyon, kilitli diferansiyel' },
+  stok: { name: 'Stok', desc: '1.6 karbüratörlü, 75 BG; fabrika süspansiyonu' },
 };
 
 export class Menu {
@@ -122,13 +130,25 @@ export class Menu {
       <h2>Garaj</h2>
       <div style="color:var(--muted);font-size:13px;margin-bottom:6px">Sürüm</div>
       <div class="grid2">${Object.entries(VARIANTS).map(([id, v]) => `<div class="card ${id === s.get('vehicleVariant') ? 'sel' : ''}" data-v="${id}"><b>${v.name}</b><span>${v.desc}</span></div>`).join('')}</div>
+      <div class="prep" style="${String(s.get('vehicleVariant')).startsWith('kartal') ? '' : 'display:none'}">
+        <div style="color:var(--muted);font-size:13px;margin:14px 0 6px">Kartal hazırlığı</div>
+        <div class="grid2">${Object.entries(PREPS).map(([id, v]) => `<div class="card ${id === s.get('vehiclePrep') ? 'sel' : ''}" data-r="${id}"><b>${v.name}</b><span>${v.desc}</span></div>`).join('')}</div>
+      </div>
       <div style="color:var(--muted);font-size:13px;margin:14px 0 6px">Renk</div>
       <div class="swatches">${Object.entries(PAINTS).map(([id, p]) => `<div class="swatch ${id === s.get('vehicleColor') ? 'sel' : ''}" title="${p.name}" data-p="${id}" style="background:${p.color}"></div>`).join('')}</div>
       <div class="row"><button class="btn" data-a="back" style="width:auto">← Tamam</button></div>
     </div>`);
     el.addEventListener('click', (e) => {
       const v = e.target.closest('[data-v]');
-      if (v) { s.set('vehicleVariant', v.dataset.v); el.querySelectorAll('[data-v]').forEach((x) => x.classList.toggle('sel', x === v)); this.game.previewCar(); return; }
+      if (v) {
+        s.set('vehicleVariant', v.dataset.v);
+        el.querySelectorAll('[data-v]').forEach((x) => x.classList.toggle('sel', x === v));
+        el.querySelector('.prep').style.display = v.dataset.v.startsWith('kartal') ? '' : 'none';
+        this.game.previewCar();
+        return;
+      }
+      const r = e.target.closest('[data-r]');
+      if (r) { s.set('vehiclePrep', r.dataset.r); el.querySelectorAll('[data-r]').forEach((x) => x.classList.toggle('sel', x === r)); this.game.previewCar(); return; }
       const p = e.target.closest('[data-p]');
       if (p) { s.set('vehicleColor', p.dataset.p); el.querySelectorAll('[data-p]').forEach((x) => x.classList.toggle('sel', x === p)); this.game.previewCar(true); return; }
       if (e.target.closest('[data-a="back"]')) onBack();

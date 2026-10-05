@@ -10,13 +10,19 @@ import { surfaceInfo } from '../presets.js';
 //    elipsi, yuk duyarliligi ve zemin malzemesi. Kuvvetler hiz seviyesinde impuls olarak
 //    cozulur; dusuk hizda bile kararlidir (yokusta kaymadan durur, titremez).
 //  - Aktarma: motor tork egrisi, motor freni, devir siniri, otomatik debriyaj (kalkista
-//    patinaj), 5 ileri + geri vites, otomatik/manuel vites, hafif kilitlemeli diferansiyel.
+//    patinaj), istenen sayida ileri vites + geri, otomatik/manuel vites, kilitlemeli
+//    diferansiyeller. Arkadan itis ya da dort ceker (merkez kavrama ile on/arka dagilim).
 //  - Yardimlar: ABS, cekis kontrolu (TCS), hiza bagli direksiyon acisi.
 //  - Govde: carpisma kureleri ile arazi/bina temasi, surtunmeli impuls, hasar olaylari.
 
 const UP = new V3(0, 1, 0);
 const _up = new V3(), _fwd = new V3(), _right = new V3();
 const _p = new V3(), _d = new V3(), _f = new V3(), _s = new V3(), _v = new V3(), _J = new V3(), _t = new V3(), _h = new V3();
+const _o = new V3(), _hd = new V3(), _hp = new V3(), _hn = new V3(), _c = new V3();
+// Lastik profili: dingilin onunde (geri giderken arkasinda) teker yaricapinin bu oranlarinda
+// ek isinlar. Yuvarlak lastik bordur/basamak kenarina tirmanir; tek dikey isinda once tampon
+// carpiyordu.
+const PROBE = [0.4, 0.75];
 
 function curve(x, peak, slideRatio) {
   // 0 -> tepeye yumusak yukselis, sonra kayma surtunmesine dusus
@@ -49,10 +55,10 @@ export class VehicleSim {
       return {
         name: (front ? 'F' : 'R') + (side < 0 ? 'L' : 'R'),
         front, side,
-        mount: new V3((side * track) / 2, S.mountY, front ? P.axleFront : P.axleRear),
+        mount: new V3((side * track) / 2, s.mountY ?? S.mountY, front ? P.axleFront : P.axleRear),
         rest: s.rest, travel: s.travel, k: s.k, bump: s.bump, rebound: s.rebound, arb: s.arb,
         radius: P.wheel.radius, inertia: P.wheel.inertia,
-        steerable: front, driven: !front,
+        steerable: front, driven: front ? P.drive === 'awd' : true,
         // durum
         x: 0, xPrev: 0, Fz: 0, contact: false, point: new V3(), normal: new V3(0, 1, 0), surface: 3, object: false,
         omega: 0, spin: 0, steer: 0, driveTorque: 0, brakeTorque: 0, handbrakeTorque: 0,
@@ -60,6 +66,8 @@ export class VehicleSim {
       };
     };
     this.wheels = [mk(-1, true), mk(1, true), mk(-1, false), mk(1, false)];
+    this.awd = P.drive === 'awd';
+    this.maxGear = P.gearbox.ratios.length - 2;
     this.steer = 0;
     this.engine = { rpm: P.engine.idle, omega: P.engine.idle / RPM, torque: 0, load: 0 };
     this.gear = 1;
@@ -108,7 +116,7 @@ export class VehicleSim {
   shift(dir) {
     if (this.shiftTimer > 0) return;
     const g = this.gear + dir;
-    if (g < -1 || g > 5) return;
+    if (g < -1 || g > this.maxGear) return;
     // geri vitese sadece neredeyse dururken
     if (g === -1 && this.forwardSpeed > 1.5) return;
     if (this.gear === -1 && g === 0 && this.forwardSpeed < -1.5) return;
@@ -257,24 +265,50 @@ export class VehicleSim {
   _suspension(dt, ground) {
     const b = this.body;
     _d.copy(_up).negate();
+    const back = b.vel.dot(_fwd) < -0.3;
     for (const w of this.wheels) {
       b.localToWorld(w.mount, _p);
-      const far = w.rest + w.radius;
+      const r = w.radius, far = w.rest + r;
+      // (zemin arayuzu ayni sonuc nesnesini yeniden kullanabilir: degerler hemen kopyalanir)
+      let x = -1, surface = 3, object = false;
       const hit = ground.raycast(_p, _d, far + 0.05);
-      w.xPrev = w.x;
       if (hit && hit.distance <= far && hit.normal.x * _up.x + hit.normal.y * _up.y + hit.normal.z * _up.z > 0.3) {
-        const x = Math.min(far - hit.distance, w.travel + 0.15);
-        const xd = w.contact ? (x - w.x) / dt : 0;
+        x = far - hit.distance;
+        _hp.set(hit.point.x, hit.point.y, hit.point.z);
+        _hn.set(hit.normal.x, hit.normal.y, hit.normal.z);
+        surface = hit.surface ?? 3; object = !!hit.object;
+      }
+      // lastik profili: yuvarlanma yonunde (on tekerde direksiyon acisiyla) iki isin daha
+      rotate(b.q, _h.set(Math.sin(w.steer), 0, -Math.cos(w.steer)), _hd);
+      for (let k = 0; k < PROBE.length; k++) {
+        const dx = PROBE[k] * r * (back ? -1 : 1);
+        _o.copy(_p).addScaled(_hd, dx);
+        const h2 = ground.raycast(_o, _d, far + 0.05);
+        if (!h2 || h2.distance > far) continue;
+        const x2 = w.rest - h2.distance + Math.sqrt(r * r - dx * dx);
+        if (x2 <= x + 0.002) continue;
+        x = x2;
+        _hp.set(h2.point.x, h2.point.y, h2.point.z);
+        // temas normali: temas noktasindan teker merkezine (kenar tekeri yukari ve geri iter)
+        _c.copy(_p).addScaled(_d, w.rest - x2);
+        _hn.copy(_c).sub(_hp).normalize();
+        surface = h2.surface ?? 3; object = !!h2.object;
+      }
+      w.xPrev = w.x;
+      if (x >= 0) {
+        x = Math.min(x, w.travel + 0.15);
+        // amortisor hizi sinirli (lastik esnekligi): basamakta ani sicrama patlama yaratmasin
+        const xd = w.contact ? clamp((x - w.x) / dt, -5, 5) : 0;
         w.x = x;
         let F = w.k * x + (xd > 0 ? w.bump : w.rebound) * xd;
         w.bottomed = x > w.travel;
         if (w.bottomed) F += 250000 * (x - w.travel) + 4000 * Math.max(xd, 0);
         w.Fz = Math.max(F, 0);
         w.contact = true;
-        w.point.set(hit.point.x, hit.point.y, hit.point.z);
-        w.normal.set(hit.normal.x, hit.normal.y, hit.normal.z);
-        w.surface = hit.surface ?? 3;
-        w.object = !!hit.object;
+        w.point.copy(_hp);
+        w.normal.copy(_hn);
+        w.surface = surface;
+        w.object = object;
       } else {
         w.contact = false;
         w.Fz = 0;
@@ -304,21 +338,29 @@ export class VehicleSim {
       this.shiftTimer -= dt;
       if (this.shiftTimer <= 0) { this.gear = this.targetGear; this.shiftTimer = 0; }
     }
-    const RL = this.wheels[2], RR = this.wheels[3];
-    const wd = (RL.omega + RR.omega) / 2;
+    const W = this.wheels, RL = W[2], RR = W[3], FL = W[0], FR = W[1];
+    const wd = this._shaftOmega();
     const ratio = this.gear === 0 ? 0 : this.ratio();
     const shaft = wd * ratio; // tekerden gelen motor tarafi acisal hiz
     let rpm = e.omega * RPM;
 
-    // otomatik vites
+    // otomatik vites (vites atinca kisa sure geri vitese inmez: oranlar arasi bosluk
+    // dar vites bandiyla birlesince 1-2 arasi gidip gelme olmasin)
+    this.shiftHold = Math.max(0, (this.shiftHold || 0) - dt);
     if (this.autoShift && this.shiftTimer === 0 && this.gear >= 1) {
       const thr = inp.throttle;
-      // tam gazda guc tepesinin biraz ustunde (~5600), hafif gazda erken vites
-      const up = lerp(2600, 5600, thr), down = lerp(1300, 2600, thr);
-      const slipping = Math.abs(RL.slipRatio) > 0.25 || Math.abs(RR.slipRatio) > 0.25;
+      // tam gazda guc tepesinin biraz ustunde, hafif gazda erken vites (araca ozel devirler)
+      const SU = G.shiftUp || [2600, 5600], SD = G.shiftDown || [1300, 2600];
+      // hafif gazda erken (ekonomik) vites: esik gazin karesiyle artar, tam devir yalniz dibe yakin
+      const t2 = thr * thr;
+      const up = lerp(SU[0], SU[1], t2), down = lerp(SD[0], SD[1], t2);
+      let slipping = false;
+      for (const w of W) if (w.driven && Math.abs(w.slipRatio) > 0.25) slipping = true;
       const shaftRpm = shaft * RPM;
-      if (this.gear < 5 && (shaftRpm > up || shaftRpm > E.redline - 150) && !slipping && this.airTime === 0) this._beginShift(this.gear + 1);
-      else if (this.gear > 1 && shaftRpm < down) {
+      if (this.gear < this.maxGear && (shaftRpm > up || shaftRpm > E.redline - 150) && !slipping && this.airTime === 0) {
+        this._beginShift(this.gear + 1);
+        this.shiftHold = 1.2;
+      } else if (this.gear > 1 && shaftRpm < down && (this.shiftHold === 0 || shaftRpm < E.idle + 250)) {
         const lowerRpm = wd * this.ratio(this.gear - 1) * RPM;
         if (lowerRpm < E.redline - 400) this._beginShift(this.gear - 1);
       }
@@ -326,6 +368,8 @@ export class VehicleSim {
 
     // gaz (TCS ile kesilebilir)
     let thr = inp.throttle * (1 - this.tcsCut);
+    // elektronik hiz sinirlayici (varsa)
+    if (E.vmax) thr *= clamp((E.vmax - this.forwardSpeed * 3.6) / 4, 0, 1);
     if (this.shiftTimer > 0) thr = 0;
     // hasarli motor guc kaybeder
     const healthF = 0.55 + 0.45 * Math.min(1, this.health / 60);
@@ -343,7 +387,7 @@ export class VehicleSim {
       this.clutchRamp = 0;
     } else {
       // kalkis: gaza gore hedef devirde kavrar; yuvarlanirken yol hiziyla kapanir
-      const launchRpm = E.idle + 300 + 2600 * inp.throttle;
+      const launchRpm = E.idle + 300 + (G.launch || 2600) * inp.throttle;
       const eLaunch = inp.throttle > 0.02 ? smoothstep(E.idle + 100, launchRpm, rpm) : 0;
       const eRoll = smoothstep(E.idle - 100, E.idle + 900, shaftRpm);
       engage = Math.max(eLaunch, eRoll);
@@ -353,7 +397,7 @@ export class VehicleSim {
       engage = Math.min(engage, this.clutchRamp);
     }
     this.clutch = engage;
-    const nDriven = 2;
+    const nDriven = this.awd ? 4 : 2;
     const eta = G.efficiency;
     let wheelTorque = 0;
     // Debriyaj: kilitliyken motor + tekerler tek rijit sistemdir (motor ataleti tekerlere
@@ -365,7 +409,7 @@ export class VehicleSim {
     else if (this.locked && (Math.abs(Te) > cap * 1.05 || shaftRpm < E.idle * 0.85)) this.locked = false;
     let Tc = 0;
     if (!this.locked && ratio !== 0 && engage > 0) {
-      const IdMin = (2 * RL.inertia) / (ratio * ratio);
+      const IdMin = (nDriven * RL.inertia) / (ratio * ratio);
       const Tlock = (e.omega - shaft + (Te / E.inertia) * dt) / (dt * (1 / E.inertia + 1 / IdMin));
       if (Math.abs(Tlock) <= cap && shaftRpm >= E.idle * 0.85) { this.locked = true; e.omega = shaft; }
       else Tc = clamp(Tlock, -cap, cap);
@@ -381,11 +425,23 @@ export class VehicleSim {
     }
     e.torque = Te; e.load = thr;
 
-    // diferansiyel (hafif kilitli): hizli tekerden yavasa tork aktar
-    const lsd = P.diff.lsd * (RL.omega - RR.omega);
-    RL.driveTorque = wheelTorque - lsd;
-    RR.driveTorque = wheelTorque + lsd;
-    this.wheels[0].driveTorque = this.wheels[1].driveTorque = 0;
+    // diferansiyeller (kilitlemeli): hizli tekerden yavasa tork aktar
+    const D = P.diff;
+    if (this.awd) {
+      // merkez: on/arka dagilim + viskoz kavrama (hizli akstan yavasa); wheelTorque teker basinadir
+      const total = wheelTorque * 4;
+      const fs = D.front ?? 0.5;
+      const center = (D.center || 0) * ((FL.omega + FR.omega) / 2 - (RL.omega + RR.omega) / 2);
+      const Tf = total * fs - center, Tr = total * (1 - fs) + center;
+      const lf = (D.lsdFront || 0) * (FL.omega - FR.omega), lr = (D.lsd || 0) * (RL.omega - RR.omega);
+      FL.driveTorque = Tf / 2 - lf; FR.driveTorque = Tf / 2 + lf;
+      RL.driveTorque = Tr / 2 - lr; RR.driveTorque = Tr / 2 + lr;
+    } else {
+      const lsd = D.lsd * (RL.omega - RR.omega);
+      RL.driveTorque = wheelTorque - lsd;
+      RR.driveTorque = wheelTorque + lsd;
+      FL.driveTorque = FR.driveTorque = 0;
+    }
 
     // frenler (ayak freni ABS'e tabi, el freni degil)
     const B = P.brakes;
@@ -396,11 +452,17 @@ export class VehicleSim {
     }
   }
 
+  /** Tahrik milinin teker tarafindaki acisal hizi (tahrikli tekerlerin ortalamasi). */
+  _shaftOmega() {
+    const W = this.wheels;
+    return this.awd ? (W[0].omega + W[1].omega + W[2].omega + W[3].omega) / 4 : (W[2].omega + W[3].omega) / 2;
+  }
+
   /** Kilitli debriyajda motor devri tekerlerden gelir; cok duserse debriyaj ayrilir. */
   _syncEngine() {
     if (!this.locked) return;
     const E = this.p.engine;
-    const shaft = ((this.wheels[2].omega + this.wheels[3].omega) / 2) * this.ratio();
+    const shaft = this._shaftOmega() * this.ratio();
     if (shaft * RPM < E.idle * 0.85) {
       this.locked = false;
       this.engine.omega = Math.max(this.engine.omega, E.idle / RPM);
@@ -426,6 +488,8 @@ export class VehicleSim {
       return;
     }
     const surf = surfaceInfo(w.surface);
+    const loose = surf.mu < 0.95 ? (T.loose || 0) : 0;
+    const surfMu = surf.mu + (1 - surf.mu) * loose;
     const n = w.normal;
     // teker yonu (direksiyon acisi govde ekseninde)
     const st = w.steer;
@@ -437,7 +501,7 @@ export class VehicleSim {
     const vLong = _v.dot(_f), vLat = _v.dot(_s);
 
     const Fz0 = (this.p.mass * 9.81) / 4;
-    const mu = T.mu * surf.mu * Math.max(0.5, 1 - T.loadSens * (w.Fz / Fz0 - 1)) * (0.92 + 0.08 * Math.min(1, this.health / 50));
+    const mu = T.mu * surfMu * Math.max(0.5, 1 - T.loadSens * (w.Fz / Fz0 - 1)) * (0.92 + 0.08 * Math.min(1, this.health / 50));
     const maxJ = mu * w.Fz * dt;
 
     // fren torku: ayak freni (ideal ABS: lastigin tasiyabilecegi tepe torku asmaz) + el freni
@@ -445,7 +509,8 @@ export class VehicleSim {
     if (this.assists.abs && Tb > 0) Tb = Math.min(Tb, mu * w.Fz * R * 0.97);
     Tb += w.handbrakeTorque;
     // yuvarlanma direnci de fren gibi donusu yavaslatan bir torktur
-    Tb += T.rolling * surf.rolling * w.Fz * R;
+    // gevsek zeminde (kum, camur) yuvarlanma direnci: arazi lastigi az, alcak profilli yol lastigi cok batar
+    Tb += T.rolling * (1 + (surf.rolling - 1) * (1 - loose) * (surf.mu < 0.95 ? (T.sink ?? 1) : 1)) * w.Fz * R;
     const TbDt = Tb * dt;
 
     // ---- boyuna: teker + fren + zemin birlikte cozulur

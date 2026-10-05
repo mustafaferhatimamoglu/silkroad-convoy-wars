@@ -264,7 +264,7 @@ export class Game {
   _applyVehicleLook(mode) {
     const s = this.app.settings;
     mode.vehicle.model.setPaint(s.get('vehicleColor'));
-    if (mode.vehicle.variant !== s.get('vehicleVariant')) mode.rebuildVehicle(s.get('vehicleVariant'), s.get('vehicleColor'));
+    if (mode.vehicle.variant !== s.get('vehicleVariant') || mode.vehicle.prep !== s.get('vehiclePrep')) mode.rebuildVehicle(s.get('vehicleVariant'), s.get('vehicleColor'));
   }
 
   _resume(mode) {

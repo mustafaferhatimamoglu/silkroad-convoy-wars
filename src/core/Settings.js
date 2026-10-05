@@ -22,6 +22,7 @@ const DEFAULTS = {
   showDebug: false,
   vehicleColor: 'lacivert',
   vehicleVariant: 'kartal80',
+  vehiclePrep: 'ralli',
   camera: 'chase',
 };
 

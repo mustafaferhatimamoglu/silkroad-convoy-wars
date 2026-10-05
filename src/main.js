@@ -67,6 +67,8 @@ async function main() {
   app.start();
   const city = params.get('city');
   if (city) app.settings.set('lastCity', city);
+  // test kisayolu: &variant=hilux&paint=beyaz&prep=stok
+  for (const [q, k] of [['variant', 'vehicleVariant'], ['paint', 'vehicleColor'], ['prep', 'vehiclePrep']]) if (params.get(q)) app.settings.set(k, params.get(q));
   await game.boot(loading);
   loading.set(1, 'Hazır');
   loading.done();

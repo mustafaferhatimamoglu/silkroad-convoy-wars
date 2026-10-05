@@ -130,6 +130,72 @@ export const PROFILES = {
     pops: [0, 2],
     gain: { ex: 1.0, in: 1.0, mech: 16, vib: 3.5 },
   },
+
+  // Audi RS 6 (4.0 TFSI: sicak-V cift turbo, 1-5-4-8-6-3-7-2; kisa manifoldlar turbinlere
+  // gider, klapeli spor susturucu; gazdan ayak cekince patlamalar)
+  rs6: {
+    cyl: 8, order: [1, 5, 4, 8, 6, 3, 7, 2], vd: 0.4995, cr: 10.1, diesel: false,
+    banks: [[1, 2, 3, 4], [5, 6, 7, 8]],
+    idle: 700, redline: 6800, limiter: 7000,
+    valves: { evo: 135, evc: 372, ivo: 350, ivc: 590 },
+    exValve: 7.0e-4, inValve: 9.0e-4, kc: 3.7, burn: 0.075,
+    cov: [0.05, 0.025], bias: 0.025,
+    exRunners: { len: [0.28, 0.24, 0.24, 0.28, 0.28, 0.24, 0.24, 0.28], d: 38 },
+    bankPipes: [{ len: 0.25, d: 55, c: 560, loss: 0.72, fc: 1300 }, { len: 0.27, d: 55, c: 560, loss: 0.72, fc: 1300 }], // turbinler
+    exhaust: [
+      { len: 0.9, d: 70, c: 540 },
+      { len: 0.4, d: 130, c: 520, chamber: true, fc: 2800, loss: 0.9 },   // katalizor / OPF
+      { len: 1.6, d: 70, c: 500 },
+      { len: 0.5, d: 190, c: 470, chamber: true, fc: 1800, loss: 0.93 },  // spor susturucu (klape acik)
+      { len: 0.35, d: 90, c: 450 },
+    ],
+    tailFc: 2600,
+    inRunners: { len: [0.32, 0.32, 0.32, 0.32, 0.32, 0.32, 0.32, 0.32], d: 40 },
+    intake: [
+      { len: 0.18, d: 100 },
+      { len: 0.9, d: 75 },
+      { len: 0.3, d: 200, chamber: true, fc: 2200, loss: 0.88 },
+      { len: 0.22, d: 90 },
+    ],
+    snorkelFc: 2600,
+    jet: [0.32, 0.05],
+    turbo: { boost: 1.4, spoolFrom: 1400, spoolTo: 2300, up: 0.45, down: 1.0, whistle: 0.02, f0: 3200, f1: 8500 },
+    mech: { valve: 0.25, knock: 0.03, res: [[800, 9, 1], [1600, 11, 0.7], [2700, 12, 0.5]], vres: [[3200, 7, 1], [5000, 8, 0.6]] },
+    pops: [5, 4],
+    gain: { ex: 0.8, in: 0.75, mech: 14, vib: 3.0 },
+  },
+
+  // Rezvani Tank (6.4 HEMI: itme cubuklu, capraz duzlem, 1-8-4-3-6-5-7-2; tek sira 1-3-5-7,
+  // cift sira 2-4-6-8; buyuk kam -> tekleyen rolanti; uzun esitsiz sira borulari)
+  tank: {
+    cyl: 8, order: [1, 8, 4, 3, 6, 5, 7, 2], vd: 0.8, cr: 10.9, diesel: false,
+    banks: [[1, 3, 5, 7], [2, 4, 6, 8]],
+    idle: 600, redline: 6400, limiter: 6600,
+    valves: { evo: 125, evc: 385, ivo: 335, ivc: 600 },
+    exValve: 9.5e-4, inValve: 1.15e-3, kc: 3.6, burn: 0.085,
+    cov: [0.12, 0.04], bias: 0.04,
+    exRunners: { len: [0.55, 0.42, 0.42, 0.55, 0.55, 0.42, 0.42, 0.55], d: 44 },
+    bankPipes: [{ len: 0.8, d: 63, c: 540 }, { len: 1.75, d: 63, c: 530 }],
+    exhaust: [
+      { len: 0.35, d: 130, c: 520, chamber: true, fc: 3000, loss: 0.92 },
+      { len: 1.4, d: 76, c: 490 },
+      { len: 0.45, d: 180, c: 470, chamber: true, fc: 1500, loss: 0.9 },
+      { len: 0.5, d: 89, c: 450 },
+    ],
+    tailFc: 1900,
+    inRunners: { len: [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5], d: 46 },
+    intake: [
+      { len: 0.22, d: 120 },
+      { len: 0.5, d: 90 },
+      { len: 0.3, d: 220, chamber: true, fc: 2000, loss: 0.86 },
+      { len: 0.25, d: 100 },
+    ],
+    snorkelFc: 2300,
+    jet: [0.34, 0.06],
+    mech: { valve: 0.5, knock: 0.05, res: [[700, 9, 1], [1400, 11, 0.8], [2300, 12, 0.5]], vres: [[2900, 7, 1], [4600, 8, 0.6]] },
+    pops: [0.8, 2.5],
+    gain: { ex: 0.75, in: 1.0, mech: 14, vib: 3.2 },
+  },
 };
 
 // ---------------------------------------------------------------------------------------
@@ -384,11 +450,11 @@ export class EngineModel {
     if (P.diesel && fuel > 0) c.pm = Math.min(0.6, (0.5 * P.idleFuel) / fuel);
     // yanmamis karisim sicak egzozda patlar (geri tepme)
     // P.pops = [motor freninde, devir sinirinda] saniyedeki ortalama patlama
-    if (P.pops && this.popDelay < 0 && this.rpm > 2400 && fuel === 0) {
+    if (P.pops && this.popDelay < 0 && this.rpm > 2200 && fuel === 0) {
       const events = (this.rpm / 120) * P.cyl;
       let rate = 0;
       if (this.limiting) rate = P.pops[1];
-      else if (misfire) rate = P.pops[0] * Math.max(0, 1 - this.overrunT / 2.5) / 0.32;
+      else if (this.cut) rate = P.pops[0] * Math.max(0, 1 - this.overrunT / 2.5) * (P.carb ? (misfire ? 1 / 0.32 : 0) : 1);
       if (this.rnd() < rate / events) {
         this.popDelay = Math.floor(this.sr * (0.006 + this.rnd() * 0.02));
         this.popAmp = (0.04 + this.rnd() * 0.1) * Math.min(1.2, this.rpm / 4000);
@@ -421,11 +487,11 @@ export class EngineModel {
     if (P.diesel) map = 1.0 + boost;
     else {
       const pv = 0.31 - 0.11 * rn;
-      map = pv + (0.97 - pv) * (1 - Math.pow(1 - L, 3));
+      map = pv + (0.97 + boost - pv) * (1 - Math.pow(1 - L, 3));
       this.throttle.t = 0.03 + 0.97 * (1 - (1 - L) * (1 - L));
     }
     this.map += (map - this.map) * Math.min(1, dt / 0.05);
-    this.pe0 = P.diesel ? 1.05 + 0.85 * this.spool : 1.03 + 0.28 * L * rn * rn;
+    this.pe0 = P.diesel ? 1.05 + 0.85 * this.spool : 1.03 + 0.28 * L * rn * rn + 0.7 * this.spool;
     // rolanti dalgalanmasi (yavas, kucuk)
     this.jitT -= dt;
     if (this.jitT <= 0) { this.jitT = 0.25 + this.rnd() * 0.5; this.jitTarget = (this.rnd() * 2 - 1); }
