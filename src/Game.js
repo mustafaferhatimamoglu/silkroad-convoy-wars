@@ -15,6 +15,7 @@ class LoadingMode {
 export class Game {
   constructor(app) {
     this.app = app;
+    app.game = this;
     this.menu = new Menu(app.ui, this);
     this.overlay = null;
   }
@@ -183,6 +184,18 @@ export class Game {
     const mode = new ExploreMode(app, new THREE.Vector3(pos.x, top + 14, pos.z + 30));
     mode.onPause = () => this.pauseExplore();
     app.setMode(mode);
+    this._hideOverlay();
+  }
+
+  /** Gelistirici: donusturulmus karakterleri sehirde sirala (?mode=chars). */
+  async startCharView(id, keys = null) {
+    const { CharViewMode } = await import('./modes/CharViewMode.js');
+    const app = this.app;
+    const { city, pos } = this.cityPos(id);
+    this.menu.clear();
+    await this.loadArea(pos, `${city.name} yükleniyor…`);
+    const sp = this.findSpawn(pos, city.heading);
+    app.setMode(new CharViewMode(app, new THREE.Vector3(sp.x, sp.y, sp.z), keys));
     this._hideOverlay();
   }
 

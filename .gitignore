@@ -9,3 +9,4 @@ __pycache__/
 *.pyc
 *.log
 .claude/
+tools/assets/.cache/
