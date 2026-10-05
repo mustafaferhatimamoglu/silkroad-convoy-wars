@@ -194,3 +194,12 @@ select { background: #141a26; color: var(--text); border: 1px solid rgba(255, 25
 #kervanHud #minimap { pointer-events: none; }
 #kervanHud .zone .goal { display: block; margin-top: 4px; max-width: 34vw; color: #f2e9d8; font-style: normal; font-size: 13px; }
 #kervanHud .zone .goal::before { content: '▸ '; color: var(--gold); }
+#worldMap { position: absolute; inset: 5vh 5vw; border: 2px solid var(--gold-2); border-radius: 10px; overflow: hidden; background: #000;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.7); cursor: grab; z-index: 30; }
+#worldMap.hidden { display: none; }
+#worldMap canvas { width: 100%; height: 100%; display: block; }
+#worldMap .wmHead { position: absolute; left: 0; right: 0; top: 0; padding: 10px 14px; background: linear-gradient(180deg, rgba(0,0,0,0.75), rgba(0,0,0,0));
+  display: flex; gap: 14px; align-items: baseline; pointer-events: none; }
+#worldMap .wmHead b { color: var(--gold); font-family: Georgia, serif; font-size: 20px; font-weight: 500; }
+#worldMap .wmHead span { color: var(--muted); font-size: 12px; }
+#worldMap kbd { display: inline-block; padding: 0 5px; border: 1px solid rgba(232, 193, 112, 0.55); border-radius: 3px; color: var(--gold); font: 600 11px Consolas, monospace; }

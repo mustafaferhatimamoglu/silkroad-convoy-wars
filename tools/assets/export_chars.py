@@ -524,6 +524,10 @@ def city_npc_resources():
         if not c or not c[0].startswith("NPC_") or "EVENT" in c[0] or "GACHA" in c[0] or c[1] in ("xxx", ""):
             continue
         res.add("res/" + jmx.norm_path(c[1]))
+    # feribot / ucan gemi biletcileri (sehir disindaki iskelelerde)
+    for code, model in chars.values():
+        if re.search(r"^NPC_.*_(FERRY|FLYSHIP)[0-9]*$", code) and model not in ("xxx", ""):
+            res.add("res/" + jmx.norm_path(model))
     return sorted(res)
 
 

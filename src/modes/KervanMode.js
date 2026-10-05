@@ -10,6 +10,8 @@ import { TraderState } from '../rpg/TraderState.js';
 import { TRANSPORTS } from '../rpg/Economy.js';
 import { KervanUI } from '../ui/KervanUI.js';
 import { Minimap } from '../ui/Minimap.js';
+import { WorldMap } from '../ui/WorldMap.js';
+import { crossings, GATE_NAMES } from '../rpg/Routes.js';
 import { Sfx } from '../rpg/Sfx.js';
 import { ROUTE } from '../rpg/Economy.js';
 import { cityById, CITIES } from '../data/cities.js';
@@ -77,7 +79,9 @@ export class KervanMode {
     this._buildHud();
     this.ui = new KervanUI(app.ui, this);
     this.minimap = new Minimap(app, this.hud);
+    this.worldMap = new WorldMap(app, app.ui);
     this.dest = this._defaultDest(this.cityId);
+    this._planRoute();
     if (this.state.transport !== 'none') await this._spawnCaravan();
     this._musicT = 0;
     this.ready = true;
@@ -91,7 +95,7 @@ export class KervanMode {
       <div class="zone"><b></b><span></span><i class="dest"></i><i class="goal"></i></div>
       <div class="prompt hidden"></div>
       <div class="toast hidden"></div>
-      <div class="help"><kbd>WASD</kbd> hareket · <kbd>Shift</kbd> yürü · <kbd>E</kbd> konuş · <kbd>Boşluk</kbd> saldır · <kbd>Tab</kbd> hedef · <kbd>Q</kbd> iksir · sağ fare: kamera · <kbd>Esc</kbd> menü</div>`;
+      <div class="help"><kbd>WASD</kbd> hareket · <kbd>Shift</kbd> yürü · <kbd>E</kbd> konuş · <kbd>Boşluk</kbd> saldır · <kbd>Tab</kbd> hedef · <kbd>Q</kbd> iksir · <kbd>M</kbd> harita · sağ fare: kamera · <kbd>Esc</kbd> menü</div>`;
     this.app.ui.appendChild(el);
     this.hud = el;
     this.hudZone = el.querySelector('.zone b');
@@ -102,6 +106,69 @@ export class KervanMode {
     this.hudGoal = el.querySelector('.zone .goal');
   }
 
+  /** Hedefe giden yol: sirali feribot / ucan gemi gecisleri. */
+  _planRoute() {
+    this.crossList = crossings(this.lastCity || this.nearCity, this.dest);
+    this.crossIdx = 0;
+  }
+
+  gatePos(id, out = new THREE.Vector3()) {
+    const g = this.data.ferries.gates[id];
+    if (!g) return null;
+    return this.app.world.toThree(g.rx, g.rz, g.x, g.y, g.z, out);
+  }
+
+  /** Siradaki ara hedef: iskele (varsa) ya da hedef sehir. */
+  nextWaypoint() {
+    const c = this.crossList && this.crossList[this.crossIdx];
+    if (c) {
+      const p = this.gatePos(c[0]);
+      if (p) return { x: p.x, z: p.z, name: GATE_NAMES[c[0]] || 'İskele', gate: c[0], ship: /FLYSHIP/.test(this.data.ferries.gates[c[0]].code) };
+    }
+    const dc = cityById(this.dest);
+    const t = this.app.world.toThree(dc.rx, dc.rz, dc.lx, 0, dc.lz, new THREE.Vector3());
+    return { x: t.x, z: t.z, name: dc.name };
+  }
+
+  /** Feribot / ucan gemi biletcisi: bagli iskelelere gecis (yukle serbest). */
+  ferryMenu(npc) {
+    const s = this.state;
+    const F = this.data.ferries;
+    const mine = Object.entries(F.gates).filter(([, g]) => g.npc === npc.def.code).map(([id]) => +id);
+    const fee = 120 + 2 * s.load;
+    const opts = F.links.filter(([a]) => mine.includes(a)).map(([a, b]) => ({
+      label: `Karşıya geç: ${GATE_NAMES[b] || 'karşı kıyı'} — ${fee} altın`,
+      small: s.load ? `Kervan ve ${s.load} birim yük de geçer` : 'Kervan da seninle gelir',
+      fn: () => {
+        if (s.gold < fee) { this.toast('Altının yetmiyor', 2); this.sfx('error'); return; }
+        s.gold -= fee;
+        this.ui.close();
+        this.crossTo(a, b);
+      },
+    }));
+    if (!opts.length) opts.push({ label: 'Bugün sefer yok', fn: () => this.ui.close() });
+    this.ui.talk(npc, opts);
+  }
+
+  async crossTo(from, to) {
+    const p = this.gatePos(to);
+    if (!p) return;
+    this.paused = true;
+    this.focus.copy(p);
+    await this.app.game.loadArea(p, `${GATE_NAMES[to] || 'Karşı kıyı'}…`);
+    this.app.game._hideOverlay();
+    this.mover.place(p.x, p.z, p.y);
+    if (this.caravan) this.caravan.mover.place(p.x + 2, p.z + 2, this.mover.pos.y);
+    this.camera.initialized = false;
+    const c = this.crossList && this.crossList[this.crossIdx];
+    if (c && c[0] === from && c[1] === to) this.crossIdx++;
+    else { this.lastCity = this.nearCity; this._planRoute(); }
+    this.paused = false;
+    this.sfx('gate');
+    this.toast(GATE_NAMES[to] || 'Karşı kıyı', 2.5);
+    this.saveSoon();
+  }
+
   /** Siradaki adim (yeni oyuncu icin rehber): metin + ilgili NPC rolu. */
   objective() {
     const s = this.state;
@@ -110,8 +177,10 @@ export class KervanMode {
     if (s.transport === 'none' && s.gold >= TRANSPORTS.donkey.price && this.inCity) return { text: "Ahır Sorumlusu'ndan bir yük eşeği al", role: 'stable' };
     if (!s.load && this.inCity) return { text: `Özel Ürün Tüccarı'ndan ${here} malı yükle`, role: 'special' };
     if (!s.load) return { text: 'Bir şehre gidip mal yükle' };
-    if (this.inCity && this.nearCity === s.boughtIn) return { text: `Yükü ${dest} şehrine götür (H: hedef değiştir)` };
-    if (this.inCity) return { text: "Özel Ürün Tüccarı'na git ve yükünü sat", role: 'special' };
+    if (this.inCity && this.nearCity === s.boughtIn) return { text: `Yükü ${dest} şehrine götür (H: hedef değiştir, M: harita)` };
+    if (this.inCity && this.nearCity !== s.boughtIn) return { text: "Özel Ürün Tüccarı'na git ve yükünü sat", role: 'special' };
+    const wp = this.nextWaypoint();
+    if (wp.gate) return { text: `${wp.name}: ${wp.ship ? 'uçan gemiyle' : 'sandalla'} karşıya geç`, ferry: wp.gate };
     return { text: `${dest} yolundasın: kervanını haydutlardan koru` };
   }
 
@@ -121,7 +190,10 @@ export class KervanMode {
     this.hudGoal.textContent = o.text;
     // hedef NPC'nin ustunde "!" isareti
     let target = null;
-    if (o.role) {
+    if (o.ferry) {
+      const code = this.data.ferries.gates[o.ferry] && this.data.ferries.gates[o.ferry].npc;
+      for (const e of this.population.entities.values()) if (e.def.code === code && e.char) target = e;
+    } else if (o.role) {
       let bd = Infinity;
       for (const e of this.population.entities.values()) {
         if (e.kind !== 'npc' || e.def.role !== o.role || !e.char) continue;
@@ -177,6 +249,7 @@ export class KervanMode {
     this.camera.initialized = false;
     this.lastCity = id; this.nearCity = id; this.state.city = id;
     this.dest = this._defaultDest(id);
+    this._planRoute();
     this.paused = false;
     this.sfx('gate');
     this.toast(city.name, 2.5);
@@ -193,6 +266,8 @@ export class KervanMode {
     const opts = ROUTE.filter((c) => c !== this.nearCity);
     const i = opts.indexOf(this.dest);
     this.dest = opts[(i + 1) % opts.length];
+    this.lastCity = this.nearCity;
+    this._planRoute();
     this.toast(`Hedef: ${cityById(this.dest).name}`, 1.5);
   }
 
@@ -207,10 +282,15 @@ export class KervanMode {
     for (const e of this.combat.ambushes) if (e.alive) marks.push({ x: e.pos.x, z: e.pos.z, color: '#ff2a1a', r: 5 });
     if (this.caravan) marks.push({ x: this.caravan.pos.x, z: this.caravan.pos.z, color: '#7fe36a', r: 6 });
     const dc = cityById(this.dest);
+    const wp = this.nextWaypoint();
+    this.minimap.draw(this.mover.pos, this.camera.yaw, marks, { x: wp.x, z: wp.z });
     const t = this.app.world.toThree(dc.rx, dc.rz, dc.lx, 0, dc.lz, _v);
-    this.minimap.draw(this.mover.pos, this.camera.yaw, marks, { x: t.x, z: t.z });
-    const km = Math.hypot(t.x - this.mover.pos.x, t.z - this.mover.pos.z) / 1000;
-    this.hudDest.textContent = `Hedef: ${dc.name} · ${km < 1 ? Math.round(km * 1000) + ' m' : km.toFixed(1) + ' km'} (H: değiştir)`;
+    this.worldMap.update({ player: { x: this.mover.pos.x, z: this.mover.pos.z, yaw: this.yaw },
+      caravan: this.caravan ? { x: this.caravan.pos.x, z: this.caravan.pos.z } : null, dest: { x: t.x, z: t.z, name: dc.name },
+      waypoint: wp.gate ? { x: wp.x, z: wp.z, name: wp.name } : null, ferries: this.data.ferries, gatePos: (id) => this.gatePos(id) });
+    const km = Math.hypot(wp.x - this.mover.pos.x, wp.z - this.mover.pos.z) / 1000;
+    const dist = km < 1 ? Math.round(km * 1000) + ' m' : km.toFixed(1) + ' km';
+    this.hudDest.textContent = wp.gate ? `Hedef: ${dc.name} · önce ${wp.name} ${dist}` : `Hedef: ${dc.name} · ${dist} (H: değiştir)`;
   }
 
   toast(text, secs = 2) {
@@ -313,6 +393,8 @@ export class KervanMode {
       opts.push({ label: 'Silahımı güçlendir', fn: () => this.ui.upgrade(npc, s, 'weapon', say) });
     } else if (role === 'armor') {
       opts.push({ label: 'Zırhımı güçlendir', fn: () => this.ui.upgrade(npc, s, 'armor', say) });
+    } else if (/_(FERRY|FLYSHIP)[0-9]*$/.test(npc.def.code)) {
+      opts.push({ label: /FLYSHIP/.test(npc.def.code) ? 'Uçan gemiye bin' : 'Sandalla karşıya geç', small: 'Kervan ve yük de geçer', fn: () => this.ferryMenu(npc) });
     } else if (role === 'guard' && /Teleport/i.test(npc.name)) {
       opts.push({ label: 'Başka şehre ışınlan', small: 'Ücretli; yük taşırken olmaz', fn: () => this.teleportMenu(npc) });
     } else if (role === 'traderGuild' || role === 'merchant') {
@@ -398,7 +480,9 @@ export class KervanMode {
     if (!this.ready) return;
     const { input } = this.app;
     const s = this.state;
+    if (input.pressed('KeyM')) this.worldMap.toggle();
     if (input.pressed('Escape')) {
+      if (this.worldMap.open) { this.worldMap.toggle(false); return; }
       if (this.ui.open) { this.ui.close(); return; }
       if (this.onPause) { this.onPause(); return; }
     }
@@ -490,6 +574,7 @@ export class KervanMode {
         if (this.lastCity !== city.id) this.toast(`${city.name}'e vardın. Özel Ürün Tüccarı'nı bul ve yükünü sat.`, 4);
         if (this.dest === city.id || this.lastCity !== city.id) this.dest = this._defaultDest(city.id);
         this.lastCity = city.id;
+        this._planRoute();
         s.city = city.id;
         this.saveSoon();
       }
@@ -528,6 +613,7 @@ export class KervanMode {
     if (this.player) this.player.dispose();
     if (this.ui) this.ui.dispose();
     if (this.minimap) this.minimap.dispose();
+    if (this.worldMap) this.worldMap.dispose();
     if (this.hud) this.hud.remove();
     for (const f of this.floaters) f.s.removeFromParent();
   }

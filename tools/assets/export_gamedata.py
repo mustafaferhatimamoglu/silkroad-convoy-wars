@@ -130,6 +130,25 @@ def main():
     n_npc = sum(1 for d in table if d["role"] not in ("mob", "cos"))
     print(f"{len(table)} tanim ({n_npc} NPC), {sum(len(v) for v in spawns.values())} dogma noktasi, {len(spawns)} bolge")
 
+    # feribot / gemi iskeleleri (teleportdata + teleportlink): kervan nehri ve denizi boyle gecer
+    gates = {}
+    for r in lines(TD + "teleportdata.txt"):
+        if len(r) < 9 or r[0] != "1" or not re.search(r"FERRY|FLYSHIP", r[2]):
+            continue
+        reg = int(float(r[5]))
+        npc = defs.get(int(float(r[3])))
+        gates[int(r[1])] = {"code": r[2], "npc": npc["code"] if npc else None, "rx": reg & 255, "rz": reg >> 8,
+                            "x": round(float(r[6]), 1), "y": round(float(r[7]), 1), "z": round(float(r[8]), 1)}
+    links = []
+    for r in lines(TD + "teleportlink.txt"):
+        if len(r) > 4 and r[0] == "1":
+            a_, b_ = int(r[1]), int(r[2])
+            if a_ in gates and b_ in gates:
+                links.append([a_, b_, int(float(r[3]))])
+    with open(os.path.join(OUT, "ferries.json"), "w", encoding="utf-8", newline="\n") as f:
+        json.dump({"gates": gates, "links": links}, f, indent=1)
+    print(len(gates), "iskele,", len(links), "baglanti")
+
     # ticaret mallari + ikonlar
     goods = []
     for code, (tr, en) in sorted(names.items()):

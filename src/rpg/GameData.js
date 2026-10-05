@@ -11,7 +11,8 @@ export class GameData {
 
   async load() {
     const get = (f) => fetch(this.base + f, { cache: 'no-cache' }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
-    const [chars, spawns, goods] = await Promise.all([get('chars.json'), get('spawns.json'), get('goods.json')]);
+    const [chars, spawns, goods, ferries] = await Promise.all([get('chars.json'), get('spawns.json'), get('goods.json'), get('ferries.json')]);
+    this.ferries = ferries || { gates: {}, links: [] };
     this.chars = chars || [];
     this.spawns = spawns || {};
     this.goods = goods || [];
