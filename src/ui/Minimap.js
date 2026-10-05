@@ -29,7 +29,7 @@ export class Minimap {
    * pos: Three.js konumu; heading: yukari bakan yon (radyan; 0 = kuzey/-z).
    * marks: [{x, z, color, r}] ; target: {x, z, label} (kenarda ok)
    */
-  draw(pos, heading, marks = [], target = null) {
+  draw(pos, heading, marks = [], target = null, path = null) {
     const c = this.canvas, ctx = c.getContext('2d');
     const W = c.width, S = this.S;
     const p = this.app.world.fromThree(pos.x, pos.z);
@@ -46,6 +46,15 @@ export class Minimap {
         const x = dx * regionPx - ox, y = -(dz * regionPx) - (regionPx - oz);
         ctx.drawImage(img, x, y, regionPx, regionPx);
       }
+    }
+    // rehber yolu (noktali)
+    if (path && path.length > 1) {
+      ctx.setLineDash([6, 6]); ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(255, 211, 106, 0.9)';
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      for (const q of path) ctx.lineTo((q.x - pos.x) * S, (q.z - pos.z) * S);
+      ctx.stroke();
+      ctx.setLineDash([]);
     }
     // isaretler (dunya: +x dogu, -z kuzey -> harita: x sag, z asagi)
     for (const m of marks) {

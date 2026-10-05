@@ -12,6 +12,7 @@ import { KervanUI } from '../ui/KervanUI.js';
 import { Minimap } from '../ui/Minimap.js';
 import { WorldMap } from '../ui/WorldMap.js';
 import { crossings, GATE_NAMES } from '../rpg/Routes.js';
+import { PathFinder } from '../rpg/PathFinder.js';
 import { Sfx } from '../rpg/Sfx.js';
 import { ROUTE } from '../rpg/Economy.js';
 import { cityById, CITIES } from '../data/cities.js';
@@ -80,6 +81,9 @@ export class KervanMode {
     this.ui = new KervanUI(app.ui, this);
     this.minimap = new Minimap(app, this.hud);
     this.worldMap = new WorldMap(app, app.ui);
+    this.pf = new PathFinder(app);
+    this.guide = null;
+    this._pfT = 0;
     this.dest = this._defaultDest(this.cityId);
     this._planRoute();
     if (this.state.transport !== 'none') await this._spawnCaravan();
@@ -128,6 +132,63 @@ export class KervanMode {
     const dc = cityById(this.dest);
     const t = this.app.world.toThree(dc.rx, dc.rz, dc.lx, 0, dc.lz, new THREE.Vector3());
     return { x: t.x, z: t.z, name: dc.name };
+  }
+
+  /**
+   * Rehber: sehir disinda oyuncudan siradaki yol noktasina A* yolu (birkac saniyede bir ya da
+   * yoldan sapinca yenilenir). Ok, yol uzerinde ~25 m ilerideki noktayi gosterir.
+   */
+  _updateGuide(dt) {
+    const wp = this.nextWaypoint();
+    const p = this.mover.pos;
+    const far = Math.hypot(wp.x - p.x, wp.z - p.z);
+    if (this.inCity && !wp.gate) { this.guide = null; return; }
+    if (far < 12) { this.guide = null; return; }
+    this._pfT -= dt;
+    const off = this.guide ? this._offPath(p) : Infinity;
+    if (!this.pf.busy && (this._pfT <= 0 || off > 18 || this._guideTo !== wp.name)) {
+      this.pf.start(p, wp);
+      this._pfT = 5;
+      this._guideTo = wp.name;
+    }
+    if (this.pf.busy) this.pf.step(3);
+    if (this.pf.path && !this.pf.busy) { this.guide = this.pf.path; this.pf.path = null; }
+  }
+
+  _offPath(p) {
+    let best = Infinity;
+    const g = this.guide;
+    for (let i = 0; i < g.length - 1; i++) {
+      const a = g[i], b = g[i + 1];
+      const dx = b.x - a.x, dz = b.z - a.z, l2 = dx * dx + dz * dz || 1;
+      const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.z - a.z) * dz) / l2));
+      best = Math.min(best, Math.hypot(p.x - (a.x + dx * t), p.z - (a.z + dz * t)));
+    }
+    return best;
+  }
+
+  /** Rehber yolunda oyuncunun ~ahead m ilerisindeki nokta. */
+  guidePoint(ahead = 28) {
+    const g = this.guide, p = this.mover.pos;
+    if (!g || g.length < 2) return null;
+    // en yakin parca
+    let bi = 0, bd = Infinity, bt = 0;
+    for (let i = 0; i < g.length - 1; i++) {
+      const a = g[i], b = g[i + 1];
+      const dx = b.x - a.x, dz = b.z - a.z, l2 = dx * dx + dz * dz || 1;
+      const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.z - a.z) * dz) / l2));
+      const d = Math.hypot(p.x - (a.x + dx * t), p.z - (a.z + dz * t));
+      if (d < bd) { bd = d; bi = i; bt = t; }
+    }
+    let left = ahead;
+    let x = g[bi].x + (g[bi + 1].x - g[bi].x) * bt, z = g[bi].z + (g[bi + 1].z - g[bi].z) * bt;
+    for (let i = bi; i < g.length - 1; i++) {
+      const b = g[i + 1];
+      const l = Math.hypot(b.x - x, b.z - z);
+      if (l >= left) return { x: x + ((b.x - x) * left) / l, z: z + ((b.z - z) * left) / l };
+      left -= l; x = b.x; z = b.z;
+    }
+    return { x, z };
   }
 
   /** Feribot / ucan gemi biletcisi: bagli iskelelere gecis (yukle serbest). */
@@ -283,7 +344,10 @@ export class KervanMode {
     if (this.caravan) marks.push({ x: this.caravan.pos.x, z: this.caravan.pos.z, color: '#7fe36a', r: 6 });
     const dc = cityById(this.dest);
     const wp = this.nextWaypoint();
-    this.minimap.draw(this.mover.pos, this.camera.yaw, marks, { x: wp.x, z: wp.z });
+    const gp = this.guidePoint();
+    // ok: sehirde gorev NPC'si, yolda rehber noktasi, yoksa yol noktasi
+    const arrow = this.goalTarget ? { x: this.goalTarget.pos.x, z: this.goalTarget.pos.z } : gp || { x: wp.x, z: wp.z };
+    this.minimap.draw(this.mover.pos, this.camera.yaw, marks, arrow, this.guide);
     const t = this.app.world.toThree(dc.rx, dc.rz, dc.lx, 0, dc.lz, _v);
     this.worldMap.update({ player: { x: this.mover.pos.x, z: this.mover.pos.z, yaw: this.yaw },
       caravan: this.caravan ? { x: this.caravan.pos.x, z: this.caravan.pos.z } : null, dest: { x: t.x, z: t.z, name: dc.name },
@@ -404,7 +468,16 @@ export class KervanMode {
     this.ui.talk(npc, opts);
   }
 
-  onDialogClosed() { this.paused = false; this.saveSoon(); }
+  onDialogClosed() {
+    this.paused = false;
+    // yuk satildiysa yeni hedef: siradaki sehir
+    if (!this.state.load && this.inCity && this.dest === this.nearCity) {
+      this.dest = this._defaultDest(this.nearCity);
+      this.lastCity = this.nearCity;
+      this._planRoute();
+    }
+    this.saveSoon();
+  }
 
   _advice() {
     const s = this.state;
@@ -549,7 +622,8 @@ export class KervanMode {
       if (!this.combat.target) this.toast('Yakında düşman yok', 1.2);
     }
     if (input.pressed('KeyQ') || (gp && gp.pressed(3))) this.drinkPotion();
-    if (input.pressed('KeyH')) this._cycleDest();
+    if (input.pressed('KeyH')) { this._cycleDest(); this.guide = null; }
+    this._updateGuide(dt);
     if ((this._mapF = (this._mapF || 0) + 1) % 2 === 0) this._drawMap();
     // etkilesim
     const npc = this.dead ? null : this.population.nearestNpc(this.mover.pos);
@@ -572,7 +646,8 @@ export class KervanMode {
       this.inCity = dist < CITY_RADIUS;
       if (this.inCity && (!was || this.lastCity !== city.id)) {
         if (this.lastCity !== city.id) this.toast(`${city.name}'e vardın. Özel Ürün Tüccarı'nı bul ve yükünü sat.`, 4);
-        if (this.dest === city.id || this.lastCity !== city.id) this.dest = this._defaultDest(city.id);
+        // yuk satilana kadar hedef bu sehir kalir; bos gelindiyse siradaki sehre gec
+        if (!s.load && (this.dest === city.id || this.lastCity !== city.id)) this.dest = this._defaultDest(city.id);
         this.lastCity = city.id;
         this._planRoute();
         s.city = city.id;

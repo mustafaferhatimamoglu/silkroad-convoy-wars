@@ -48,11 +48,13 @@ export class CharacterMover {
   move(dt, wish, { accel = 30 } = {}) {
     dt = Math.min(dt, 0.05);
     const v = this.vel;
+    // altindaki bolge henuz yuklenmediyse bekle (zemin isini bos doner: dunyanin altina dusmesin)
+    if (!this.app.world.isLoadedAt(this.pos.x, this.pos.z)) { v.set(0, 0, 0); return 0; }
     // yatay hiz istenene yaklasir
     const k = Math.min(1, (accel * dt) / Math.max(0.01, Math.hypot(wish.x - v.x, wish.z - v.z)));
     v.x += (wish.x - v.x) * k;
     v.z += (wish.z - v.z) * k;
-    if (!this.onGround) v.y -= 22 * dt; else v.y = 0;
+    if (!this.onGround) v.y = Math.max(-40, v.y - 22 * dt); else v.y = 0;
     const x0 = this.pos.x, z0 = this.pos.z;
     // alt adimlar (hizli harekette duvardan gecmesin)
     const travel = Math.hypot(v.x, v.z) * dt;
@@ -66,6 +68,7 @@ export class CharacterMover {
     const p = this.pos, v = this.vel;
     const px = p.x, pz = p.z;
     p.x += v.x * dt; p.z += v.z * dt; p.y += v.y * dt;
+    if (!this.app.world.isLoadedAt(p.x, p.z)) { p.x = px; p.z = pz; v.x = 0; v.z = 0; }
     // duvarlar (objeler)
     for (const hgt of this.spheres) {
       _c.set(p.x, p.y + hgt, p.z);
@@ -85,22 +88,31 @@ export class CharacterMover {
         if (vn < 0) { v.x -= _n.x * vn; v.z -= _n.z * vn; this.blocked += -vn; }
       }
     }
+    // derin gomulme (2 m+; normalde olmaz): eski yere don ve yuzeye cik
+    const th = this.app.world.heightAt(p.x, p.z);
+    if (th !== null && p.y < th - 2.0) {
+      p.x = px; p.z = pz;
+      const th0 = this.app.world.heightAt(p.x, p.z) ?? th;
+      const g2 = this._groundAt(p.x, p.z, th0 + 2.5, 6);
+      p.y = g2 ? Math.max(g2.y, th0) : th0;
+      if (v.y < 0) v.y = 0;
+    }
     // zemin
-    const g = this._groundAt(p.x, p.z, p.y + this.stepUp + 0.05, this.stepUp + 3.0);
-    if (g) {
-      const gy = g.y;
-      if (g.n.y < this.maxSlope && gy > p.y + 0.05) {
-        // cok dik yukari yokus: duvar gibi geri it
-        p.x = px; p.z = pz;
-        this.blocked += 1;
-      } else if (gy >= p.y - 0.06 || (this.onGround && gy > p.y - this.stepUp && v.y <= 0)) {
-        // zemine otur (asagi basamak/yokus inisinde de yapis)
-        p.y = gy;
-        this.onGround = true;
-        this.groundNormal.copy(g.n);
-        if (v.y < 0) v.y = 0;
-        return;
-      }
+    let g = this._groundAt(p.x, p.z, p.y + this.stepUp + 0.05, this.stepUp + 3.0);
+    if (g && g.n.y < this.maxSlope && g.y > p.y + 0.05) {
+      // cok dik yukari yokus: duvar gibi; eski yere don ve oradaki zemine otur
+      p.x = px; p.z = pz;
+      this.blocked += 1;
+      g = this._groundAt(p.x, p.z, p.y + this.stepUp + 0.05, this.stepUp + 3.0);
+      if (g && g.y > p.y + 0.05 && g.n.y < this.maxSlope) g = { y: Math.max(p.y, Math.min(g.y, p.y + 0.05)), n: g.n };
+    }
+    if (g && (g.y >= p.y - 0.06 || (this.onGround && g.y > p.y - this.stepUp && v.y <= 0))) {
+      // zemine otur (asagi basamak/yokus inisinde de yapis)
+      p.y = g.y;
+      this.onGround = true;
+      this.groundNormal.copy(g.n);
+      if (v.y < 0) v.y = 0;
+      return;
     }
     this.onGround = false;
   }
