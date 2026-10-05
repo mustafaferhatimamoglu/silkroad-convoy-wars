@@ -1,6 +1,6 @@
 # Silkroad istemcisinden uretilen oyun varliklari (Joymax telifli, ~1.5 GB).
 # tools/ altindaki betiklerle C:\Silkroad\SRO_Client icindeki PK2 dosyalarindan yeniden uretilir.
-assets/
+/assets/
 
 # Gelistirme ciktilari
 .debug/
