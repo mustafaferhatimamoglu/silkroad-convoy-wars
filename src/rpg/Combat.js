@@ -41,7 +41,10 @@ export class Combat {
     e.lvl = st.lvl; e.maxHp = st.hp; e.hp = st.hp; e.dmg = st.dmg; e.pd = st.pd;
     e.archer = isArcher(e.def);
     e.bandit = isBandit(e.def);
-    e.aggro = e.bandit ? 13 : 8;
+    // yaban canavarlari oyuncudan cok yuksek seviyedeyse saldirilmadikca pasif (yeni tuccar uzak
+    // yollardan gecebilsin); haydutlar her zaman kervanin pesinde
+    const pl = this.mode.state ? this.mode.state.level : 1;
+    e.aggro = e.bandit ? 13 : e.lvl > pl + 8 ? 0 : 8;
     e.atkT = 1 + Math.random();
     e.state = 'idle';
     e.wanderT = 2 + Math.random() * 5;
