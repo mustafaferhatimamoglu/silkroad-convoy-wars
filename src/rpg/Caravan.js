@@ -7,6 +7,7 @@ import { TRANSPORTS } from './Economy.js';
 
 const _d = new THREE.Vector3();
 const _w = new THREE.Vector3();
+const _t = new THREE.Vector3();
 
 export class Caravan {
   constructor(app, lib, kind) {
@@ -37,18 +38,24 @@ export class Caravan {
 
   get pos() { return this.mover.pos; }
 
-  update(dt, player, playerYaw) {
+  update(dt, player, playerYaw, moving = true) {
     if (!this.ready) return;
     const p = this.mover.pos;
-    _d.subVectors(player, p); _d.y = 0;
+    // hedef: oyuncunun 3 m arkasi ve 1.8 m solu (kamera ile oyuncu arasina girmesin).
+    // Oyuncu yerinde donerken (savas) hedef sabit kalsin: yon yalniz yururken guncellenir.
+    if (moving || this.anchorYaw === undefined) this.anchorYaw = playerYaw;
+    const ay = this.anchorYaw;
+    _t.set(player.x - Math.sin(ay) * 3.0 + Math.cos(ay) * 1.8, player.y, player.z - Math.cos(ay) * 3.0 - Math.sin(ay) * 1.8);
+    _d.subVectors(_t, p); _d.y = 0;
     const dist = _d.length();
-    const follow = 3.2;
+    const toPlayer = Math.hypot(player.x - p.x, player.z - p.z);
+    const follow = toPlayer < 2.2 ? 0 : 0.8;
     _w.set(0, 0, 0);
     if (!this.alive) {
       this.char.update(dt);
       return;
     }
-    if (dist > 45 || Math.abs(player.y - p.y) > 8) {
+    if (toPlayer > 45 || Math.abs(player.y - p.y) > 8) {
       // cok geride kaldi: oyuncunun arkasina gel
       this.mover.place(player.x - Math.sin(playerYaw) * 3, player.z - Math.cos(playerYaw) * 3, player.y);
       this.stuckT = 0;
@@ -63,7 +70,7 @@ export class Caravan {
     this.mover.move(dt, _w, { accel: 12 });
     // takilma: istedigi halde ilerleyemiyorsa yana kaydir
     const v = Math.hypot(this.mover.vel.x, this.mover.vel.z);
-    if (dist > follow + 2 && v < 0.3) this.stuckT += dt; else this.stuckT = Math.max(0, this.stuckT - dt);
+    if (toPlayer > 6 && v < 0.3) this.stuckT += dt; else this.stuckT = Math.max(0, this.stuckT - dt);
     if (this.stuckT > 2.5) { this.mover.place(player.x - Math.sin(playerYaw) * 2.5, player.z - Math.cos(playerYaw) * 2.5, player.y); this.stuckT = 0; }
     this.char.root.position.copy(this.mover.pos);
     this.char.root.rotation.y = this.yaw;

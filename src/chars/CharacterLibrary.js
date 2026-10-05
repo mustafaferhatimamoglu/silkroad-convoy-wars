@@ -132,6 +132,27 @@ export class Character {
 
   has(key) { return !!this.type.clips[key]; }
 
+  /** Esya (silah) modelini bir kemige tak; ayni yuvadaki eskisi cikarilir. */
+  async attach(lib, key, boneName = 'Bip01 R HandMid', slot = 'hand') {
+    this.attachments = this.attachments || {};
+    const old = this.attachments[slot];
+    if (old) { old.removeFromParent(); delete this.attachments[slot]; }
+    if (!key) return null;
+    const type = await lib.load(key);
+    const bone = this.bones.find((b) => b.name === sanitize(boneName));
+    if (!bone) return null;
+    const g = new THREE.Group();
+    g.name = key;
+    type.geometries.forEach((geo, i) => {
+      const m = new THREE.Mesh(geo, type.materials[type.meta.meshes[i].mat]);
+      m.castShadow = true;
+      g.add(m);
+    });
+    bone.add(g);
+    this.attachments[slot] = g;
+    return g;
+  }
+
   action(key) {
     let a = this.actions[key];
     if (!a && this.type.clips[key]) { a = this.mixer.clipAction(this.type.clips[key]); this.actions[key] = a; }

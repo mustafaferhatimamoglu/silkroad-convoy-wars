@@ -9,8 +9,9 @@ import { routeStage } from './Economy.js';
 const _d = new THREE.Vector3();
 const _w = new THREE.Vector3();
 
-const PLAYER_ATTACKS = ['punchL', 'punchR', 'hookL'];
-const MELEE = 2.1;
+const PLAYER_ATTACKS = ['spearAttack1', 'spearAttack2', 'spearAttack3'];
+const FIST_ATTACKS = ['punchL', 'punchR', 'hookL'];
+const MELEE = 2.6;          // mizrak menzili (m)
 
 function isArcher(def) { return /ARCHER|BOW/.test(def.code); }
 function isBandit(def) { return /BANDIT|ROBBER|THIEF/.test(def.code); }
@@ -76,8 +77,12 @@ export class Combat {
     const d = Math.hypot(t.pos.x - p.x, t.pos.z - p.z);
     m.yaw = Math.atan2(t.pos.x - p.x, t.pos.z - p.z);
     if (d > MELEE + 0.4) { m.autoMove = t; return; }     // yaklas, sonra vur
-    const anim = PLAYER_ATTACKS[this.comboI++ % PLAYER_ATTACKS.length];
-    m.player.play(anim, { once: true, then: 'idleBattle', fade: 0.08, restart: true, timeScale: 1.25 });
+    const armed = m.player.has('spearAttack1') && m.hasWeapon;
+    const list = armed ? PLAYER_ATTACKS : FIST_ATTACKS;
+    const anim = list[this.comboI++ % list.length];
+    m.player.play(anim, { once: true, then: m.idleKey(true), fade: 0.08, restart: true, timeScale: armed ? 1.15 : 1.25 });
+    m.sfxs.play(armed ? (this.comboI % 2 ? 'spearSwing1' : 'spearSwing2') : 'punchSwing', { pos: m.mover.pos, vol: 0.7 });
+    if (Math.random() < 0.35) m.sfxs.voice(m.look.endsWith('_w') ? 'w' : 'm', 'shout', m.mover.pos);
     m.attackLock = 0.45;
     this.cooldown = 0.75;
     setTimeout(() => {
@@ -88,15 +93,17 @@ export class Combat {
       const crit = Math.random() < 0.12;
       if (crit) dmg *= 2;
       dmg = Math.max(1, Math.round(dmg));
+      m.sfxs.play(crit ? 'crit' : m.hasWeapon ? (Math.random() < 0.5 ? 'spearHit1' : 'spearHit2') : 'punchHit', { pos: t.pos, vol: 0.9 });
       this.damage(t, dmg, crit);
       t.provoked = true;
-    }, 260);
+    }, armed ? 330 : 260);
   }
 
   damage(e, dmg, crit = false) {
     e.hp -= dmg;
     this.mode.floatText(e.pos, crit ? `${dmg}!` : `${dmg}`, crit ? '#ffd36a' : '#ffffff', (e.char.type.height || 1.8) + 0.2);
     if (e.hp <= 0) { this.kill(e); return; }
+    if (Math.random() < 0.6) this.mode.sfxs.char(e.def.model, 'hurt', e.pos, { gap: 0.3 });
     if (e.state !== 'attack' || Math.random() < 0.5) e.char.play('hit', { once: true, then: 'idle', fade: 0.06 });
     if (e.state === 'idle' || e.state === 'wander' || e.state === 'home') { e.state = 'chase'; e.target = 'player'; }
   }
@@ -107,6 +114,8 @@ export class Combat {
     e.state = 'dead';
     e.deadT = 0;
     e.char.play('die', { once: true, fade: 0.08 });
+    m.sfxs.char(e.def.model, 'die', e.pos);
+    setTimeout(() => m.sfx('coin'), 350);
     const gold = Math.round((e.bandit ? 14 : 7) * e.lvl * (0.8 + Math.random() * 0.5));
     const xp = Math.round((e.ambush ? 30 + e.lvl * 12 : Math.max(8, (e.def.exp || 40) / 3)));
     s.gold += gold;
@@ -188,7 +197,10 @@ export class Combat {
       const dHome = Math.hypot(e.home.x - e.pos.x, e.home.z - e.pos.z);
       // durum gecisleri
       if (e.state === 'idle' || e.state === 'wander') {
-        if (!m.dead && (dP < e.aggro || (e.bandit && dC < e.aggro))) { e.state = 'chase'; e.target = dC < dP ? 'caravan' : 'player'; }
+        if (!m.dead && (dP < e.aggro || (e.bandit && dC < e.aggro))) {
+          e.state = 'chase'; e.target = dC < dP ? 'caravan' : 'player';
+          m.sfxs.char(e.def.model, 'shout', e.pos, { gap: 1 });
+        }
       } else if (e.state === 'chase' || e.state === 'attack') {
         if (!e.ambush && dHome > 38 && !e.provoked) e.state = 'home';
         if (m.dead) e.state = e.ambush ? 'flee' : 'home';
@@ -226,6 +238,8 @@ export class Combat {
             e.atkT = (e.archer ? 2.3 : 1.8) + Math.random() * 0.6;
             const key = e.char.has('attack2') && Math.random() < 0.4 ? 'attack2' : 'attack1';
             e.char.play(key, { once: true, then: 'idle', fade: 0.08, restart: true });
+            m.sfxs.play(e.archer ? 'bowShot' : 'swordSwing', { pos: e.pos, vol: 0.6 });
+            if (Math.random() < 0.3) m.sfxs.char(e.def.model, 'shout', e.pos, { gap: 1.5 });
             const target = e.target;
             setTimeout(() => this._mobHit(e, target), e.archer ? 520 : 380);
           }
@@ -262,6 +276,8 @@ export class Combat {
       if (Math.hypot(m.caravan.pos.x - e.pos.x, m.caravan.pos.z - e.pos.z) > (e.archer ? 14 : 3.6)) return;
       s.transportHp = Math.max(0, s.transportHp - dmg);
       m.caravan.hit();
+      m.sfxs.play('punchHit', { pos: m.caravan.pos, vol: 0.7 });
+      if (Math.random() < 0.5) m.sfxs.char(m.caravan.t.model, 'hurt', m.caravan.pos, { gap: 0.8 });
       m.floatText(m.caravan.pos, `${dmg}`, '#ff9b6a', 2.6);
       if (s.transportHp <= 0) m.caravanDown();
     } else {
@@ -269,8 +285,10 @@ export class Combat {
       const d = Math.max(1, Math.round(dmg - s.defense * 0.6));
       s.hp = Math.max(0, s.hp - d);
       m.floatText(m.mover.pos, `-${d}`, '#ff6a5a', 2.1);
+      m.sfxs.play(e.archer ? 'spearHit3' : 'spearHit1', { pos: m.mover.pos, vol: 0.8 });
+      if (Math.random() < 0.5) m.sfxs.voice(m.look.endsWith('_w') ? 'w' : 'm', 'hurt', m.mover.pos);
       m.camera.shake = Math.min(1, m.camera.shake + 0.35);
-      if (!m.attackLock) m.player.play('hit', { once: true, then: 'idleBattle', fade: 0.06, restart: true });
+      if (!m.attackLock) m.player.play('hit', { once: true, then: m.idleKey(true), fade: 0.06, restart: true });
       if (s.hp <= 0) m.playerDown();
     }
   }

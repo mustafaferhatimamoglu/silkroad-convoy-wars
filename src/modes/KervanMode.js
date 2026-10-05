@@ -10,6 +10,7 @@ import { TraderState } from '../rpg/TraderState.js';
 import { TRANSPORTS } from '../rpg/Economy.js';
 import { KervanUI } from '../ui/KervanUI.js';
 import { Minimap } from '../ui/Minimap.js';
+import { Sfx } from '../rpg/Sfx.js';
 import { ROUTE } from '../rpg/Economy.js';
 import { cityById, CITIES } from '../data/cities.js';
 import { musicForRegion } from '../core/AudioSystem.js';
@@ -65,8 +66,10 @@ export class KervanMode {
     this.yaw = (city.heading || 0) + Math.PI;
     this.player.root.rotation.y = this.yaw;
     app.scene.add(this.player.root);
-    this.player.play('idle');
+    await this.equipWeapon();
+    this.player.play(this.idleKey());
     this.camera = new OrbitCamera(app, { yaw: city.heading || 0, dist: 6.5 });
+    this.sfxs = app.sfx || (app.sfx = new Sfx(app));
     this.population = new Population(app, this.data, this.lib);
     this.combat = new Combat(this);
     this.population.onRemove = (e) => { if (this.combat.target === e) this.combat.target = null; };
@@ -134,7 +137,26 @@ export class KervanMode {
     this._toastT = setTimeout(() => this.hudToast.classList.add('hidden'), secs * 1000);
   }
 
-  sfx() { /* ses efektleri: sonraki adim (prim/snd) */ }
+  /** Silah kademesine gore mizrak modeli (demirci yukselttikce degisir). */
+  async equipWeapon() {
+    const tier = Math.min(4, 1 + Math.floor(this.state.weapon / 3));
+    if (this._weaponTier === tier) return;
+    this._weaponTier = tier;
+    const g = await this.player.attach(this.lib, `weapon_spear_${tier}`).catch(() => null);
+    this.hasWeapon = !!g && this.player.has('spearIdle');
+  }
+
+  /** Bekleme animasyonu: silahliysa mizrak durusu. */
+  idleKey(battle = false) {
+    if (this.hasWeapon) return 'spearIdle';
+    return battle ? 'idleBattle' : 'idle';
+  }
+
+  /** Arayuz sesleri (konumsuz). */
+  sfx(name) {
+    const map = { coin: 'gold', level: 'levelup', alarm: 'alarm', potion: 'potion', error: 'error', quest: 'quest' };
+    this.sfxs.play(map[name] || name, { vol: name === 'alarm' ? 0.7 : 0.9 });
+  }
 
   saveSoon() {
     clearTimeout(this._saveT);
@@ -245,6 +267,7 @@ export class KervanMode {
     const s = this.state;
     const lost = s.loseCargo(0.4);
     this.caravan.knockOut();
+    this.sfxs.char(this.caravan.t.model, 'die', this.caravan.pos);
     this.combat.scatter();
     this.toast(`Haydutlar kervanı yağmaladı! ${lost} birim mal kayıp.`, 4);
     setTimeout(() => {
@@ -260,6 +283,7 @@ export class KervanMode {
     const s = this.state;
     this.dead = true;
     this.player.play('die', { once: true, fade: 0.1 });
+    this.sfxs.voice(this.look.endsWith('_w') ? 'w' : 'm', 'die', this.mover.pos);
     const lost = s.loseCargo(0.25);
     const goldLost = Math.round(s.gold * 0.05);
     s.gold -= goldLost;
@@ -277,7 +301,7 @@ export class KervanMode {
     this.mover.place(p.x, p.z);
     s.hp = Math.round(s.maxHp * 0.6);
     this.dead = false;
-    this.player.play('idle');
+    this.player.play(this.idleKey());
     this.camera.initialized = false;
     if (this.caravan) { this.caravan.mover.place(p.x + 2, p.z + 2, this.mover.pos.y); this.caravan.revive(); }
     this.saveSoon();
@@ -324,23 +348,29 @@ export class KervanMode {
       d = Math.atan2(Math.sin(d), Math.cos(d));
       this.yaw += d * Math.min(1, dt * 12);
     }
-    this.mover.move(dt, _w);
+    const moved = this.mover.move(dt, _w);
     const v = Math.hypot(this.mover.vel.x, this.mover.vel.z);
+    // ayak sesleri: adim boyuna gore
+    this._stepD = (this._stepD || 0) + moved;
+    const stride = v > 3 ? 1.25 : 0.75;
+    if (this._stepD > stride && this.mover.onGround) { this._stepD = 0; this.sfxs.step(this.mover.groundSurface, v > 3, this.mover.pos); }
+    this.sfxs.updateListener(this.app.camera);
     const pl = this.player;
     pl.root.position.copy(this.mover.pos);
     pl.root.rotation.y = this.yaw;
-    const busy = pl.currentKey && /punch|hook|hit|die/.test(pl.currentKey) && pl.current && pl.current.isRunning();
+    const busy = pl.currentKey && /punch|hook|Attack|hit|die/.test(pl.currentKey) && pl.current && pl.current.isRunning();
     if (!this.dead && !busy) {
       const fighting = this.combat.target && this.combat.target.alive;
-      if (v > 3.0) pl.play('run', { timeScale: v / RUN });
-      else if (v > 0.25) pl.play('walk', { timeScale: Math.max(0.6, v / WALK) });
-      else pl.play(fighting ? 'idleBattle' : 'idle');
+      const w = this.hasWeapon;
+      if (v > 3.0) pl.play(w ? 'spearRun' : 'run', { timeScale: v / RUN });
+      else if (v > 0.25) pl.play(w ? 'spearWalk' : 'walk', { timeScale: Math.max(0.6, v / WALK) });
+      else pl.play(this.idleKey(fighting));
     }
     pl.update(dt);
     this.focus.copy(this.mover.pos);
     this.camera.update(dt, this.mover.pos);
     this.population.update(dt, this.mover.pos);
-    if (this.caravan) this.caravan.update(dt, this.mover.pos, this.yaw);
+    if (this.caravan) this.caravan.update(dt, this.mover.pos, this.yaw, v > 1.0);
     this.combat.update(dt);
     // savas tuslari
     if (input.pressed('Space') || (gp && gp.pressed(2))) this.combat.playerAttack();
@@ -389,6 +419,7 @@ export class KervanMode {
     if (!s.potions || s.hp >= s.maxHp || this.dead) return;
     s.potions--;
     s.hp = Math.min(s.maxHp, s.hp + Math.round(s.maxHp * 0.45));
+    this.sfx('potion');
     this.floatText(this.mover.pos, '+can', '#9fe08a', 2.2);
     this.saveSoon();
   }

@@ -265,6 +265,70 @@ def hide_covered(data_pk2, base_meshes, item_meshes, reach=0.6, need=0.7):
     return keep
 
 
+# Ele takilan esyalar (silah): kendi iskeletinin kok kemigi cercevesinde statik mesh olarak
+# disa aktarilir; oyunda karakterin el kemigine (Bip01 R HandMid) cocuk olarak eklenir.
+ATTACHMENTS = {
+    "weapon_spear_1": "res/item/china/weapon/spear_01.bsr",
+    "weapon_spear_2": "res/item/china/weapon/spear_04.bsr",
+    "weapon_spear_3": "res/item/china/weapon/spear_08.bsr",
+    "weapon_spear_4": "res/item/china/weapon/spear_12.bsr",
+}
+
+
+def qrot(q, v):
+    """Dortlu (x, y, z, w) ile vektor dondur."""
+    x, y, z, w = q
+    vx, vy, vz = v
+    tx, ty, tz = 2 * (y * vz - z * vy), 2 * (z * vx - x * vz), 2 * (x * vy - y * vx)
+    return (vx + w * tx + (y * tz - z * ty), vy + w * ty + (z * tx - x * tz), vz + w * tz + (x * ty - y * tx))
+
+
+def export_attachment(data_pk2, tex, bsr_path, key):
+    bsr = jmx.parse_bsr(data_pk2.read(bsr_path))
+    root = None
+    if bsr["skeleton"] and bsr["skeleton"] in data_pk2.files:
+        root = jmx.parse_bsk(data_pk2.read(bsr["skeleton"]))[0]
+    qi = (-root["qw"][0], -root["qw"][1], -root["qw"][2], root["qw"][3]) if root else (0, 0, 0, 1)
+    tw = root["tw"] if root else (0, 0, 0)
+    mats = {}
+    for _, bmt_path in bsr["materials"]:
+        if bmt_path in data_pk2.files:
+            for name, m in jmx.parse_bmt(data_pk2.read(bmt_path)).items():
+                mats.setdefault(name, {"diffuse": m["diffuse"], "src": tex.resolve(bmt_path, m["texture"]) if m["texture"] else None, "flag": m["flag"]})
+    b = Bin()
+    out_meshes, out_mats = [], []
+    for path, _ in bsr["meshes"]:
+        if path not in data_pk2.files:
+            continue
+        m = jmx.parse_bms(data_pk2.read(path))
+        pos, nrm = [], []
+        for i in range(len(m["pos"]) // 3):
+            v = qrot(qi, (m["pos"][i * 3] - tw[0], m["pos"][i * 3 + 1] - tw[1], m["pos"][i * 3 + 2] - tw[2]))
+            n = qrot(qi, m["nrm"][i * 3:i * 3 + 3])
+            pos += [v[0] * SCALE, v[1] * SCALE, -v[2] * SCALE]
+            nrm += [n[0], n[1], -n[2]]
+        nv = len(pos) // 3
+        idx = []
+        for k in range(0, len(m["idx"]), 3):
+            idx += [m["idx"][k], m["idx"][k + 2], m["idx"][k + 1]]
+        info = mats.get(m["material"]) or next(iter(mats.values()), None) or {"diffuse": (1, 1, 1, 1), "src": None, "flag": 0}
+        t = tex.get(info["src"]) if info["src"] else None
+        cut = bool(info.get("flag", 0) & 1)
+        out_mats.append({"n": m["material"], "tex": t["file"] if t else None, "alpha": bool(t and t["alpha"] and cut),
+                         "twoSided": cut, "color": [round(c, 3) for c in info["diffuse"][:3]]})
+        out_meshes.append({"mat": len(out_mats) - 1, "v": nv, "i": len(idx), "pos": b.add("f", pos), "nrm": b.add("f", nrm),
+                           "uv": b.add("f", m["uv"]), "si": b.add("H", [0] * (nv * 4)), "sw": b.add("f", [1.0, 0, 0, 0] * nv),
+                           "idx": b.add("H", idx), "idx32": False})
+    meta = {"key": key, "src": bsr_path, "name": bsr["name"], "attach": True, "height": 0,
+            "bones": [{"n": "root", "p": -1, "t": [0, 0, 0], "q": [0, 0, 0, 1]}], "meshes": out_meshes, "materials": out_mats, "anims": {}}
+    with open(os.path.join(OUT, key + ".bin"), "wb") as f:
+        f.write(b.buf)
+    with open(os.path.join(OUT, key + ".json"), "w", encoding="utf-8", newline="\n") as f:
+        json.dump(meta, f, ensure_ascii=False, separators=(",", ":"))
+    import hashlib
+    return {"file": key + ".json", "v": hashlib.md5(bytes(b.buf)).hexdigest()[:10], "bones": 1, "meshes": len(out_meshes), "anims": [], "height": 0, "bytes": len(b.buf)}
+
+
 def export_resource(data_pk2, tex, bsr_path, key, player=False, max_anims=None, items=None):
     bsr = jmx.parse_bsr(data_pk2.read(bsr_path))
     if not bsr["skeleton"] or bsr["skeleton"] not in data_pk2.files:
@@ -520,6 +584,11 @@ def main():
             index[key] = r
             print(f"[{i + 1}/{len(targets)}] {key}: {r['bones']} kemik, {r['meshes']} mesh, boy {r['height']} m, "
                   f"{r['bytes'] // 1024} KB, anim {','.join(r['anims'])}")
+    if outfits:
+        for key, path in ATTACHMENTS.items():
+            r = export_attachment(data, tex, path, key)
+            index[key] = r
+            print(f"[esya] {key}: {r['meshes']} mesh, {r['bytes'] // 1024} KB")
     for key, (base, items) in outfits.items():
         try:
             r = export_resource(data, tex, base, key, player=True, items=items)

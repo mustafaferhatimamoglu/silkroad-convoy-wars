@@ -216,7 +216,11 @@ export class KervanUI {
       <div class="row"><button class="btn secondary" data-back style="width:auto">← Geri</button><div style="flex:1"></div><button class="btn" data-up style="width:auto"></button><button class="btn" data-x style="width:auto;margin-left:8px">Kapat</button></div></div>`);
     el.addEventListener('click', (e) => {
       const b = e.target.closest('[data-up]');
-      if (b && !b.disabled) { s.gold -= +b.dataset.cost; s[kind]++; onChange(`${label} güçlendirildi`); render(); }
+      if (b && !b.disabled) {
+        s.gold -= +b.dataset.cost; s[kind]++; onChange(`${label} güçlendirildi`); render();
+        if (kind === 'weapon' && this.mode.equipWeapon) this.mode.equipWeapon();
+        this.mode.sfx && this.mode.sfx('coin');
+      }
       if (e.target.closest('[data-back]')) this.mode.openNpc(npc);
     });
     this._show(el);

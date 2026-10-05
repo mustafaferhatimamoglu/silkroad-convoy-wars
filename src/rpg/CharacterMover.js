@@ -38,6 +38,7 @@ export class CharacterMover {
   _groundAt(x, z, fromY, far) {
     const h = this.hit;
     if (!this.app.collision.raycast(_o.set(x, fromY, z), _down, far, h)) return null;
+    this.groundSurface = h.surface;       // arazi bayragi ya da 100 (obje ustu)
     return { y: h.point.y, n: h.normal, object: h.object };
   }
 
