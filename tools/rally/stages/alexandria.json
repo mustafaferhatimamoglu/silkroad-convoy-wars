@@ -1,8 +1,28 @@
 {
   "id": "alexandria",
   "name": "İskenderiye Tepeleri – Vaha",
-  "desc": "",
+  "desc": "İskenderiye'nin güney yolundan bağ evleri ve zeytinliklere, Nil kıyısından kuzey vadisine; doğu sırtından kum yarımadasına inip çöl tepelerinden güney burnunda biter.",
   "city": "alexandria",
   "bounds": [47, 55, 84, 95],
-  "waypoints": []
+  "waypoints": [
+    [49.2, 88.5, "İskenderiye Güney Yolu"],
+    [50.0, 89.3, "Bağ Evleri"],
+    [51.0, 89.6, null],
+    [51.5, 90.5, "Zeytinlik"],
+    [52.3, 90.35, "Nil Kıyısı"],
+    [52.3, 91.1, null],
+    [53.1, 91.8, "Kuzey Vadisi"],
+    [53.9, 91.3, null],
+    [53.9, 90.2, "Doğu Sırtı"],
+    [53.7, 88.9, null],
+    [53.5, 88.0, "Doğu Kıyısı"],
+    [52.7, 87.6, null],
+    [52.4, 86.7, "Çöl Tepeleri"],
+    [52.9, 85.9, "Güney Burnu"],
+    [52.85, 85.5, null]
+  ],
+  "road": 0.6,
+  "smooth": 1.0,
+  "maxslope": 20,
+  "slopecost": 0.3
 }

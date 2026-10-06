@@ -175,6 +175,7 @@ export class RaceMode extends RallyMode {
         }
       }
     }
+    if (this.me.autopilot && this.vehicle.lastImpacts) for (const im of this.vehicle.lastImpacts) if (im.speed > 5) this.me.autopilot._log(`carpma ${im.car ? 'arac' : im.object ? 'obje' : 'zemin'} ${im.speed.toFixed(1)}`, this.me.state);
     this._trackAll();
     // hata ayiklama gecmisi (saniyede bir): zaman, indeks, kapi, ilerleme, konum, fiziksel mi
     this._histT = (this._histT || 0) - dt;
@@ -289,7 +290,12 @@ export class RaceMode extends RallyMode {
 
   _botVisuals(car, dt) {
     const v = car.vehicle;
-    if (v.sim.impacts.length) { v.lastImpacts = v.sim.impacts.splice(0); v.applyImpacts(v.lastImpacts); }
+    if (v.sim.impacts.length) {
+      v.lastImpacts = v.sim.impacts.splice(0);
+      v.applyImpacts(v.lastImpacts);
+      const d = car.driver || car.autopilot;
+      if (d) for (const im of v.lastImpacts) if (im.speed > 5) d._log(`carpma ${im.car ? 'arac' : im.object ? 'obje' : 'zemin'} ${im.speed.toFixed(1)}`, car.state);
+    }
     if (v.damage.events.length) {
       for (const ev of v.damage.events) {
         if (ev.type === 'shatter' && car.effects) car.effects.glass(ev.point);
@@ -470,6 +476,8 @@ export class RaceMode extends RallyMode {
     }
     v.spawn(a.x, a.z, yaw, y, 0.6);
     st.idx = bi; st.prev = null;
+    if (car.driver) car.driver.resetWatch();
+    if (car.autopilot) car.autopilot.resetWatch();
     if (car === this.me) { this.routeIdx = bi; this.camera.initialized = false; }
   }
 

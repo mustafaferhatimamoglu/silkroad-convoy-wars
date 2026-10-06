@@ -1,8 +1,25 @@
 {
   "id": "samarkand",
   "name": "Semerkant Vadisi – Karlı Dağ Eteği",
-  "desc": "",
+  "desc": "Semerkant'ın doğu yolundan şehrin kapısına, ovanın ortasından taşlı düzlüğe ve karlı dağların eteğine; güney yolundan doğu geçidinde biter.",
   "city": "samarkand",
   "bounds": [104, 112, 100, 108],
-  "waypoints": []
+  "waypoints": [
+    [110.6, 107.07, "Semerkant Doğu Yolu"],
+    [109.3, 107.07, "Doğu Kapısı"],
+    [108.0, 105.6, null],
+    [108.0, 105.05, "Orta Kavşak"],
+    [106.3, 105.04, "Batı Yolu"],
+    [105.5, 104.1, null],
+    [106.0, 103.0, "Taşlı Ova"],
+    [107.4, 102.4, "Dağ Eteği"],
+    [109.2, 103.1, "Güney Yolu"],
+    [111.0, 103.1, null],
+    [112.2, 103.6, "Doğu Geçidi"],
+    [112.6, 104.1, null]
+  ],
+  "road": 0.6,
+  "smooth": 1.0,
+  "maxslope": 20,
+  "slopecost": 0.3
 }

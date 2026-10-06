@@ -145,18 +145,31 @@ export class BotDriver {
     let vt = 75;
     const i0 = path.indexAt(s);
     let k = prof.sampleAt(s);
+    // aradaki sicrama: havadayken fren yok -> kullanilabilir fren mesafesi ~25 m kisa
+    const Cc = this.course, onR = path === Cc.route;
+    const sR = onR ? s : Cc.cum[Cc.lineToRoute[i0]];
+    const jumpAhead = this.jumps.find((j) => j > sR + 2 && j < sR + 170);
     for (let i = i0; i < path.n && path.cum[i] - s < 170; i++) {
       while (k < prof.M - 1 && prof.ss[k] < path.cum[i]) k++;
       let a = (this.aLat * prof.muAt(k)) / 0.78;
       if (path.cum[i] <= leanUntil) a *= 1.55;   // yanindaki araca yaslanarak donuyor
       if (this.mistake && this.mistake.type === 'late' && path.cum[i] - s < 80) a *= 1.35;
       const vk = Math.sqrt(a / Math.max(Math.abs(path.kap[i]), 1e-4));
-      const d = Math.max(0, path.cum[i] - s);
+      let d = Math.max(0, path.cum[i] - s);
+      if (jumpAhead !== undefined && sR + d > jumpAhead) d = Math.max(0, d - 25);
       vt = Math.min(vt, Math.sqrt(vk * vk + 2 * this.aBrk * d));
+    }
+    const C = this.course, onRoute = path === C.route;
+    // dar gecit (kaya sutunlari, agaclar arasi): koridor genisligine gore hiz siniri
+    for (let i = i0; i < path.n && path.cum[i] - s < 120; i += 1) {
+      const ri = onRoute ? i : C.lineToRoute[i];
+      const wsum = C.wl[ri] + C.wr[ri];
+      if (wsum >= 14) continue;
+      const vw = 8 + 1.8 * wsum;
+      vt = Math.min(vt, Math.sqrt(vw * vw + 2 * this.aBrk * Math.max(0, path.cum[i] - s)));
     }
     // tumsek / cukur (bilinen sicramalarda havalanma payi dar: inis kum/virajsa takla riski)
     const k0 = prof.sampleAt(s);
-    const C = this.course, onRoute = path === C.route;
     for (let q = k0 + 3; q < prof.M - 3 && prof.ss[q] - s < 140; q += 1) {
       const h0 = prof.heightAt(q - 3), h1 = prof.heightAt(q), h2 = prof.heightAt(q + 3);
       if (Number.isNaN(h0) || Number.isNaN(h1) || Number.isNaN(h2)) continue;
@@ -220,6 +233,9 @@ export class BotDriver {
     this.events.push({ type, target, bot: this.car });
     this._log(type + ' -> ' + target.name, this.car.state);
   }
+
+  /** Rotaya donus / kurtarma sonrasi ilerleme bekcisini sifirla. */
+  resetWatch() { this.progRef = undefined; this.stuckT = 0; this.offT = 0; this.revT = 0; }
 
   _log(what, st) {
     this.trace.push([+(this.car.sim.time || 0).toFixed(1), what, st.idx || 0]);
@@ -360,6 +376,20 @@ export class BotDriver {
       this._log('takildi', st);
       return c;
     }
+    // ilerleme bekcisi: kayan/patinaj yapan arac (hiz sifir olmadigi icin takilma sayilmaz)
+    if (this.progRef === undefined) { this.progRef = st.progress || 0; this.progT = 0; }
+    this.progT += dt;
+    if (this.progT > 6) {
+      const gained = (st.progress || 0) - this.progRef;
+      this.progT = 0;
+      this.progRef = st.progress || 0;
+      if (gained < 5 && st.gate < this.course.gates.length && !this.revT) {
+        if (Math.abs(st.lat || 0) > 8) { race.toRoute(me); this._log('rotaya (ilerleyemedi)', st); return c; }
+        this.revT = 1.4; this._revSteer = -Math.sign(this._lastSteer || 1) * 0.8;
+        this._log('ilerleyemedi', st);
+        return c;
+      }
+    }
     // kapiyi kacirdi (itildi, savruldu): oyuncunun R-R'si gibi kapidan once rotaya don
     const Gs = this.course.gates;
     if (st.gate < Gs.length && (st.idx || 0) > Gs[st.gate].i + 3) { race.toRoute(me); this._log('kapi kacti', st); return c; }
@@ -377,10 +407,27 @@ export class BotDriver {
       s = path.project(b.pos, this.li, _pr).s;
     }
     const pr = path.project(b.pos, path.indexAt(Math.max(0, s)), _pr);
-    this.off += clamp(this.offTarget - this.off, -2.2 * dt, 2.2 * dt);
+    const slew = this.emerg ? 4.5 : 2.2;
+    if (this.emerg && !this.tactic) {
+      // bos tarafa kac (koridor izin veriyorsa)
+      const R0 = this._room(this._path(), Math.max(0, st.progress || 0));
+      const xo = this.off + this.emerg.x.dl;
+      const roomL = R0.hi - (xo + 2.6), roomR = (xo - 2.6) - R0.lo;
+      if (roomL > 0 || roomR > 0) this.offTarget = clamp(roomL >= roomR ? xo + 2.9 : xo - 2.9, R0.lo, R0.hi);
+    }
+    this.off += clamp(this.offTarget - this.off, -slew * dt, slew * dt);
 
     // --- algi ve taktik
     const others = this._perceive(race);
+    // acil durum: seritteki yavas/duran araca hizla yaklasiyor (takla atmis, takilmis arac)
+    let emerg = null;
+    const look = Math.max(30, Math.abs(sp) * 2.4);
+    for (const x of others) {
+      if (x.df < 3 || x.df > look || Math.abs(x.dl) > 2.4 || x.closing <= 1) continue;
+      const ttc = (x.df - 5) / x.closing;
+      if (ttc < 1.8 && (!emerg || ttc < emerg.ttc)) emerg = { x, ttc };
+    }
+    this.emerg = emerg;
     this.thinkT -= dt;
     if (this.thinkT <= 0) { this.thinkT = 0.12 + this.rng() * 0.08; this._think(race, others, path, s, sp); }
     // hatalar (beceriye gore)
@@ -457,6 +504,11 @@ export class BotDriver {
     let vt = Math.min(this.plan(path, s, asp, leanUntil), speedCap);
     const vPlan = vt;
     if (this.follow && !T) vt = Math.min(vt, this.follow.vO + clamp((this.follow.df - 9) * 0.5, -4, 3));
+    // acil fren: kacacak yer yoksa ya da yakinsa onundekinin hizina in (kasitli durtme haric)
+    if (this.emerg && !(T && (T.type === 'bump' || T.type === 'pit'))) {
+      const e = this.emerg.x;
+      if (Math.abs(this.off - this.offTarget) > 0.8 || this.emerg.ttc < 0.9) vt = Math.min(vt, Math.max(0, e.vO) + Math.max(0, e.df - 7) * 0.45);
+    }
     const D = this.dbg;
     D.vt = vt; D.vPlan = vPlan; D.follow = this.follow ? this.follow.o.name : null; D.tactic = T ? `${T.type}/${T.phase || ''}` : null;
     D.path = path === this.course.route ? 'rota' : 'cizgi'; D.off = this.off; D.offT = this.offTarget;

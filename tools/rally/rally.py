@@ -609,7 +609,10 @@ def cmd_reach(st):
         blocked = blocked | (g.s >= max_slope)
     blocked2 = blocked | dilate(blocked & ~((g.f & 1) > 0), 1)
     w0 = st['waypoints'][0]
-    seen = reachable(g, blocked2, g.to_grid(w0[0], w0[1]), step)
+    sx, sz = (int(round(v)) for v in g.to_grid(w0[0], w0[1]))
+    cand = [(abs(dx) + abs(dz), sx + dx, sz + dz) for dz in range(-6, 7) for dx in range(-6, 7)
+            if 0 <= sz + dz < blocked2.shape[0] and 0 <= sx + dx < blocked2.shape[1] and not blocked2[sz + dz, sx + dx]]
+    seen = reachable(g, blocked2, min(cand)[1:], step)
     render(st, g, None)
     im = np.asarray(Image.open(wpath(st, 'map.png')).convert('RGB')).astype(np.float32)
     S = im.shape[0] // seen.shape[0]

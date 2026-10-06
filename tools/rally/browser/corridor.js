@@ -38,7 +38,9 @@
             if (hitObj) break;
             c.set(x, h + dy, z);
             const cnt = col.sphereContacts(c, 0.6, contacts, 8);
-            for (let q = 0; q < cnt; q++) if (contacts[q].object && Math.abs(contacts[q].normal.y) < 0.75) { hitObj = true; break; }
+            // alcak kure (0.3-1.5 m): calı, kutuk, kaya ustu gibi egik yuzler de engel; ust kure: duvarlar
+            const lim = dy < 1 ? 0.92 : 0.75;
+            for (let q = 0; q < cnt; q++) if (contacts[q].object && Math.abs(contacts[q].normal.y) < lim) { hitObj = true; break; }
             if (hitObj) break;
           }
           if (hitObj) obs.push([i, s, l, +x.toFixed(1), +z.toFixed(1)]);

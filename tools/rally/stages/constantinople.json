@@ -1,8 +1,24 @@
 {
   "id": "constantinople",
   "name": "Konstantiniyye Kıyıları",
-  "desc": "",
+  "desc": "Konstantiniyye'nin batı kapısından Haliç kıyısına, nehir boyundan ormanlık tepelere; denizi gören kuzey sırtlarından kuzey kapısında biter.",
   "city": "constantinople",
   "bounds": [73, 81, 99, 110],
-  "waypoints": []
+  "waypoints": [
+    [76.6, 104.9, "Konstantiniyye Batı Kapısı"],
+    [75.5, 104.4, "Haliç Kıyısı"],
+    [74.4, 105.0, null],
+    [74.9, 106.2, "Gölet Başı"],
+    [75.2, 107.4, "Orman Yolu"],
+    [75.0, 108.9, "Nehir Köprüsü"],
+    [76.6, 109.25, null],
+    [77.8, 109.0, "Kuzey Sırtları"],
+    [79.0, 108.7, null],
+    [79.65, 108.2, "Kuzey Kapısı"],
+    [80.2, 108.45, null]
+  ],
+  "road": 0.6,
+  "smooth": 1.0,
+  "maxslope": 20,
+  "slopecost": 0.3
 }
