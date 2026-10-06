@@ -56,11 +56,14 @@ export class VehicleAudio {
       src.start();
       return { src, bq, g };
     };
-    this.squeal = chain('bandpass', 1500, 9);
-    this.squeal2 = chain('bandpass', 2300, 12);
     this.wind = chain('lowpass', 520, 0.7);
     this.rumble = chain('lowpass', 240, 0.9);
-    this.gravel = chain('bandpass', 1200, 1.2);
+    // lastikler: cigliklama, patinaj, drift, cakil puskurtme, yuvarlanma (src/audio/tire-worklet.js)
+    try {
+      this.tires = new AudioWorkletNode(ctx, 'sro-tires', { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [1] });
+      this.tireGain = ctx.createGain(); this.tireGain.gain.value = 0.9;
+      this.tires.connect(this.tireGain).connect(this.out);
+    } catch (e) { console.warn('Lastik sesi kullanilamiyor', e); }
   }
 
   /** Kamera kipine gore motor sesi karisimi (disaridan / kaputtan / kokpitten). */
@@ -93,21 +96,53 @@ export class VehicleAudio {
       p.get('load').setValueAtTime(Math.min(1, Math.max(0, sim.engine.load)), t);
       p.get('level').setValueAtTime(0.55, t);
     }
-    // lastik cigligi: sert zeminde kayma
-    let slideHard = 0, rough = 0, soft = 0, contacts = 0;
+    // lastikler: her teker kendi zemininde kayma (yanal + boyuna) ve yuvarlanma
+    let rough = 0, contacts = 0;
+    let hardEx = 0, hardSum = 0, hardN = 0, spinSum = 0;
+    let looseSlide = 0, looseN = 0, toneSum = 0, sandAmt = 0;
     for (const w of sim.wheels) {
       if (!w.contact) continue;
       contacts++;
-      const s = surfaceInfo(w.surface);
-      if (s.dustAmt < 0.3) slideHard = Math.max(slideHard, w.slide);
-      soft += s.dustAmt;
       rough += Math.abs(w.x - w.xPrev);
+      const s = surfaceInfo(w.surface);
+      const slide = w.slide || 0;
+      // boyuna kayma hizi (patinaj/kilitlenme) ve kaymanin boyuna payi
+      const longS = Math.abs((w.slipRatio || 0) * Math.max(Math.abs(w.vLong || 0), 1));
+      if (s.dustAmt < 0.3) {
+        hardN++;
+        hardSum += slide;
+        hardEx += Math.max(0, slide - 1.2);
+        spinSum += slide > 0.5 ? Math.min(1, longS / (slide + 0.1)) * Math.max(0, slide - 1.2) : 0;
+      } else {
+        looseN++;
+        looseSlide += slide;
+        toneSum += s.dustAmt >= 0.9 ? 1300 : s.dustAmt >= 0.6 ? 1800 : s.dustAmt >= 0.45 ? 950 : 2500;
+        if (s.dustAmt >= 0.9) sandAmt += 1;
+      }
     }
-    soft = contacts ? soft / contacts : 0;
-    const sq = Math.min(1, Math.max(0, (slideHard - 2.2) / 7));
-    this.squeal.g.gain.setTargetAtTime(sq * 0.32, t, 0.04);
-    this.squeal2.g.gain.setTargetAtTime(sq * 0.12, t, 0.04);
-    this.squeal.bq.frequency.setTargetAtTime(1300 + sq * 500 + Math.sin(t * 23) * 60, t, 0.05);
+    if (this.tires) {
+      const P = this.tires.parameters, k = 0.04;
+      const set = (name, v) => P.get(name).setTargetAtTime(v, t, k);
+      // sert zemin: cigliklama (kayma arttikca yukselen perde), patinajda kalin ve puruzlu
+      const sq = Math.min(1, Math.pow(hardEx / 9, 0.8));
+      const avg = hardN ? hardSum / hardN : 0;
+      set('squeal', sq * 0.55);
+      set('pitch', Math.min(1500, 640 + avg * 24));
+      set('spin', hardEx > 0.01 ? Math.min(1, spinSum / hardEx) : 0);
+      set('scrub', Math.min(1, Math.max(0, (avg - 3.5) / 9)) * (hardN ? 1 : 0));
+      // gevsek zemin: tanecikli cakil/toprak puskurtmesi (kayma + hiz), kumda hisirti
+      const air = contacts === 0;
+      const lv = looseN ? looseSlide / looseN : 0;
+      const gravel = air || !looseN ? 0 : Math.min(1, 0.1 + Math.min(1, speed / 18) * 0.25 + lv / 8) * (looseN / Math.max(1, contacts));
+      set('gravel', speed > 0.4 || lv > 0.5 ? gravel : 0);
+      set('rate', Math.min(900, looseN * (speed * 3.2 + lv * 55)));
+      set('tone', looseN ? toneSum / looseN : 1800);
+      set('soft', air ? 0 : Math.min(1, (sandAmt / Math.max(1, contacts)) * (speed / 25 + lv / 6)));
+      // yuvarlanma ugultusu: sert zeminde belirgin, gevsek zeminde az
+      const hv = Math.min(1, speed / 38);
+      set('roll', air ? 0 : (hardN / Math.max(1, contacts)) * (0.04 + 0.5 * hv * hv) + (looseN / Math.max(1, contacts)) * 0.12 * hv);
+      set('rollTone', 220 + speed * 14);
+    }
     // ruzgar
     const wv = Math.min(1, speed / 45);
     this.wind.g.gain.setTargetAtTime(wv * wv * 0.35, t, 0.2);
@@ -115,8 +150,7 @@ export class VehicleAudio {
     // zemin: yumusak zeminde cakil/kum hisirtisi, sert zeminde ugultu
     const sp = Math.min(1, speed / 22);
     const air = contacts === 0;
-    this.rumble.g.gain.setTargetAtTime(air ? 0 : sp * (0.12 + rough * 6), t, 0.08);
-    this.gravel.g.gain.setTargetAtTime(air ? 0 : sp * soft * 0.13, t, 0.08);
+    this.rumble.g.gain.setTargetAtTime(air ? 0 : sp * (0.06 + rough * 6), t, 0.08);
     // vites gecisi
     const g = sim.gearLabel;
     if (this.lastGear !== null && g !== this.lastGear) this.click(0.18);
@@ -207,7 +241,8 @@ export class VehicleAudio {
     this.disposed = true;
     if (!this.ctx) return;
     this.horn(false);
-    for (const c of [this.squeal, this.squeal2, this.wind, this.rumble, this.gravel]) if (c) c.src.stop();
+    for (const c of [this.wind, this.rumble]) if (c) c.src.stop();
+    if (this.tires) this.tires.disconnect();
     if (this.engine) { this.engine.disconnect(); this.engine.port.postMessage({ stop: true }); }
     this.out.disconnect();
   }

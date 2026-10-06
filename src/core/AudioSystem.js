@@ -33,7 +33,9 @@ export class AudioSystem {
     this.noise = ctx.createBuffer(1, len, ctx.sampleRate);
     const d = this.noise.getChannelData(0);
     for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
-    this.ready = ctx.audioWorklet.addModule('src/audio/engine-worklet.js').then(() => ctx).catch((e) => { console.warn('Motor sesi yuklenemedi', e); return ctx; });
+    this.ready = ctx.audioWorklet.addModule('src/audio/engine-worklet.js')
+      .then(() => ctx.audioWorklet.addModule('src/audio/tire-worklet.js'))
+      .then(() => ctx).catch((e) => { console.warn('Motor/lastik sesi yuklenemedi', e); return ctx; });
     if (ctx.state === 'suspended') ctx.resume();
     removeEventListener('pointerdown', this._unlock);
     removeEventListener('keydown', this._unlock);
