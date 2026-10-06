@@ -185,4 +185,5 @@ export const F150_SPEC = {
   spot: { x: 0.8, y: 1.13 },
   cam: { hood: [0, 0.57, -1.5], cockpit: [-0.42, 0.86, -0.38], chase: 1.25 },
   front, rear, details,
+  engine: 'v8', engineAccent: 0x1d1f22,
 };

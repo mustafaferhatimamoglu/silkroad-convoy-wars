@@ -175,4 +175,5 @@ export const TANK_SPEC = {
   spot: { x: 0.72, y: 1.08 },
   cam: { hood: [0, 0.5, -1.2], cockpit: [-0.42, 0.78, -0.12], chase: 1.25 },
   materials, front, rear, details,
+  engine: 'v8', engineAccent: 0xb01c12,
 };

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { loft, lathe, mergeInto, canvasTexture, normalMapFromHeight, lerp, smooth } from './carkit.js';
 import { PAINTS } from './KartalModel.js';
+import { buildEngineBay } from './engineBay.js';
 
 // Modern araclarin (pikap, SUV, station) ortak prosedurel kurucusu.
 //
@@ -294,6 +295,12 @@ export class CarModel {
     if (S.rear) S.rear(ctx);
     if (S.details) S.details(ctx);
     this._buildUnder(ctx);
+    // motor bolmesi (kaput altinda)
+    const bayZ0 = S.zN + 0.1, bayZ1 = S.zWS0 - 0.08;
+    this.body.add(buildEngineBay({
+      z0: bayZ0, z1: bayZ1, halfW: S.halfW(bayZ1) - 0.05, yTop: S.yTop(S.zN + 0.3) - 0.06, yLow: S.engineBayLow ?? Math.max(0.3, S.archCY + 0.02),
+      layout: S.engine || 'v8', archTop: S.archCY + S.archR, accent: S.engineAccent,
+    }));
     const parts = this._buildInterior(ctx);
     this.steeringWheel = parts.steeringWheel;
     this.gauges = parts.gauges;
@@ -316,6 +323,7 @@ export class CarModel {
       this.spots.push(sp);
     }
     this.cam = S.cam;
+    this.frontZ = S.zN + 0.4;   // bu z'nin onundeki darbeler farlari kirar
     this.optimize();
     this.prepareDamage();
   }
@@ -821,6 +829,7 @@ export class CarModel {
       lp.copy(p); ld.copy(dir);
       if (d.part) {
         const gp = d.part.group;
+        if (gp.parent !== this.body) continue;   // kopmus parca
         lp.sub(gp.position);
         q.copy(gp.quaternion).invert();
         lp.applyQuaternion(q); ld.applyQuaternion(q);

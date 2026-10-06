@@ -7,6 +7,7 @@ import { CarModel } from './model/CarModel.js';
 import { SPECS } from './model/specs/index.js';
 import { WorldGround } from './WorldGround.js';
 import { VehicleReflections } from './Reflections.js';
+import { VehicleDamage } from './Damage.js';
 
 // Oyundaki arac: sabit adimli fizik (240 Hz) + ara degerlemeli gorsel model + isiklar.
 
@@ -42,6 +43,9 @@ export class Vehicle {
     this.reflections = new VehicleReflections(app, { size: 128 });
     this.reflections.enabled = app.settings ? app.settings.get('quality') !== 'dusuk' : true;
     this.reflections.track(this.model.reflectiveMaterials());
+    // menteseli parcalar (kapi, kaput, bagaj): kilit kirilir, savrulur, kopar
+    this.root.updateMatrixWorld(true);
+    this.damage = new VehicleDamage(this);
     this._reflPos = new THREE.Vector3();
   }
 
@@ -151,6 +155,7 @@ export class Vehicle {
     this.steps = n;
     if (ground) this._trackSafe(dt);
     this._sync(this.acc / STEP);
+    this.damage.update(dt);
     this._reflPos.copy(this.position).y += 0.6;
     this.reflections.update(this._reflPos, [this.root, this.shadow]);
   }
@@ -207,7 +212,8 @@ export class Vehicle {
       const amount = Math.min(0.14, (im.speed - 2.5) * 0.013);
       const radius = 0.32 + Math.min(0.45, im.speed * 0.025);
       this.model.deform(p, d, amount, radius);
-      if (p.z < -1.75 && im.speed > 5) this.model.breakHeadlight(p.x < 0 ? 'L' : 'R');
+      this.damage.impact(p, d, im.speed);
+      if (p.z < (this.model.frontZ ?? -1.75) && im.speed > 5) this.model.breakHeadlight(p.x < 0 ? 'L' : 'R');
       if (im.speed > 9) this.model.crackGlass();
     }
   }
@@ -232,6 +238,7 @@ export class Vehicle {
   }
 
   repair() {
+    this.damage.repair();
     this.model.repair();
     this.sim.health = this.params.maxHealth;
     this.dirt = 0;
@@ -252,6 +259,7 @@ export class Vehicle {
   }
 
   dispose() {
+    this.damage.dispose();
     this.app.scene.remove(this.root);
     this.app.scene.remove(this.shadow);
     this.reflections.dispose();

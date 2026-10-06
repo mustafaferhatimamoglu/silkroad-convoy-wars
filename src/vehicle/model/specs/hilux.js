@@ -244,4 +244,5 @@ export const HILUX_SPEC = {
   spot: { x: 0.66, y: 0.95 },
   cam: { hood: [0, 0.36, -1.25], cockpit: [-0.38, 0.74, -0.12], chase: 1.15 },
   front, rear, details,
+  engine: 'i4d', engineAccent: 0x2a2c30,
 };

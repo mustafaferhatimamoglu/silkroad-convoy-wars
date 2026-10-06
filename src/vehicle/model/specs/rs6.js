@@ -215,4 +215,5 @@ export const RS6_SPEC = {
   spot: { x: 0.68, y: 0.75 },
   cam: { hood: [0, 0.5, -0.75], cockpit: [-0.37, 0.63, 0.12], chase: 1.0 },
   materials, front, rear, details,
+  engine: 'v8', engineAccent: 0x7a0e0e,
 };

@@ -18,6 +18,7 @@ export class VehicleEffects {
     this.dust = new ParticleSystem(scene, { max: 700, soft: 0.0 });
     this.smoke = new ParticleSystem(scene, { max: 400, soft: 0.0 });
     this.sparks = new ParticleSystem(scene, { max: 240, additive: true, soft: 0.55 });
+    this.shards = new ParticleSystem(scene, { max: 500, soft: 0.25 });
     this.skids = new SkidMarks(scene, { width: 0.16 });
     this.acc = [0, 0, 0, 0];
     this.smokeAcc = [0, 0, 0, 0];
@@ -78,11 +79,32 @@ export class VehicleEffects {
       }
     }
     v.lastImpacts = null;
-    this.dust.update(dt); this.smoke.update(dt); this.sparks.update(dt); this.skids.update(dt);
+    this.dust.update(dt); this.smoke.update(dt); this.sparks.update(dt); this.shards.update(dt); this.skids.update(dt);
+  }
+
+  /** Cam kirilmasi: parlak kucuk kiriklar etrafa sacilir. */
+  glass(point, n = 90) {
+    const v = this.vehicle.velocity;
+    for (let k = 0; k < n; k++) {
+      const r = () => Math.random() - 0.5;
+      const c = 0.78 + Math.random() * 0.2;
+      this.shards.emit(point.x + r() * 0.5, point.y + r() * 0.3, point.z + r() * 0.5,
+        v.x * 0.8 + r() * 5, Math.random() * 3.2, v.z * 0.8 + r() * 5,
+        { life: 0.7 + Math.random() * 1.1, size0: 0.05 + Math.random() * 0.04, size1: 0.03, color: [c * 0.92, c, c * 1.04], alpha: 0.95, drag: 0.4, gravity: 9.8 });
+    }
+  }
+
+  /** Kopan parca: biraz toz ve kivilcim. */
+  debris(point) {
+    for (let k = 0; k < 18; k++) {
+      const r = () => Math.random() - 0.5;
+      this.sparks.emit(point.x, point.y, point.z, r() * 6, Math.random() * 3, r() * 6,
+        { life: 0.2 + Math.random() * 0.3, size0: 0.05, size1: 0.02, color: [1.0, 0.62, 0.22], alpha: 1, drag: 0.6, gravity: 9.8 });
+    }
   }
 
   dispose() {
     const scene = this.app.scene;
-    this.dust.dispose(scene); this.smoke.dispose(scene); this.sparks.dispose(scene); this.skids.dispose(scene);
+    this.dust.dispose(scene); this.smoke.dispose(scene); this.sparks.dispose(scene); this.shards.dispose(scene); this.skids.dispose(scene);
   }
 }

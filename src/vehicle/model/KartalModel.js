@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { loft, sweep, roundRectProfile, lathe, smooth, lerp, canvasTexture, normalMapFromHeight, mergeInto } from './carkit.js';
+import { buildEngineBay } from './engineBay.js';
 
 // Tofas Kartal (Fiat 131 Panorama tabanli station) prosedurel modeli.
 // Model "zemin uzayinda" kurulur: y=0 zemin, -z ileri (on), +x sag. Olculer metre.
@@ -29,6 +30,18 @@ const ARCH_R = 0.362, ARCH_CY = 0.285, WELL = 0.27;
 const ZWS0 = -0.62, ZWS1 = -0.17, ZRF = 1.97, ZTG = 2.045;
 const ROOF = 1.375;
 export const CG_Z = -0.184;           // kutle merkezinin zemin uzayi z'si (fizik ile ayni)
+// menteseli parcalar (dikis cizgileriyle ayni sinirlar): kapilar, kaput, bagaj kapagi
+const DOORS = [{ z0: -0.69, z1: 0.44 }, { z0: 0.44, z1: 1.255 }];
+const DOOR_Y0 = 0.345;
+const HOOD_Z0 = ZF + 0.02, HOOD_Z1 = ZWS0 - 0.04;
+const TG_X = 0.69, TG_Y0 = 0.36;
+const hoodX = (z) => halfW(z) - 0.075;
+/** Bir yuz merkezinin ait oldugu kapi (yan yuzler icin). */
+function doorAt(c) {
+  if (c.y < DOOR_Y0) return null;
+  for (let k = 0; k < DOORS.length; k++) if (c.z > DOORS[k].z0 && c.z < DOORS[k].z1) return `door${k * 2 + (c.x > 0 ? 1 : 0)}`;
+  return null;
+}
 
 function yTop(z) {
   if (z < ZWS0) { const t = (z - ZF) / (ZWS0 - ZF); return 0.79 + 0.098 * Math.sin((t * Math.PI) / 2); }
@@ -172,7 +185,15 @@ function lowerSection(z, variant) {
   const ax = a - 0.01 - rt;
   for (let k = 1; k <= 5; k++) { const an = (k / 5) * (Math.PI / 2); half.push({ x: ax + rt * Math.cos(an), y: yt - rt + rt * Math.sin(an), part: 'tcorner' }); }
   const crown = hoodCrown(z);
-  for (let k = 1; k <= 6; k++) { const x = ax * (1 - k / 6); half.push({ x, y: yt + crown * (1 - (x / a) ** 2), part: 'top' }); }
+  const hx = hoodX(z);
+  const xs = [];
+  for (let k = 1; k <= 6; k++) xs.push(ax * (1 - k / 6));
+  // kaput kenari (dikis) her kesitte ayni indekste: en yakin noktayi kenara tasi
+  let best = 0;
+  for (let k = 1; k < xs.length; k++) if (Math.abs(xs[k] - hx) < Math.abs(xs[best] - hx)) best = k;
+  if (hx > 0.05 && hx < ax - 0.01) xs[best] = hx;
+  xs.sort((p, q) => q - p);
+  for (const x of xs) half.push({ x, y: yt + crown * (1 - (x / a) ** 2), part: 'top' });
   // tam halka: alt merkez -> sag -> ust merkez -> sol -> (alt merkeze kapanir)
   const ring = [];
   for (const p of half) ring.push({ ...p, side: 1 });
@@ -223,15 +244,23 @@ function buildBody(m, variant) {
   // ----- alt govde
   const archZ = [];
   for (const ax of [AXF, AXR]) for (let k = -ARCH_R; k <= ARCH_R + 1e-6; k += 0.02) archZ.push(ax + k);
-  const zs = stations(ZF, ZR, 0.06, [...archZ, AXF - ARCH_R, AXF + ARCH_R, AXR - ARCH_R, AXR + ARCH_R, ZWS0, ZF + 0.01, ZF + 0.04, ZF + 0.1, ZR - 0.01, ZR - 0.04, ZR - 0.1]);
+  const zs = stations(ZF, ZR, 0.06, [...archZ, AXF - ARCH_R, AXF + ARCH_R, AXR - ARCH_R, AXR + ARCH_R, ZWS0, ZF + 0.01, ZF + 0.04, ZF + 0.1, ZR - 0.01, ZR - 0.04, ZR - 0.1,
+    HOOD_Z0, HOOD_Z1, ...DOORS.flatMap((d) => [d.z0, d.z1])]);
   const secs = zs.map((z) => lowerSection(z, variant));
   const lower = loft(secs, {
     closedRing: true,
-    capStart: is80 ? 'paint' : null, capEnd: 'paint',
+    capStart: is80 ? 'paint' : null, capEnd: null,
     classify: (i, j, c, a, b, cc, d) => {
       if (a.inner || b.inner || cc.inner || d.inner) return 'well';
       if (a.part === 'bottom' && b.part === 'bottom') return 'under';
       if (a.part === 'top' && b.part === 'top' && c.z > ZWS0 - 0.005) return null; // kabin/bagaj ust yuzu yok
+      if (a.part === 'top' && b.part === 'top' && c.z > HOOD_Z0 && c.z < HOOD_Z1 && Math.abs(c.x) < hoodX(c.z)) return 'paint@hood';
+      if ((a.part === 'side' || a.part === 'tcorner') && !a.inner) {
+        const dn = doorAt(c);
+        if (dn) return `paint@${dn}`;
+      }
+      // bagaj kapagi: arka yuzde dikis cizgileri arasi
+      if (c.z > ZR - 0.06 && Math.abs(c.x) < TG_X && c.y > TG_Y0) return 'paint@hatch';
       return 'paint';
     },
   });
@@ -239,6 +268,7 @@ function buildBody(m, variant) {
   const gz = stations(ZWS0, ZTG, 0.025, [
     ZWS0 + 0.035, ZWS1 - 0.02, ZWS1, ZRF, ZRF + 0.01, ZRF + 0.03,
     ...OPEN.flatMap((o) => [o.z0, o.z0 + 0.012, o.z1 - 0.012, o.z1, ...(o.split ? [o.split - 0.009, o.split + 0.009] : [])]),
+    ...DOORS.flatMap((d) => [d.z0, d.z1]),
   ]);
   const gsec = gz.map((z) => greenSection(z));
   const tmpN = new THREE.Vector3(), e1 = new THREE.Vector3(), e2 = new THREE.Vector3();
@@ -254,23 +284,26 @@ function buildBody(m, variant) {
         if (z < ZWS0 + 0.035 || z > ZWS1 - 0.02 || ax > g.wT - g.rc - 0.015) return z < ZWS0 + 0.035 ? 'black' : trimName;
         return 'glass';
       }
-      // arka (bagaj) cami
+      // arka (bagaj) cami: bagaj kapagiyla birlikte acilir
       if (z > ZRF && nz > 0.45 && nx < 0.5) {
         if (ax > g.wT - g.rc - 0.03) return 'paint';
-        if (z < ZRF + 0.012 || y < g.yb + 0.03) return trimName;
-        return 'glass';
+        if (z < ZRF + 0.012 || y < g.yb + 0.03) return `${trimName}@hatch`;
+        return 'glass@hatch';
       }
       if (nx > 0.5) {
-        // yan camlar
-        if (y < g.yb + 0.022 || y > g.yWT) return 'paint';
+        // yan camlar (kapi camlari ve cerceveleri kapiyla birlikte)
+        const dn = doorAt(c);
+        const tag = (k) => (dn ? `${k}@${dn}` : k);
+        if (y > g.yWT) return 'paint';
+        if (y < g.yb + 0.022) return tag('paint');
         const band = y < g.yb + 0.034 || y > g.yWT - 0.012;
         for (const o of OPEN) {
           if (z < o.z0 || z > o.z1) continue;
-          if (band || z < o.z0 + 0.012 || z > o.z1 - 0.012) return trimName;
-          if (o.split && Math.abs(z - o.split) < 0.009 && (is80 || o.split > 0)) return trimName;
-          return 'glass';
+          if (band || z < o.z0 + 0.012 || z > o.z1 - 0.012) return tag(trimName);
+          if (o.split && Math.abs(z - o.split) < 0.009 && (is80 || o.split > 0)) return tag(trimName);
+          return tag('glass');
         }
-        return 'paint';
+        return tag('paint');
       }
       return 'paint';
   };
@@ -291,11 +324,43 @@ function buildBody(m, variant) {
       const R = gsec[i].ring, R2 = gsec[i + 1].ring;
       const a = R[j], b = R[j + 1], cc = R2[j + 1], d = R2[j];
       const c = new THREE.Vector3().copy(a).add(b).add(cc).add(d).multiplyScalar(0.25);
-      return classifyGreen(i, j, c, a, b, cc, d) === 'glass' ? null : 'liner';
+      return classifyGreen(i, j, c, a, b, cc, d).startsWith('glass') ? null : 'liner';
     },
   });
   for (const [k, geo] of lower) out.push([k, geo]);
-  for (const [k, geo] of green) out.push([k === 'black' ? 'blackTrim' : k, geo]);
+  // arka yuz: bagaj kapagi bolgesi (dikisler arasi) kapaga, kalan cerceve govdeye
+  {
+    const ring = secs[secs.length - 1].map((q) => new THREE.Vector2(q.x, q.y));
+    const ys = ring.map((q) => q.y), yMax = Math.max(...ys);
+    const hatchPoly = [new THREE.Vector2(-TG_X, TG_Y0), new THREE.Vector2(TG_X, TG_Y0), new THREE.Vector2(TG_X, yMax + 0.01), new THREE.Vector2(-TG_X, yMax + 0.01)];
+    // kapak: halka ile dikdortgenin kesisimi (Sutherland-Hodgman, dort yarim duzlem)
+    let poly = ring.slice();
+    const clip = (pl, inside, cut) => {
+      const out2 = [];
+      for (let k = 0; k < pl.length; k++) {
+        const A = pl[k], B = pl[(k + 1) % pl.length];
+        const ia = inside(A), ib = inside(B);
+        if (ia) out2.push(A);
+        if (ia !== ib) out2.push(cut(A, B));
+      }
+      return out2;
+    };
+    const atX = (X) => (A, B) => new THREE.Vector2(X, A.y + ((B.y - A.y) * (X - A.x)) / (B.x - A.x));
+    const atY = (Y) => (A, B) => new THREE.Vector2(A.x + ((B.x - A.x) * (Y - A.y)) / (B.y - A.y), Y);
+    poly = clip(poly, (q) => q.x <= TG_X, atX(TG_X));
+    poly = clip(poly, (q) => q.x >= -TG_X, atX(-TG_X));
+    poly = clip(poly, (q) => q.y >= TG_Y0, atY(TG_Y0));
+    const hatchCap = new THREE.ShapeGeometry(new THREE.Shape(poly));
+    hatchCap.translate(0, 0, ZR);
+    out.push(['paint@hatch', hatchCap]);
+    const shape = new THREE.Shape(ring);
+    shape.holes.push(new THREE.Path(poly.slice().reverse()));
+    const bodyCap = new THREE.ShapeGeometry(shape);
+    bodyCap.translate(0, 0, ZR);
+    out.push(['paint', bodyCap]);
+    void hatchPoly;
+  }
+  for (const [k, geo] of green) out.push([k.startsWith('black') ? k.replace(/^black/, 'blackTrim') : k, geo]);
   for (const [k, geo] of liner) out.push([k, geo]);
   if (!is80) out.push(['paint', frontCapWithOpening(secs[0])]);
   return out;
@@ -338,33 +403,38 @@ function seamStrip(points, width = 0.0035) {
 
 function buildSeams(variant) {
   const geos = [];
+  const tagged = [];
   const vLine = (z, y0, y1, side) => {
     const pts = [];
     for (let k = 0; k <= 12; k++) { const y = lerp(y0, y1, k / 12); pts.push(new THREE.Vector3(side * sidePoint(z, y, 0.0012), y, z)); }
     return seamStrip(pts);
   };
   for (const s of [-1, 1]) {
-    geos.push(vLine(-0.69, 0.33, yTop(-0.69) - 0.02, s));       // on kapi on kenari
-    geos.push(vLine(0.44, 0.26, yTop(0.44) - 0.01, s));         // B
-    geos.push(vLine(1.255, archTop(1.255) + 0.02, yTop(1.255) - 0.01, s)); // arka kapi arka kenari
-    // kapi alt kenari (esik ustu)
-    const pts = [];
-    for (let k = 0; k <= 20; k++) { const z = lerp(-0.69, 0.78, k / 20); pts.push(new THREE.Vector3(s * sidePoint(z, 0.345, 0.0012), 0.345, z)); }
-    geos.push(seamStrip(pts));
+    const dF = `door${s > 0 ? 1 : 0}`, dR = `door${s > 0 ? 3 : 2}`;
+    tagged.push([dF, vLine(-0.69, 0.33, yTop(-0.69) - 0.02, s)]);       // on kapi on kenari
+    tagged.push([dF, vLine(0.44, 0.26, yTop(0.44) - 0.01, s)]);         // B
+    tagged.push([dR, vLine(1.255, archTop(1.255) + 0.02, yTop(1.255) - 0.01, s)]); // arka kapi arka kenari
+    // kapi alt kenari (esik ustu): her kapinin kendi parcasi
+    for (const [name, z0, z1] of [[dF, -0.69, 0.44], [dR, 0.44, 0.78]]) {
+      const pts = [];
+      for (let k = 0; k <= 12; k++) { const z = lerp(z0, z1, k / 12); pts.push(new THREE.Vector3(s * sidePoint(z, 0.345, 0.0012), 0.345, z)); }
+      tagged.push([name, seamStrip(pts)]);
+    }
     // kaput kenari (camurluk ustu)
     const hp = [];
     for (let k = 0; k <= 20; k++) { const z = lerp(ZF + 0.02, ZWS0 - 0.03, k / 20); const x = halfW(z) - 0.075; hp.push(new THREE.Vector3(s * x, yTop(z) + hoodCrown(z) * (1 - (x / halfW(z)) ** 2) + 0.0012, z)); }
-    geos.push(sweep(hp, [{ x: -0.002, y: -0.0006 }, { x: 0.002, y: -0.0006 }, { x: 0.002, y: 0.0006 }, { x: -0.002, y: 0.0006 }], { caps: false }));
+    tagged.push(['hood', sweep(hp, [{ x: -0.002, y: -0.0006 }, { x: 0.002, y: -0.0006 }, { x: 0.002, y: 0.0006 }, { x: -0.002, y: 0.0006 }], { caps: false })]);
     // bagaj kapagi yan kenari (arka panel)
     const tp = [];
     for (let k = 0; k <= 10; k++) { const y = lerp(0.36, yTop(ZR) - 0.01, k / 10); tp.push(new THREE.Vector3(s * 0.69, y, ZR + 0.0015)); }
-    geos.push(sweep(tp, [{ x: -0.002, y: -0.0006 }, { x: 0.002, y: -0.0006 }, { x: 0.002, y: 0.0006 }, { x: -0.002, y: 0.0006 }], { up: new THREE.Vector3(0, 0, 1), caps: false }));
+    tagged.push(['hatch', sweep(tp, [{ x: -0.002, y: -0.0006 }, { x: 0.002, y: -0.0006 }, { x: 0.002, y: 0.0006 }, { x: -0.002, y: 0.0006 }], { up: new THREE.Vector3(0, 0, 1), caps: false })]);
   }
   // kaput arka (cowl) cizgisi
   const cp = [];
   for (let k = 0; k <= 16; k++) { const x = lerp(-0.73, 0.73, k / 16); cp.push(new THREE.Vector3(x, yTop(ZWS0 - 0.04) + 0.0015, ZWS0 - 0.04)); }
-  geos.push(sweep(cp, [{ x: -0.002, y: -0.0006 }, { x: 0.002, y: -0.0006 }, { x: 0.002, y: 0.0006 }, { x: -0.002, y: 0.0006 }], { caps: false }));
-  return mergeInto(geos);
+  tagged.push(['hood', sweep(cp, [{ x: -0.002, y: -0.0006 }, { x: 0.002, y: -0.0006 }, { x: 0.002, y: 0.0006 }, { x: -0.002, y: 0.0006 }], { caps: false })]);
+  void geos;
+  return tagged;
 }
 
 function plateTexture(text) {
@@ -781,8 +851,12 @@ function buildInterior(m, g) {
   // taban, kapi panelleri
   const floor = mesh(new THREE.BoxGeometry(1.48, 0.02, 2.62), m.interior, false); floor.position.set(0, 0.34, 0.7); g.add(floor);
   for (const s of [-1, 1]) {
-    const door = mesh(new THREE.BoxGeometry(0.02, 0.52, 2.62), m.interior, false);
-    door.position.set(s * 0.74, 0.64, 0.7); g.add(door);
+    for (const d of DOORS) {
+      const door = mesh(new THREE.BoxGeometry(0.02, 0.5, d.z1 - d.z0 - 0.03), m.interior, false);
+      door.position.set(s * 0.74, 0.64, (d.z0 + d.z1) / 2); g.add(door);
+    }
+    const rearTrim = mesh(new THREE.BoxGeometry(0.02, 0.52, 0.8), m.interior, false);
+    rearTrim.position.set(s * 0.74, 0.64, 1.66); g.add(rearTrim);
   }
   // torpido
   const dash = mesh(new RoundedBoxGeometry(1.5, 0.2, 0.38, 3, 0.05), m.dash, false);
@@ -913,21 +987,27 @@ export class KartalModel {
     this.body = new THREE.Group();     // zemin uzayi
     this.root.add(this.body);
     const m = (this.mats = makeMaterials(paint));
-    // govde
-    for (const [name, geo] of buildBody(m, variant)) {
+    this._makeParts();
+    // govde ("malzeme@parca" adlari menteseli parcalara gider)
+    for (const [tagged, geo] of buildBody(m, variant)) {
+      const [name, part] = tagged.split('@');
       const mat = { paint: m.paint, well: m.well, under: m.under, glass: m.glass, chrome: m.chrome, blackTrim: m.rubber, black: m.rubber, liner: m.liner }[name] || m.paint;
       const o = mesh(geo, mat, name !== 'glass');
       if (name === 'glass') o.renderOrder = 5;
-      this.body.add(o);
+      (part ? this.parts[part].inner : this.body).add(o);
     }
-    const seams = buildSeams(variant);
-    if (seams) this.body.add(mesh(seams, new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 0.9 }), false));
+    const seamMat = new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 0.9 });
+    for (const [part, geo] of buildSeams(variant)) (part ? this.parts[part].inner : this.body).add(mesh(geo, seamMat, false));
     this.headLamps = buildFront(m, variant, this.body);
     this.tails = buildRear(m, variant, this.body);
     buildSideDetails(m, variant, this.body);
     const parts = buildInterior(m, this.body);
     this.steeringWheel = parts.steeringWheel;
     this.gauges = parts.gauges;
+    this._assignDetails();
+    this.frontZ = -1.75;
+    // motor bolmesi: Fiat 131 OHC sira 4 (kirmizi supap kapagi)
+    this.body.add(buildEngineBay({ z0: ZF + 0.12, z1: ZWS0 - 0.06, halfW: W - 0.06, yTop: yTop(-1.4) - 0.05, yLow: 0.36, layout: 'i4', archTop: ARCH_CY + ARCH_R, accent: 0x9c1a12 }));
     // tekerlekler (fizik konumlandirir; govde-yerel)
     const tires = tireTextures();
     this.wheels = [];
@@ -961,6 +1041,7 @@ export class KartalModel {
     const inv = new THREE.Matrix4().copy(body.matrixWorld).invert();
     const keep = new Set();
     if (this.steeringWheel) this.steeringWheel.traverse((o) => keep.add(o));
+    for (const p of Object.values(this.parts)) p.group.traverse((o) => keep.add(o));
     const buckets = new Map();
     const remove = [];
     body.traverse((o) => {
@@ -983,16 +1064,84 @@ export class KartalModel {
       m.renderOrder = b.order;
       body.add(m);
     }
+    // parca icinde ayni malzemeli dokusuz geometriler (zemin uzayinda kalir)
+    for (const p of Object.values(this.parts)) {
+      const pb = new Map(), rem = [];
+      p.inner.updateMatrixWorld(true);
+      const pinv = new THREE.Matrix4().copy(p.inner.matrixWorld).invert();
+      p.inner.traverse((o) => {
+        if (!o.isMesh || o.material.map || o.userData.keep) return;
+        const g = o.geometry.clone();
+        g.applyMatrix4(new THREE.Matrix4().multiplyMatrices(pinv, o.matrixWorld));
+        let b = pb.get(o.material);
+        if (!b) { b = { list: [], cast: false, order: 0 }; pb.set(o.material, b); }
+        b.list.push(g); b.cast = b.cast || o.castShadow; b.order = Math.max(b.order, o.renderOrder);
+        rem.push(o);
+      });
+      for (const o of rem) o.parent.remove(o);
+      for (const [mat, b] of pb) {
+        const geo = mergeInto(b.list);
+        if (!geo) continue;
+        geo.computeBoundingSphere();
+        const o = mesh(geo, mat, b.cast);
+        o.renderOrder = b.order;
+        p.inner.add(o);
+      }
+    }
+  }
+
+  /** Menteseli parca gruplari: dis grup mentese noktasinda (doner), ic grup -mentese. */
+  _makeParts() {
+    this.parts = {};
+    const mk = (name, pivot) => {
+      const group = new THREE.Group(); group.name = name; group.position.copy(pivot);
+      const inner = new THREE.Group(); inner.position.copy(pivot).negate();
+      group.add(inner);
+      this.body.add(group);
+      this.parts[name] = { name, group, inner, pivot: pivot.clone() };
+    };
+    mk('hood', new THREE.Vector3(0, yTop(HOOD_Z1) + 0.01, HOOD_Z1));
+    DOORS.forEach((d, k) => {
+      for (const s of [-1, 1]) mk(`door${k * 2 + (s > 0 ? 1 : 0)}`, new THREE.Vector3(s * (halfW(d.z0) - 0.005), (DOOR_Y0 + yTop(d.z0)) / 2, d.z0));
+    });
+    mk('hatch', new THREE.Vector3(0, ROOF - 0.02, ZRF - 0.01));
+  }
+
+  /** Kapilara/kapaga monte ayrintilar (ayna, kol, plaka, yazilar...) konumlarina gore parcaya tasinir. */
+  _assignDetails() {
+    const body = this.body;
+    body.updateMatrixWorld(true);
+    const inv = new THREE.Matrix4().copy(body.matrixWorld).invert();
+    const box = new THREE.Box3(), c = new THREE.Vector3();
+    const partSet = new Set(Object.values(this.parts).map((p) => p.group));
+    for (const o of [...body.children]) {
+      if (partSet.has(o) || o === this.steeringWheel) continue;
+      box.setFromObject(o);
+      if (box.isEmpty()) continue;
+      box.applyMatrix4(inv);
+      box.getCenter(c);
+      const size = box.getSize(new THREE.Vector3());
+      if (size.z > 1.2) continue;   // uzun citalar govdede kalir
+      let target = null;
+      const dn = Math.abs(c.x) > W - 0.12 ? doorAt(c) : null;
+      if (dn && c.y < yTop(c.z) + 0.2) target = dn;
+      else if (c.z > ZR - 0.06 && Math.abs(c.x) < TG_X - 0.02 && c.y > TG_Y0 + 0.08) target = 'hatch';
+      if (target) this.parts[target].inner.attach(o);
+    }
   }
 
   /** Hasar icin birlesik govde geometrilerinin orijinal konum/normallerini sakla. */
   prepareDamage() {
     this.deformables = [];
-    for (const o of this.body.children) {
-      if (!o.isMesh || o.material.map || o.geometry.index) continue;
-      const g = o.geometry;
-      this.deformables.push({ mesh: o, orig: g.attributes.position.array.slice(), origN: g.attributes.normal.array.slice() });
-    }
+    const collect = (root, part) => {
+      for (const o of root.children) {
+        if (!o.isMesh || o.material.map || o.geometry.index) continue;
+        const g = o.geometry;
+        this.deformables.push({ mesh: o, part, orig: g.attributes.position.array.slice(), origN: g.attributes.normal.array.slice() });
+      }
+    };
+    collect(this.body, null);
+    for (const p of Object.values(this.parts)) collect(p.inner, p);
     this.broken = { L: false, R: false, glass: false };
   }
 
@@ -1007,19 +1156,28 @@ export class KartalModel {
       const h = Math.sin(Math.round(x * 40) * 12.9898 + Math.round(y * 40) * 78.233 + Math.round(z * 40) * 37.719) * 43758.5453;
       return h - Math.floor(h);
     };
+    const lp = new THREE.Vector3(), ld = new THREE.Vector3(), M = new THREE.Matrix4(), N3 = new THREE.Matrix3();
     for (const d of this.deformables) {
+      let P = p, D = dir;
+      if (d.part) {
+        if (d.part.group.parent !== this.body) continue;   // kopmus parca
+        // govde -> parca geometri uzayi: (dis grup * ic grup)^-1
+        M.multiplyMatrices(d.part.group.matrix, d.part.inner.matrix).invert();
+        P = lp.copy(p).applyMatrix4(M);
+        D = ld.copy(dir).applyMatrix3(N3.setFromMatrix4(M)).normalize();
+      }
       const g = d.mesh.geometry;
       const bs = g.boundingSphere;
-      if (bs && bs.center.distanceTo(p) > bs.radius + radius) continue;
+      if (bs && bs.center.distanceTo(P) > bs.radius + radius) continue;
       const a = g.attributes.position.array, o = d.orig, n = g.attributes.normal.array;
       const tris = new Set();
       for (let i = 0; i < a.length; i += 3) {
-        const dx = a[i] - p.x, dy = a[i + 1] - p.y, dz = a[i + 2] - p.z;
+        const dx = a[i] - P.x, dy = a[i + 1] - P.y, dz = a[i + 2] - P.z;
         const q = dx * dx + dy * dy + dz * dz;
         if (q > r2) continue;
         const f = 1 - Math.sqrt(q) / radius;
         const k = amount * f * f * (0.7 + 0.6 * hash(o[i], o[i + 1], o[i + 2]));
-        let x = a[i] + dir.x * k, y = a[i + 1] + dir.y * k, z = a[i + 2] + dir.z * k;
+        let x = a[i] + D.x * k, y = a[i + 1] + D.y * k, z = a[i + 2] + D.z * k;
         const ox = x - o[i], oy = y - o[i + 1], oz = z - o[i + 2];
         const ol = Math.hypot(ox, oy, oz);
         if (ol > maxDisp) { const s = maxDisp / ol; x = o[i] + ox * s; y = o[i + 1] + oy * s; z = o[i + 2] + oz * s; }

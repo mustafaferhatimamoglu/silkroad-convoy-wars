@@ -148,6 +148,40 @@ export class VehicleAudio {
     s.connect(f).connect(g).connect(this.out); s.start(t); s.stop(t + 0.5);
   }
 
+  /** Cam kirilmasi: yuksek frekansli kirik sesi + rastgele "tink"ler. */
+  glass(level = 1) {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    for (const [f, q, d] of [[4200, 1.6, 0.35], [7600, 2.5, 0.25]]) {
+      const s = this.audio.noiseSource();
+      const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = f; bp.Q.value = q;
+      const g = ctx.createGain(); g.gain.setValueAtTime(0.5 * level, t); g.gain.exponentialRampToValueAtTime(0.001, t + d);
+      s.connect(bp).connect(g).connect(this.out); s.start(t); s.stop(t + d + 0.05);
+    }
+    for (let k = 0; k < 9; k++) {
+      const o = ctx.createOscillator(); o.type = 'sine';
+      o.frequency.value = 2800 + Math.random() * 6000;
+      const g = ctx.createGain(); const t0 = t + Math.random() * 0.45;
+      g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(0.06 * level, t0 + 0.002); g.gain.exponentialRampToValueAtTime(0.0005, t0 + 0.09);
+      o.connect(g).connect(this.out); o.start(t0); o.stop(t0 + 0.1);
+    }
+  }
+
+  /** Sac parca carpmasi/sallanmasi (kapi dayanaga vurur, kaput cama kalkar). */
+  clank(level = 0.6) {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    const s = this.audio.noiseSource();
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 650 + Math.random() * 500; bp.Q.value = 4;
+    const g = ctx.createGain(); g.gain.setValueAtTime(level * 0.55, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.28);
+    s.connect(bp).connect(g).connect(this.out); s.start(t); s.stop(t + 0.3);
+    const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.setValueAtTime(180 + Math.random() * 60, t); o.frequency.exponentialRampToValueAtTime(90, t + 0.2);
+    const og = ctx.createGain(); og.gain.setValueAtTime(level * 0.35, t); og.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+    o.connect(og).connect(this.out); o.start(t); o.stop(t + 0.25);
+  }
+
   horn(on) {
     const ctx = this.ctx;
     if (!ctx || on === this.hornOn) return;

@@ -122,6 +122,16 @@ export class DriveMode {
       v.lastImpacts = v.sim.impacts.splice(0);
       v.applyImpacts(v.lastImpacts);
     }
+    // menteseli parca olaylari
+    if (v.damage.events.length) {
+      for (const ev of v.damage.events) {
+        if (ev.type === 'shatter') { this.effects.glass(ev.point); this.sound.glass(1); }
+        else if (ev.type === 'detach') { this.effects.debris(ev.point); this.sound.clank(1); this.camera.addShake(0.3); }
+        else if (ev.type === 'open') this.sound.clank(0.5);
+        else if (ev.type === 'slam') this.sound.clank(0.35);
+      }
+      v.damage.events.length = 0;
+    }
     v.updateDirt(dt);
     // bozuk zeminde hafif sarsinti
     const rough = v.sim.wheels.reduce((a, w) => a + (w.contact ? Math.abs(w.x - w.xPrev) : 0), 0);
