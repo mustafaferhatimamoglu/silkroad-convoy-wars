@@ -164,10 +164,10 @@ export class Menu {
       bots: s.get('raceBots') ?? 7, level: s.get('raceLevel') || 'orta', cars: s.get('raceCars') || 'same', grid: s.get('raceGrid') || 'back',
     };
     const opt = (k, items) => items.map(([v, l]) => `<option value="${v}" ${String(cfg[k]) === String(v) ? 'selected' : ''}>${l}</option>`).join('');
-    const el = h(`<div class="panel dialog interactive" style="width:min(760px,94vw)">
+    const el = h(`<div class="panel dialog interactive" style="width:min(860px,95vw)">
       <h2>Yarış: Botlara Karşı</h2>
       <div style="color:var(--muted);font-size:13px;margin-bottom:6px">Etap</div>
-      <div class="grid2">${Object.entries(RALLY_STAGES).map(([id, st]) => `<div class="card ${id === cfg.stage ? 'sel' : ''}" data-s="${id}"><b>${st.name}</b><span>${stageInfo(st)}</span></div>`).join('')}</div>
+      <div class="grid3">${Object.entries(RALLY_STAGES).map(([id, st]) => `<div class="card ${id === cfg.stage ? 'sel' : ''}" data-s="${id}"><b>${st.name}</b><span>${stageInfo(st)}</span></div>`).join('')}</div>
       <div style="color:var(--muted);font-size:13px;margin:14px 0 6px">Bot zorluğu <span style="opacity:.7">(aynı araçlar, ek güç yok: fark sürüş becerisi ve kirli taktiklerde)</span></div>
       <div class="grid2">${Object.entries(DIFFICULTY).map(([id, d]) => `<div class="card ${id === cfg.level ? 'sel' : ''}" data-l="${id}"><b>${d.label}</b><span>${LEVEL_DESC[id]}</span></div>`).join('')}</div>
       <div class="setting" style="margin-top:12px"><label>Rakip sayısı</label><select data-k="bots">${opt('bots', [1, 2, 3, 4, 5, 6, 7].map((n) => [n, `${n} bot (${n + 1} araç)`]))}</select></div>
