@@ -689,7 +689,10 @@ def cmd_emit():
           '// kontrol noktalari yol indeksi. Pilot notlari: k = L/R viraj (g: 1 keskin .. 6 hafif,',
           '// 0 firkete; e: viraj sonu; long: uzun), C tumsek, J sicrama, D cukur.',
           'export const RALLY_STAGES = {']
-    for fn in sorted(glob.glob(os.path.join(TOOLS, 'stages', '*.json'))):
+    ORDER = ['jangan', 'donwhang', 'hotan', 'samarkand', 'constantinople', 'alexandria']   # oyundaki sehir sirasi
+    files = glob.glob(os.path.join(TOOLS, 'stages', '*.json'))
+    key = lambda f: (ORDER.index(os.path.splitext(os.path.basename(f))[0]) if os.path.splitext(os.path.basename(f))[0] in ORDER else 99, f)
+    for fn in sorted(files, key=key):
         st = load_stage(os.path.splitext(os.path.basename(fn))[0])
         if not os.path.exists(wpath(st, 'route.json')):
             continue

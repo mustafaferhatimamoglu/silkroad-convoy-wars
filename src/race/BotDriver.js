@@ -360,7 +360,7 @@ export class BotDriver {
       return c;
     }
     if (this.revT > 0) {
-      this.revT -= dt;
+      this.revT = Math.max(0, this.revT - dt);
       c.decel = 1; c.steer = this._revSteer;
       return c;
     }
@@ -383,7 +383,7 @@ export class BotDriver {
       const gained = (st.progress || 0) - this.progRef;
       this.progT = 0;
       this.progRef = st.progress || 0;
-      if (gained < 5 && st.gate < this.course.gates.length && !this.revT) {
+      if (gained < 5 && st.gate < this.course.gates.length && !(this.revT > 0)) {
         if (Math.abs(st.lat || 0) > 8) { race.toRoute(me); this._log('rotaya (ilerleyemedi)', st); return c; }
         this.revT = 1.4; this._revSteer = -Math.sign(this._lastSteer || 1) * 0.8;
         this._log('ilerleyemedi', st);

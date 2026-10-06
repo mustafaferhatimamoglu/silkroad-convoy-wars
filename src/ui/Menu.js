@@ -11,6 +11,7 @@ const LEVEL_DESC = {
   acimasiz: 'Her fırsatta PIT, fren testi, seni bariyer gibi kullanır',
 };
 const stageInfo = (st) => `${(st.length / 1000).toFixed(1)} km · ${st.cps.length} kapı`;
+const esc = (t) => String(t ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 // Menu arayuzu: ana menu, sehir secimi, garaj, ayarlar, duraklatma.
 // Her ekran DOM olarak kurulur; geri cagirimlar Game denetleyicisine baglanir.
@@ -47,6 +48,7 @@ export class Menu {
       <div class="ver">CONVOY WARS · V4</div>
       <button class="btn" data-a="drive">Serbest Sürüş<small>Silkroad dünyasında Tofaş Kartal ile dolaş</small></button>
       <button class="btn" data-a="race">Yarış: Botlara Karşı<small>8 araç · PIT manevrası, blok, kestirme; 4 zorluk seviyesi</small></button>
+      <button class="btn" data-a="mp">Çok Oyunculu<small>Arkadaşlarınla yarış ya da takım olup botlara karşı (co-op)</small></button>
       <button class="btn" data-a="rally">Ralli: Zamana Karşı<small>${Object.keys(RALLY_STAGES).length} etap · pilot notlarıyla kontrol noktalı etap</small></button>
       <button class="btn" data-a="garage">Garaj<small>Sürüm ve renk seçimi</small></button>
       <button class="btn" data-a="kervan">Kervan RPG<small>Tüccar ol: mal al, kervanla şehirden şehre taşı, haydutlara karşı koy</small></button>
@@ -63,6 +65,7 @@ export class Menu {
       else if (act === 'explore') this.cityPicker('explore');
       else if (act === 'rally') this.stagePicker();
       else if (act === 'race') this.raceSetup();
+      else if (act === 'mp') this.multiplayer();
       else if (act === 'kervan') this.kervanMenu();
       else if (act === 'garage') this.garage();
       else if (act === 'settings') this.settings(() => this.main());
@@ -193,6 +196,115 @@ export class Menu {
     });
     this.root.appendChild(el);
     this.layer = el;
+  }
+
+  /** Cok oyunculu: isim, oda kur / katil, acik odalar, yerel ag bilgisi. */
+  async multiplayer() {
+    this.clear();
+    const game = this.game, s = game.app.settings;
+    const el = h(`<div class="panel dialog interactive" style="width:min(640px,94vw)">
+      <h2>Çok Oyunculu Yarış</h2>
+      <div class="setting"><label>Adın</label><input data-k="name" maxlength="20" value="${esc(s.get('mpName') || 'Oyuncu')}"></div>
+      <div class="row" style="gap:8px;align-items:center"><button class="btn" data-a="create" style="width:auto">Oda kur</button>
+        <div style="flex:1"></div><input data-k="code" placeholder="ODA KODU" maxlength="4" style="width:120px;text-transform:uppercase;text-align:center">
+        <button class="btn secondary" data-a="join" style="width:auto">Odaya katıl</button></div>
+      <div style="color:var(--muted);font-size:13px;margin:14px 0 6px">Açık odalar</div>
+      <div class="rooms" style="min-height:40px;font-size:14px">Bağlanıyor…</div>
+      <div class="lan note" style="font-size:12px;color:var(--muted);margin-top:12px;line-height:1.5"></div>
+      <div class="err" style="color:#ff8a7a;margin-top:6px"></div>
+      <div class="row" style="margin-top:14px"><button class="btn secondary" data-a="back" style="width:auto">← Geri</button></div>
+    </div>`);
+    this.root.appendChild(el);
+    this.layer = el;
+    const err = (t) => { el.querySelector('.err').textContent = t || ''; };
+    const name = () => (el.querySelector('[data-k="name"]').value.trim() || 'Oyuncu').slice(0, 20);
+    fetch('/api/info').then((r) => r.json()).then((info) => {
+      el.querySelector('.lan').innerHTML = info.lan && info.addresses.length
+        ? `Yerel ağdaki arkadaşların tarayıcıda şu adresi açsın: ${info.addresses.map((a) => `<b style="color:var(--gold)">http://${a}:${info.port}/</b>`).join(' ya da ')} — sonra “Çok Oyunculu”dan odana katılsın.`
+        : 'Sunucu şu an yalnızca bu bilgisayara açık. Arkadaşlarınla oynamak için oyunu <b>COKLU_OYUNCU.bat</b> ile (python server.py --lan) başlat; Windows güvenlik duvarı sorarsa izin ver.';
+    }).catch(() => {});
+    let net;
+    try { net = await game.connectNet(name()); } catch (e) { el.querySelector('.rooms').textContent = ''; err(`${e.message}. Sunucu güncel mi? (server.py yeniden başlatılmalı)`); }
+    const off = [];
+    const go = () => { off.forEach((u) => u()); clearInterval(timer); game.showLobby(); };
+    if (net) {
+      off.push(net.on('rooms', (m) => {
+        const box = el.querySelector('.rooms');
+        if (!box) return;
+        box.innerHTML = m.list.length ? m.list.map((r) => `<div class="row" style="align-items:center;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.08)">
+          <b style="width:70px;letter-spacing:2px">${esc(r.code)}</b><span style="flex:1">${esc(r.host)}</span><span style="width:90px;color:var(--muted)">${r.n}/8${r.started ? ' · yarışta' : ''}</span>
+          <button class="btn secondary" data-join="${esc(r.code)}" style="width:auto;padding:4px 12px" ${r.started || r.n >= 8 ? 'disabled' : ''}>Katıl</button></div>`).join('') : '<span style="color:var(--muted)">Açık oda yok — bir oda kur.</span>';
+      }));
+      off.push(net.on('room', () => go()));
+      off.push(net.on('error', (m) => err(m.msg)));
+      net.rooms();
+    }
+    const timer = setInterval(() => { if (!el.isConnected) { clearInterval(timer); off.forEach((u) => u()); return; } if (net) net.rooms(); }, 2000);
+    el.addEventListener('click', async (e) => {
+      const a = e.target.closest('[data-a],[data-join]');
+      if (!a) return;
+      if (a.dataset.a === 'back') { clearInterval(timer); off.forEach((u) => u()); this.main(); return; }
+      s.set('mpName', name());
+      try { net = await game.connectNet(name()); } catch (x) { err(x.message); return; }
+      if (a.dataset.a === 'create') net.create();
+      else if (a.dataset.a === 'join') { const code = el.querySelector('[data-k="code"]').value.trim().toUpperCase(); if (code.length === 4) net.join(code); else err('Oda kodu 4 harf'); }
+      else if (a.dataset.join) net.join(a.dataset.join);
+    });
+  }
+
+  /** Oda lobisi: oyuncular, araclar, hazirlik; kurucu etap/mod/bot ayarlarini yapar ve baslatir. */
+  lobby(lob, net) {
+    this.clear();
+    const s = this.game.app.settings;
+    const el = h(`<div class="panel dialog interactive" style="width:min(820px,95vw)"><div class="body"></div></div>`);
+    this.root.appendChild(el);
+    this.layer = el;
+    const body = el.querySelector('.body');
+    const sel = (k, items, val, dis) => `<select data-c="${k}" ${dis ? 'disabled' : ''}>${items.map(([v, l]) => `<option value="${esc(v)}" ${String(val) === String(v) ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
+    const render = () => {
+      if (!el.isConnected) return;
+      const host = net.isHost, cfg = lob.cfg, rows = lob.rows();
+      const humans = net.members.length;
+      const carName = (v) => (VARIANTS[v] ? VARIANTS[v].name : v || '—');
+      const dot = (p) => `<span class="dot" style="background:${PAINTS[p] ? PAINTS[p].color : '#888'}"></span>`;
+      body.innerHTML = `<h2>Oda <span style="letter-spacing:4px;color:var(--gold)">${esc(net.room ? net.room.code : '')}</span></h2>
+        <table class="results" style="margin-bottom:12px"><tr><th></th><th>Sürücü</th><th>Araç</th><th>Durum</th></tr>
+        ${rows.map((r, i) => `<tr class="${r.me ? 'me' : ''}"><td>${i + 1}.</td><td>${r.host ? '👑 ' : ''}${esc(r.name)}${r.bot ? ' <span style="color:var(--muted)">(bot)</span>' : ''}</td>
+          <td>${r.bot ? `<span style="color:var(--muted)">${cfg.botCars === 'mixed' ? 'karışık' : 'kurucunun aracı'}</span>` : `${dot(r.paint)}${esc(carName(r.variant))}`}</td>
+          <td>${r.bot ? `<span style="color:var(--muted)">${esc((DIFFICULTY[cfg.level] || {}).label || '')}</span>` : r.host ? 'kurucu' : r.ready ? '<b style="color:#8fdc7a">Hazır</b>' : '<span style="color:var(--muted)">bekliyor</span>'}</td></tr>`).join('')}
+        </table>
+        <div class="grid2" style="gap:6px 14px">
+          <div class="setting"><label>Etap</label>${sel('stage', Object.entries(RALLY_STAGES).map(([id, st]) => [id, `${st.name} (${(st.length / 1000).toFixed(1)} km)`]), cfg.stage, !host)}</div>
+          <div class="setting"><label>Mod</label>${sel('mode', [['ffa', 'Herkes kendi için'], ['team', 'Takım: oyuncular botlara karşı (co-op)']], cfg.mode, !host)}</div>
+          <div class="setting"><label>Bot sayısı</label>${sel('bots', [...Array(8 - humans + 1).keys()].map((n) => [n, `${n} bot`]), Math.min(cfg.bots, 8 - humans), !host)}</div>
+          <div class="setting"><label>Bot zorluğu</label>${sel('level', Object.entries(DIFFICULTY).map(([id, d]) => [id, d.label]), cfg.level, !host)}</div>
+          <div class="setting"><label>Bot araçları</label>${sel('botCars', [['same', 'Kurucunun aracı'], ['mixed', 'Karışık']], cfg.botCars, !host)}</div>
+          <div class="setting"><label>Aracın</label>${sel('myVariant', Object.entries(VARIANTS).map(([id, v]) => [id, v.name]), s.get('vehicleVariant'), lob.ready && !host)} ${sel('myPaint', Object.entries(PAINTS).map(([id, p]) => [id, p.name]), s.get('vehicleColor'), lob.ready && !host)}</div>
+        </div>
+        <div class="err" style="color:#ff8a7a;margin-top:6px">${esc(lob.error || '')}</div>
+        <div class="row" style="margin-top:14px;align-items:center">
+          <button class="btn secondary" data-a="leave" style="width:auto">← Odadan çık</button><div style="flex:1"></div>
+          ${host ? `<span style="color:var(--muted);font-size:12px;margin-right:10px">${lob.canStart() ? '' : 'Herkes “Hazır” olunca başlatabilirsin'}</span><button class="btn" data-a="start" style="width:auto" ${lob.canStart() ? '' : 'disabled'}>Yarışı başlat →</button>`
+            : `<button class="btn" data-a="ready" style="width:auto">${lob.ready ? 'Hazır değilim' : 'Hazırım ✓'}</button>`}
+        </div>`;
+    };
+    lob.onChange = render;
+    el.addEventListener('change', (e) => {
+      const k = e.target.dataset.c;
+      if (!k) return;
+      const v = e.target.value;
+      if (k === 'myVariant') { s.set('vehicleVariant', v); this.game.previewCar(); lob.publish(); return; }
+      if (k === 'myPaint') { s.set('vehicleColor', v); this.game.previewCar(true); lob.publish(); return; }
+      lob.setCfg(k, k === 'bots' ? Number(v) : v);
+    });
+    el.addEventListener('click', (e) => {
+      const a = e.target.closest('[data-a]');
+      if (!a) return;
+      if (a.dataset.a === 'leave') { this.game.leaveNet(); this.multiplayer(); }
+      if (a.dataset.a === 'ready') lob.toggleReady();
+      if (a.dataset.a === 'start') lob.start();
+    });
+    render();
   }
 
   _start(kind, city) {

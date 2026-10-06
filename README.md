@@ -11,6 +11,8 @@ OYNA.bat
 ```
 
 ya da elle: `python server.py 5070` ve tarayıcıda <http://localhost:5070/>.
+Yerel ağda arkadaşlarla oynamak için `COKLU_OYUNCU.bat` (`python server.py 5070 --lan`); bkz.
+[Çok oyunculu](#çok-oyunculu).
 Oyun internetsiz çalışır; Three.js ve diğer kütüphaneler `vendor/` altındadır.
 
 Hızlı test adresleri:
@@ -18,7 +20,8 @@ Hızlı test adresleri:
 | Adres | Ne açar |
 |---|---|
 | `/?mode=drive&city=hotan` | Hotan'da serbest sürüş |
-| `/?mode=rally&variant=kartal80&prep=ralli` | Hotan rallisi (Kartal Ralli) |
+| `/?mode=rally&stage=hotan&variant=kartal80&prep=ralli` | Ralli (zamana karşı), etap seçilebilir |
+| `/?mode=race&stage=jangan&bots=7&level=zor` | Botlara karşı yarış (`&auto=1`: oyuncu aracını da bot sürer, izleme) |
 | `/?mode=kervan&city=jangan` | Kervan RPG (kayıtlı oyuna devam) |
 | `/?mode=chars&keys=player_ch_m,cos_t_horse1` | Dönüştürülmüş karakterleri inceleme |
 | `/?mode=garage&variant=kartal80&paint=lacivert` | Aracı yakından inceleme |
@@ -35,7 +38,8 @@ Hızlı test adresleri:
 | C | Kamera: takip, uzak, kaput, kokpit, sinematik |
 | Sağ fare tuşu | Etrafa bakma |
 | L | Farlar |
-| R | Aracı düzelt; iki kez basınca (ya da suya/çukura düşünce) son güvenli noktaya, rallide rotaya dön |
+| R | Aracı düzelt; iki kez basınca (ya da suya/çukura düşünce) son güvenli noktaya, ralli ve yarışta rotaya dön |
+| V | Yarışta finişten sonra diğer araçları izle |
 | T | Otomatik / manuel şanzıman (manuelde Q / E vites) |
 | Esc | Menü |
 
@@ -43,28 +47,81 @@ Xbox uyumlu kumanda desteklenir (RT gaz, LT fren, sol çubuk direksiyon, A el fr
 
 ## Ralli
 
-Ana menüden **Ralli**: Hotan Vahası – Lord Yarkan Rallisi, 2.6 km, 9 kontrol noktası. Hotan doğu
-köprüsünden vaha toprak yollarına ve hurma düzlüğüne, kayalık boğazdan (çıkışta kör tümsek ve
-sıçrama) Taklamakan çölünün kum tepelerine; kanyon kenarından geçip Lord Yarkan Tapınağı
-manzarasında biter. Sıradaki kapı ışık sütunuyla, ondan sonraki sönük direklerle görünür; mini
-haritada rota çizilidir. Üst paneldeki **pilot notları** yaklaşan virajın yönünü ve şiddetini
-(1 en keskin … 6 en hafif, firkete, *uzun*) ve tümsek / sıçrama / çukuru mesafesiyle söyler.
-Ralli sırasında R'ye iki kez basmak aracı rotaya (son geçilen ile sıradaki kapı arasındaki en
-yakın noktaya) geri koyar.
+Altı etap, her şehrin çevresinde (ana menüden **Ralli: Zamana Karşı**):
+
+| Etap | Uzunluk | Karakter |
+|---|---|---|
+| Jangan Kırları – Göl Tapınağı | 2.8 km | güney kapısı, pirinç tarlaları, doğu sırtı, saray yolu, surun dibi, gölle sur arası düzlük |
+| Donwhang Çölü – Kızıl Platolar | 3.3 km | kızıl mesalar arasındaki kanyon vadileri, dar boğaz, vaha gölü |
+| Hotan Vahası – Lord Yarkan Rallisi | 2.7 km | vaha toprak yolları, hurma düzlüğü, kayalık boğaz (kör sıçrama), kum tepeleri |
+| Semerkant Vadisi – Karlı Dağ Eteği | 3.1 km | ova, dev mantar kaya sütunları arasında slalom, iki sütunun oluşturduğu dar kapı |
+| Konstantiniyye Kıyıları | 2.3 km | Haliç kıyısı, nehir boyu ormanlar, deniz gören kuzey sırtları |
+| İskenderiye Tepeleri – Vaha | 2.8 km | bağ evleri, zeytinlik, Nil kıyısı, kuzey vadisi, kum yarımadasının güney burnu |
+
+Sıradaki kapı ışık sütunuyla, ondan sonraki sönük direklerle görünür; mini haritada rota
+çizilidir. Üst paneldeki **pilot notları** yaklaşan virajın yönünü ve şiddetini (1 en keskin … 6
+en hafif, firkete, *uzun*) ve tümsek / sıçrama / çukuru mesafesiyle söyler. R'ye iki kez basmak
+aracı rotaya (son geçilen ile sıradaki kapı arasındaki en yakın noktaya) geri koyar.
+
+## Yarış: Botlara Karşı
+
+Aynı etaplarda 8 araca kadar toplu kalkış. Botlar **aynı araçları aynı fizikle** kullanır: ek güç
+ya da "lastik bandı" yoktur, zorluk yalnız sürüş becerisini ve kirli taktiklerin sıklığını
+belirler (Kolay / Orta / Zor / Acımasız). Taktikler:
+
+- **PIT manevrası** — yanındaki aracın arka çamurluğuna gelip direksiyonu ona kırar, arkasını döndürür
+- **Bariyer** — viraj girişinde dış tarafındaki araca yaslanıp ondan destek alarak daha hızlı döner
+- **Blok** (kirli botlar zigzag), **fren testi**, **yandan itme** (kenara, kayaya, uçuruma doğru),
+  **arkadan dürtme**
+- **Kestirme** — hızlı çizgideki viraj içleri ve açık arazi kestirmeleri (kapılar yine geçilmek zorunda)
+
+Araçlar arası çarpışma gerçek fiziktir (gövde küreleri, kütle oranında itme, göçük ve hasar). Botlar
+takla, takılma, kaçırılan kapı ve rotadan kopmada insan oyuncunun kullandığı aynı kurtarmaları
+(düzelt, rotaya dön) kullanır. Sıralama geçilen kapı + rota üzerindeki ilerlemeyle; sonuçta puan
+(10-8-6-5-4-3-2-1). Finişten sonra **V** ile diğer araçları izlersin. Oyuncudan uzaktaki botlar
+(bölgesi yüklü olmayan) fiziksiz modda kendi hız planlarıyla yarışmaya devam eder.
+
+## Çok oyunculu
+
+Bir bilgisayar sunucu olur: `COKLU_OYUNCU.bat` (ya da `python server.py 5070 --lan`). Konsolda
+yazan yerel ağ adresini (ör. `http://192.168.1.20:5070/`) aynı ağdaki arkadaşların tarayıcıda açar;
+Windows güvenlik duvarı sorarsa "Özel ağlar" için izin verilmelidir. Oyun dosyaları sunucudan
+yüklenir; arkadaşların bilgisayarında kurulum gerekmez.
+
+Ana menü → **Çok Oyunculu**: adını yaz, **Oda kur** ya da açık odalardan birine / 4 harfli kodla
+**katıl**. Lobide herkes aracını ve rengini seçip **Hazırım** der; oda kurucusu etabı, modu, bot
+sayısını, zorluğunu ve bot araçlarını ayarlayıp başlatır. Modlar:
+
+- **Herkes kendi için** — oyuncular ve botlar birbiriyle yarışır
+- **Takım (co-op)** — oyuncular botlara karşı; botlar yalnız oyunculara saldırır, sonuçta takım
+  puanları toplanır
+
+Her oyuncu kendi aracını kendi bilgisayarında simüle eder ve durumunu saniyede 20 kez yayınlar;
+botları oda kurucusu simüle eder. Uzak araçlar 110 ms geriden ara değerlenerek gösterilir; araçlar
+arası temas iki tarafta da kendi aracına uygulanır. Start, sunucu saatine göre herkeste aynı anda
+verilir; süreler karşılaştırılabilir. Sunucu oyun mantığı çalıştırmaz, yalnız oda ve mesaj aktarır
+(Python standart kütüphanesi, ek kurulum yok). İnternet üzerinden oynamak için kurucunun 5070
+portunu yönlendirmesi gerekir.
+
+## Etap araçları
 
 Etaplar `tools/rally/` ile üretilir (oyun ve `node tools/devharness.mjs` açıkken):
 
 ```bat
-python tools/rally/rally.py scan hotan     :: araziyi tara (4 m ızgara: eğim, su, engel, zemin)
-python tools/rally/rally.py build hotan    :: A* rota + ince engel koridoru + pilot notları -> src/data/rally.js
-python tools/rally/rally.py drive hotan kartal80 ralli   :: otomatik pilotla deneme turu
+python tools/rally/rally.py scan jangan    :: araziyi tara (4 m ızgara: eğim, su, engel, zemin)
+python tools/rally/rally.py reach jangan   :: başlangıçtan araçla ulaşılabilen alan haritası
+python tools/rally/rally.py build jangan   :: A* rota + ince engel koridoru + hızlı çizgi + pilot notları
+python tools/rally/rally.py drive jangan kartal80 ralli   :: otomatik pilotla deneme turu
 ```
 
-Etap tanımı `tools/rally/stages/<id>.json` (ara noktalar ve kontrol noktası adları). Rota
-eğim/zemin/engel yakınlığı maliyetli A* ile bulunur, görüş hattıyla sadeleştirilip spline ile
-yumuşatılır; kaktüs ve hurma gövdesi gibi 4 m ızgarada kaçan ince engeller rota koridorunun
-1 m'lik taramasıyla bulunup rotadan uzak tutulur. Otomatik pilotla temiz tur süreleri:
-Kartal Ralli 2:22, RS 6 2:07, F-150 2:12, Tank 2:22.
+Etap tanımı `tools/rally/stages/<id>.json`: ara noktalar (adı olanlar kontrol kapısı; finişten sonra
+adsız bir nokta kaçış yolu bırakır) ve ayarlar: `road` (toprak yolu ne kadar sıkı izlesin; tarlalar
+böylece kestirme olur), `smooth` (tümsek/set cezası), `maxslope` / `slopecost` (dik yokuş). Rota
+eğim/zemin/engel yakınlığı maliyetli A* ile bulunur, görüş hattıyla sadeleştirilip yumuşatılır;
+kaktüs, hurma gövdesi, çalı, kütük ve hendek gibi 4 m ızgarada kaçan ince engeller koridorun 1 m'lik
+taramasıyla bulunup uzak tutulur. Botların hızlı çizgisi rotanın kapılardan geçen gergin ip
+hâlidir; koridor genişlikleri sollama/blok yerlerini sınırlar. Her etap 8 botla baştan sona
+yarıştırılarak denendi (`/?mode=race&stage=…&bots=7&level=zor&auto=1`).
 
 ## Kervan RPG
 
@@ -96,14 +153,16 @@ Sol üstte sıradaki adım ve hedef yazar; mini haritadaki noktalı çizgi yol b
 
 ```
 index.html            giriş (import map: three, three/addons, three-mesh-bvh)
-server.py, OYNA.bat   yerel sunucu (doğru MIME türleri, çok iş parçacıklı)
+server.py, OYNA.bat   yerel sunucu (doğru MIME türleri, çok iş parçacıklı, WebSocket oda sistemi)
 src/
   core/               uygulama, renderer, girişler, ayarlar
   world/              bölge akışı, zemin dokusu karışımı, objeler, su, gökyüzü, çarpışma
   vehicle/            araç fiziği (physics/), Tofaş Kartal modeli (model/), kamera
   chars/              Silkroad karakter/NPC/canavar yükleyicisi (iskelet, animasyon, eşya takma)
   rpg/                Kervan RPG: nüfus, hareket, savaş, ekonomi, feribot rotaları, yol bulucu, ses
-  modes/              sürüş, garaj, dünya gezgini, ralli, kervan
+  modes/              sürüş, garaj, dünya gezgini, ralli, yarış, kervan
+  race/               yarış: parkur takibi (Course), bot sürücü ve zorluklar (BotDriver)
+  net/                çok oyunculu: sunucu bağlantısı, lobi, uzak araçların ara değerlemesi
   ui/                 göstergeler, menüler, stiller
   data/               şehirler ve başlangıç noktaları
 tools/                varlık üretim betikleri ve geliştirme araçları

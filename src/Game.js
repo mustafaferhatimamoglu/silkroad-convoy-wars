@@ -144,13 +144,13 @@ export class Game {
     this.showMainMenu(id);
   }
 
-  showMainMenu(id = this.app.settings.get('lastCity') || 'hotan') {
+  showMainMenu(id = this.app.settings.get('lastCity') || 'hotan', menu = true) {
     const app = this.app, s = app.settings;
     const { city, pos } = this.cityPos(id);
     const top = this.groundTop(pos.x, pos.z);
     this.menuMode = new GarageMode(app, { variant: s.get('vehicleVariant'), paint: s.get('vehicleColor'), at: new THREE.Vector3(pos.x, top, pos.z), cinematic: true, yaw: city.heading });
     app.setMode(this.menuMode);
-    this.menu.main();
+    if (menu) this.menu.main();
     app.audio.playMusic('maintheme_cut.ogg');
   }
 
@@ -257,6 +257,48 @@ export class Game {
     if (result.finished && (!best || result.place < best.place || (result.place === best.place && result.time < best.time))) this.app.settings.set(key, { place: result.place, time: result.time });
   }
 
+  // ------------------------------------------------------------ cok oyunculu
+  async connectNet(name) {
+    const { net } = await import('./net/Net.js');
+    if (!net.connected) await net.connect(name);
+    else if (name && name !== net.name) { net.name = name; net.send({ t: 'hello', name }); }
+    return net;
+  }
+
+  /** Oda lobisi (menu arka plani: garaj sahnesi). */
+  async showLobby() {
+    const { net } = await import('./net/Net.js');
+    const { Lobby } = await import('./net/Lobby.js');
+    if (!net.connected || !net.room) { this.showMainMenu(); this.menu.multiplayer(); return; }
+    if (this.app.mode !== this.menuMode || !this.menuMode) this.showMainMenu(undefined, false);
+    if (!this.lobby) this.lobby = new Lobby(this);
+    this.lobby.ready = false;
+    this.lobby.started = null;
+    if (net.isHost) net.markStarted(false);
+    this.menu.lobby(this.lobby, net);
+    this.lobby.publish();
+  }
+
+  leaveNet() {
+    if (this.lobby) { this.lobby.dispose(); this.lobby = null; }
+    import('./net/Net.js').then(({ net }) => { if (net.room) net.leave(); });
+  }
+
+  /** Ag yarisi: kurucunun giris listesiyle yaris modu (herkes yukleyince ortak start). */
+  async startNetRace(d) {
+    const { RaceMode } = await import('./modes/RaceMode.js');
+    const { net } = await import('./net/Net.js');
+    const app = this.app;
+    this.menu.clear();
+    const start = RaceMode.startPosition(app.world, d.cfg.stage);
+    await this.loadArea(start, 'Çok oyunculu yarış yükleniyor…');
+    const mode = new RaceMode(app, { stage: d.cfg.stage, level: d.cfg.level, seed: d.seed, net, entries: d.entries, teams: d.cfg.mode === 'team',
+      onPause: () => this.pauseDrive(), onFinish: (r) => this.raceFinished(r) });
+    app.setMode(mode);
+    this.drive = mode;
+    this._hideOverlay();
+  }
+
   rallyFinished(result) {
     const best = this.app.settings.get('rallyBest');
     if (result.finished && (!best || result.time < best)) this.app.settings.set('rallyBest', result.time);
@@ -271,10 +313,10 @@ export class Game {
     this.menu.pause({
       onResume: () => this._resume(mode),
       onTeleport: mode.teleportable === false ? null : (id) => { this._resume(mode); this.teleport(id); },
-      onGarage: () => this.menu.garage(() => { this._applyVehicleLook(mode); this.pauseDrive2(mode); }),
+      onGarage: mode.net ? null : () => this.menu.garage(() => { this._applyVehicleLook(mode); this.pauseDrive2(mode); }),
       onRepair: mode.repairable === false ? null : () => { mode.vehicle.repair(); this._resume(mode); if (mode.hud) mode.hud.toast('Araç onarıldı ve yıkandı', 1.8); },
       onSettings: () => this.menu.settings(() => this.pauseDrive2(mode)),
-      onMain: () => { this.menu.clear(); this.showMainMenu(); },
+      onMain: () => { this.menu.clear(); if (mode.net) this.leaveNet(); this.showMainMenu(); },
     });
   }
 

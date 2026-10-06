@@ -8,12 +8,19 @@ import { collideCars } from '../vehicle/physics/CarContacts.js';
 import { PAINTS } from '../vehicle/model/KartalModel.js';
 import { Course } from '../race/Course.js';
 import { BotDriver, BOTS, DIFFICULTY } from '../race/BotDriver.js';
+import { RemoteCar, encodeState, SNAP_MS } from '../net/RemoteCar.js';
 
 // Yaris: ralli etabinda 8 araca kadar toplu kalkis. Oyuncu + botlar (ve ag oyununda uzak
 // oyuncular) ayni 240 Hz fizik adimiyla birlikte ilerler; araclar birbirine carpar (PIT, itme,
 // yaslanma gercek fizikle olur). Siralama: gecilen kapi + rota uzerindeki ilerleme; kapilar
 // atlanamaz (kestirme serbest). Oyuncudan uzak (bolgesi yuklu olmayan) botlar fiziksiz "uzak"
 // modda kendi hiz planiyla rota boyunca ilerler, yaklasinca yeniden fiziksel olur.
+//
+// Ag oyunu (opts.net): her oyuncu kendi aracini simule edip 20 Hz durum yayinlar; botlari oda
+// kurucusu simule eder. Uzak araclar ara degerlenerek gosterilir, yerel araclar onlara tek
+// tarafli carpar (karsi taraf ayni temasi kendi makinesinde cozer). Herkes parkuru yukleyince
+// kurucu sunucu saatine gore ortak start zamanini yayinlar; yaris saati herkeste ayni.
+// Takim modu (co-op): oyuncular botlara karsi; botlar yalniz oyunculara saldirir.
 
 const STEP = 1 / 240;
 export const VARIANT_POOL = ['kartal80', 'kartal90', 'hilux', 'f150', 'rs6', 'tank'];
@@ -46,7 +53,8 @@ export class RaceMode extends RallyMode {
     this.raceState = 'countdown';
     this.raceTime = 0;
     this.cars = [];
-    this.teams = false;
+    this.net = opts.net || null;
+    this.teams = !!opts.teams;
     this.repairable = false;
     this.acc = 0;
     this.voices = [];
@@ -66,6 +74,26 @@ export class RaceMode extends RallyMode {
     const sp = new THREE.Vector3(), sd = new THREE.Vector3();
     this.course.route.pointAt(startS, sp, sd);
     this.startGate = { pos: sp.clone(), dir: sd.clone(), placed: false, label: 'START' };
+    if (this.net) this._buildNet(slots);
+    else this._buildLocal(slots);
+    const total = this.cars.length;
+    this.levelLabel = (DIFFICULTY[O.level] || DIFFICULTY.orta).label;
+    this.hud.route.cars = this.cars;
+    // HUD: sira + siralama tablosu
+    const pos = document.createElement('div');
+    pos.className = 'pos';
+    this.ui.insertBefore(pos, this.ui.querySelector('.cp'));
+    this.posEl = pos;
+    this.board = document.createElement('div');
+    this.board.id = 'standings';
+    this.board.className = 'panel';
+    this.hud.root.appendChild(this.board);
+    const modeTxt = this.net ? (this.teams ? ' · Takım: oyuncular botlara karşı' : ' · çok oyunculu') : '';
+    this.hud.toast(`${this.st.name} · ${total} araç · ${this.levelLabel}${modeTxt}`, 3.5);
+  }
+
+  _buildLocal(slots) {
+    const app = this.app, s = app.settings, O = this.raceOpts;
     const nBots = clamp(O.bots | 0, 0, 7);
     const total = nBots + 1;
     const order = [...Array(total).keys()];
@@ -98,18 +126,81 @@ export class RaceMode extends RallyMode {
       veh.root.add(car.label);
       this._place(car, slots[car.slot]);
     }
-    this.levelLabel = (DIFFICULTY[O.level] || DIFFICULTY.orta).label;
-    this.hud.route.cars = this.cars;
-    // HUD: sira + siralama tablosu
-    const pos = document.createElement('div');
-    pos.className = 'pos';
-    this.ui.insertBefore(pos, this.ui.querySelector('.cp'));
-    this.posEl = pos;
-    this.board = document.createElement('div');
-    this.board.id = 'standings';
-    this.board.className = 'panel';
-    this.hud.root.appendChild(this.board);
-    this.hud.toast(`${this.st.name} · ${total} araç · ${this.levelLabel}`, 3.5);
+  }
+
+  /** Ag oyunu: girislerden araclar (yerel oyuncu, uzak oyuncular, kurucuda simule edilen botlar). */
+  _buildNet(slots) {
+    const app = this.app, O = this.raceOpts, net = this.net;
+    this.startAt = null;      // kurucu herkes yukleyince yayinlar
+    this.loaded = new Set([net.id]);
+    this._waitT = 0;
+    for (const e of O.entries) {
+      const slot = slots[e.slot];
+      if (e.id === net.id) {
+        this.me = this._addCar({ id: e.id, name: e.name, human: true, local: true, team: 'players', vehicle: this.vehicle, effects: this.effects, paint: e.paint });
+        this._place(this.me, slot);
+        continue;
+      }
+      const isBot = e.kind === 'bot';
+      const veh = new Vehicle(app, { variant: e.variant, paint: e.paint, prep: e.prep, reflections: false });
+      veh.shareReflections(this.vehicle);
+      veh.headlights = this.vehicle.headlights;
+      const car = this._addCar({ id: e.id, name: e.name, human: !isBot, local: isBot && net.isHost, team: isBot ? 'bots' : 'players', vehicle: veh, paint: e.paint });
+      car.effects = new VehicleEffects(app, veh);
+      car.label = this._label(e.name, car.color);
+      veh.root.add(car.label);
+      this._place(car, slot);
+      if (car.local) {
+        veh.sim.autoShift = true;
+        const eq = veh.params.equipment || {};
+        veh.sim.assists.abs = eq.abs !== false; veh.sim.assists.tcs = false; veh.sim.assists.steer = true; veh.sim.tcsCut = 0;
+        car.driver = new BotDriver(car, this.course, O.level, BOTS[(e.persona || 0) % BOTS.length], this.rng);
+      } else {
+        car.remote = new RemoteCar(veh);
+        car.physical = false;
+      }
+    }
+    this._subs = [
+      net.on('r:st', (d) => this._onState(d)),
+      net.on('r:bs', (d) => { for (const m of d.list) this._onState(m); }),
+      net.on('r:dmg', (d) => this._onDamage(d)),
+      net.on('r:loaded', (d, from) => { this.loaded.add(from); }),
+      net.on('r:go', (d) => { this.startAt = d.startAt; }),
+      net.on('left', (m) => this._onLeft(m.id)),
+      net.on('close', () => this.hud.toast('Sunucu bağlantısı koptu', 4)),
+    ];
+    if (!net.isHost) net.relay({ t: 'loaded' }, 'host');
+  }
+
+  _onState(m) {
+    const car = this.cars.find((c) => c.id === m.id && c.remote);
+    if (car) car.remote.push(m);
+  }
+
+  _onDamage(d) {
+    const car = this.cars.find((c) => c.id === d.id && c.remote);
+    if (!car) return;
+    car.vehicle.applyImpacts(d.list.map((x) => ({ speed: x.s, point: { x: x.p[0], y: x.p[1], z: x.p[2] }, normal: { x: x.n[0], y: x.n[1], z: x.n[2] }, object: true })));
+  }
+
+  _onLeft(id) {
+    const car = this.cars.find((c) => c.id === id);
+    if (!car || car === this.me) return;
+    if (!car.state.finished) car.state.dnf = true;
+    car.ghost = true; car.gone = true; car.left = true;
+    car.vehicle.root.visible = false; car.vehicle.shadow.visible = false;
+    this.hud.toast(`${car.name} yarıştan ayrıldı`, 2.5);
+  }
+
+  /** Yerel aracin carpisma izlerini digerlerine bildir (uzak goruntude gocuk). */
+  _sendDamage(car, list) {
+    if (!this.net || !list || !list.length) return;
+    const now = performance.now();
+    if (car._dmgT && now - car._dmgT < 120) return;
+    const out = list.filter((im) => im.speed > 4).slice(0, 3).map((im) => ({ s: +im.speed.toFixed(1), p: [+im.point.x.toFixed(2), +im.point.y.toFixed(2), +im.point.z.toFixed(2)], n: [+im.normal.x.toFixed(2), +im.normal.y.toFixed(2), +im.normal.z.toFixed(2)] }));
+    if (!out.length) return;
+    car._dmgT = now;
+    this.net.relay({ t: 'dmg', id: car.id, list: out });
   }
 
   _addCar(rec) {
@@ -149,22 +240,42 @@ export class RaceMode extends RallyMode {
   // ------------------------------------------------------------ dongu
 
   update(dt) {
-    const v = this.vehicle;
-    if (this.paused) { DriveMode.prototype.update.call(this, dt); return; }
+    const v = this.vehicle, net = this.net;
+    if (this.paused && !net) { DriveMode.prototype.update.call(this, dt); return; }
     this._refreshGates();
     if (this.beamMat) this.beamMat.uniforms.uTime.value += dt;
+    if (net && net.isHost && this.startAt === null) {
+      // herkes yukleyince (ya da 25 sn sonra) ortak start zamani
+      this._waitT += dt;
+      const humans = this.cars.filter((c) => c.human && !c.gone);
+      if (humans.every((c) => this.loaded.has(c.id)) || this._waitT > 25) {
+        this.startAt = net.serverNow() + 4500;
+        net.relay({ t: 'go', startAt: this.startAt });
+      }
+    }
     if (this.raceState === 'countdown') {
-      this.countdown -= dt;
+      if (net) this.countdown = this.startAt === null ? 99 : (this.startAt - net.serverNow()) / 1000;
+      else this.countdown -= dt;
       const n = Math.ceil(this.countdown - 0.5);
-      this.big.textContent = n > 0 ? String(n) : 'BAŞLA!';
+      this.big.textContent = this.countdown > 30 ? '' : n > 0 ? String(n) : 'BAŞLA!';
+      if (net && this.startAt === null) this.big.innerHTML = '<span style="font-size:28px">Diğer oyuncular bekleniyor…</span>';
       if (this.countdown <= 0) {
         this.raceState = 'run'; this.state = 'run';
         setTimeout(() => { if (this.big) this.big.textContent = ''; }, 700);
       }
     }
-    DriveMode.prototype.update.call(this, dt);   // tuslar + _stepVehicles (tum araclar) + kamera/ses/HUD
+    if (net) {
+      // ag oyununda dunya durmaz: duraklatma menusu acikken arac bos (gazsiz) ilerler
+      const { input } = this.app;
+      if (input.pressed('Escape') && this.onPause) this.onPause();
+      const c = this.paused ? { accel: 0, decel: 0.3, steer: 0, handbrake: 0 } : this._readControls(dt);
+      if (!this.paused) this._keys();
+      this._stepVehicles(dt, c);
+      this._afterVehicle(dt);
+    } else DriveMode.prototype.update.call(this, dt);   // tuslar + _stepVehicles (tum araclar) + kamera/ses/HUD
     if (this.raceState === 'run') {
-      this.raceTime += dt;
+      if (net) this.raceTime = Math.max(0, (net.serverNow() - this.startAt) / 1000);
+      else this.raceTime += dt;
       if (this.state === 'run') this.time = this.raceTime;
       // oyuncu bitirdikten 90 sn sonra (ya da herkes bitince) yaris kapanir; bitiremeyenler DNF
       if (this.state === 'done' && !this.final) {
@@ -193,6 +304,7 @@ export class RaceMode extends RallyMode {
       for (const d of [car.driver, car.autopilot]) if (d && d.events.length) { this._events.push(...d.events); d.events.length = 0; }
     }
     this._announce();
+    if (net) this._broadcastState(dt);
     this.routeIdx = this.me.state.idx;
     this.cpIndex = this.me.state.gate;
     this.hud.route.next = this.cpIndex;
@@ -201,9 +313,46 @@ export class RaceMode extends RallyMode {
     void v;
   }
 
+  _broadcastState(dt) {
+    const net = this.net;
+    this._sendT = (this._sendT || 0) + dt * 1000;
+    if (this._sendT < SNAP_MS) return;
+    this._sendT = 0;
+    const now = net.serverNow();
+    net.relay(encodeState(this.me, now));
+    if (net.isHost) {
+      const list = this.cars.filter((c) => c.driver).map((c) => encodeState(c, now));
+      if (list.length) net.relay({ t: 'bs', list });
+    }
+  }
+
+  /** Uzak araclarin ara degerlenmis durumu (kare basinda); sessiz kalan uzak arac yaristan duser. */
+  _applyRemotes() {
+    if (!this.net) return;
+    const now = this.net.serverNow();
+    for (const car of this.cars) {
+      if (!car.remote || car.left) continue;
+      const was = car.state.finished;
+      const stale = car.remote.buf.length && performance.now() - car.remote.lastRecv > 12000;
+      if (stale) {
+        // uzun sessizlik (baglanti/kurucu sorunu): gecici olarak yaristan dus, veri gelince don
+        if (!car.gone) { car.gone = true; car.ghost = true; car.vehicle.root.visible = false; car.vehicle.shadow.visible = false; }
+        continue;
+      }
+      if (car.gone) { car.gone = false; car.ghost = car.state.finished; car.vehicle.root.visible = true; car.vehicle.shadow.visible = true; }
+      if (car.remote.buf.length) car.remote.apply(now, car);
+      if (!was && car.state.finished) {
+        car.ghost = true;
+        const place = this.cars.filter((c) => c.state.finished).length;
+        this.hud.toast(`${car.name} ${place}. olarak bitirdi — ${fmtTime(car.state.time)}`, 2.2);
+      }
+    }
+  }
+
   /** Tum araclari birlikte adimla (DriveMode yalniz oyuncuyu adimlar). */
   _stepVehicles(dt, c) {
     const counting = this.raceState === 'countdown';
+    this._applyRemotes();
     for (const car of this.cars) {
       if (car === this.me) car.controls = this.me.autopilot ? this.me.autopilot.update(dt, this) : c;
       else if (car.driver && car.physical) car.controls = car.driver.update(dt, this);
@@ -228,11 +377,19 @@ export class RaceMode extends RallyMode {
     if (!phys.includes(this.me)) this.vehicle._sync(1);
     if (counting) for (const car of phys) { car.sim.body.vel.x *= 0.5; car.sim.body.vel.z *= 0.5; }
     for (const car of this.cars) if (car.driver && !car.physical) this._virtualStep(car, dt);
-    for (const car of this.cars) if (car !== this.me && car.vehicle && car.local) this._botVisuals(car, dt);
+    for (const car of this.cars) if (car !== this.me && car.vehicle && !car.gone) this._botVisuals(car, dt);
   }
 
-  /** Ag oyunu: uzak araclara tek tarafli carpisma (RaceNet ezer). */
-  _remoteContacts() {}
+  /** Ag oyunu: uzak araclara tek tarafli carpisma; vekil govde alt adimlarda hiziyla ilerler. */
+  _remoteContacts(phys) {
+    if (!this.net) return;
+    for (const R of this.cars) {
+      if (!R.remote || R.ghost || !R.remote.buf.length) continue;
+      const b = R.sim.body;
+      b.pos.addScaled(b.vel, STEP);
+      for (const A of phys) if (!A.ghost) collideCars(A.sim, R.sim, { oneSided: true });
+    }
+  }
 
   /** Uzak bot: bolgesi yuklu degilse ya da oyuncudan cok uzaksa fiziksiz ilerlesin. */
   _physicalSwitch(car) {
@@ -293,6 +450,7 @@ export class RaceMode extends RallyMode {
     if (v.sim.impacts.length) {
       v.lastImpacts = v.sim.impacts.splice(0);
       v.applyImpacts(v.lastImpacts);
+      this._sendDamage(car, v.lastImpacts);
       const d = car.driver || car.autopilot;
       if (d) for (const im of v.lastImpacts) if (im.speed > 5) d._log(`carpma ${im.car ? 'arac' : im.object ? 'obje' : 'zemin'} ${im.speed.toFixed(1)}`, car.state);
     }
@@ -332,6 +490,7 @@ export class RaceMode extends RallyMode {
   }
 
   _afterVehicle(dt) {
+    if (this.net && this.vehicle.sim.impacts.length) this._sendDamage(this.me, this.vehicle.sim.impacts);
     super._afterVehicle(dt);
     updateListener(this.app.audio, this.app.camera);
     this._updateVoices(dt);
@@ -344,7 +503,7 @@ export class RaceMode extends RallyMode {
     if (this._voiceT <= 0) {
       this._voiceT = 0.6;
       const cam = this.app.camera.position;
-      const near = this.cars.filter((c) => c !== this.me && c.vehicle && c.physical && c.vehicle.position.distanceTo(cam) < 160)
+      const near = this.cars.filter((c) => c !== this.me && c.vehicle && !c.gone && (c.physical || c.remote) && c.vehicle.position.distanceTo(cam) < 160)
         .sort((a, b) => a.vehicle.position.distanceTo(cam) - b.vehicle.position.distanceTo(cam)).slice(0, 3);
       for (const vo of this.voices.slice()) {
         if (!near.includes(vo.car)) { vo.audio.dispose(); this.voices.splice(this.voices.indexOf(vo), 1); }
@@ -489,12 +648,22 @@ export class RaceMode extends RallyMode {
     const list = this.ranking();
     const rows = list.map((c, i) => {
       const t = c.state.finished ? fmtTime(c.state.time) : (c.state.dnf ? 'DNF' : `yarışta · ${(c.state.progress / 1000).toFixed(2)} km`);
-      return `<tr class="${c === this.me ? 'me' : ''}"><td>${i + 1}.</td><td><span class="dot" style="background:${c.color}"></span>${c.name}</td><td>${c.vehicle ? this._carName(c.vehicle.variant) : ''}</td><td>${t}</td><td>${c.state.finished ? POINTS[i] || 0 : ''}</td></tr>`;
+      return `<tr class="${c === this.me ? 'me' : ''}${this.teams && c.team === 'players' ? ' team' : ''}"><td>${i + 1}.</td><td><span class="dot" style="background:${c.color}"></span>${c.name}</td><td>${c.vehicle ? this._carName(c.vehicle.variant) : ''}</td><td>${t}</td><td>${c.state.finished ? POINTS[i] || 0 : ''}</td></tr>`;
     }).join('');
+    let team = '';
+    if (this.teams) {
+      const pts = { players: 0, bots: 0 };
+      list.forEach((c, i) => { if (c.state.finished) pts[c.team] += POINTS[i] || 0; });
+      const win = pts.players === pts.bots ? 'Berabere!' : pts.players > pts.bots ? 'Oyuncular kazandı!' : 'Botlar kazandı!';
+      team = `<div style="margin:6px 0 10px;font-size:15px"><b style="color:var(--gold)">${win}</b> &nbsp; Oyuncular <b>${pts.players}</b> · Botlar <b>${pts.bots}</b> puan</div>`;
+    }
+    const buttons = this.net
+      ? '<button class="btn" data-a="lobby" style="width:auto">Lobiye dön</button><button class="btn secondary" data-a="main" style="width:auto">Ana menü</button>'
+      : '<button class="btn" data-a="again" style="width:auto">Tekrar yarış</button><button class="btn secondary" data-a="main" style="width:auto">Ana menü</button>';
     const html = `<h2>${this.st.name}</h2>
-      <div style="color:var(--muted);margin-bottom:8px">${this.me.place}. oldun · ${fmtTime(this.me.state.time)} · ${this.levelLabel}</div>
+      <div style="color:var(--muted);margin-bottom:8px">${this.me.place}. oldun · ${fmtTime(this.me.state.time)} · ${this.levelLabel}</div>${team}
       <table class="results"><tr><th></th><th>Sürücü</th><th>Araç</th><th>Süre</th><th>Puan</th></tr>${rows}</table>
-      <div class="row" style="margin-top:14px"><button class="btn" data-a="again" style="width:auto">Tekrar yarış</button><button class="btn secondary" data-a="main" style="width:auto">Ana menü</button></div>`;
+      <div class="row" style="margin-top:14px">${buttons}</div>`;
     if (refresh) { if (this._resultHtml !== html) { this.resultEl.innerHTML = html; this._resultHtml = html; } return; }
     const el = document.createElement('div');
     el.className = 'panel dialog interactive results-panel';
@@ -505,7 +674,8 @@ export class RaceMode extends RallyMode {
       if (!a) return;
       el.remove();
       if (a.dataset.a === 'again') window.game.startRace({ ...this.raceOpts, seed: (Math.random() * 1e9) | 0 });
-      else window.game.showMainMenu();
+      else if (a.dataset.a === 'lobby') window.game.showLobby();
+      else window.game.leaveNet(), window.game.showMainMenu();
     });
     this.app.ui.appendChild(el);
     this.resultEl = el;
@@ -517,6 +687,7 @@ export class RaceMode extends RallyMode {
   }
 
   dispose() {
+    if (this._subs) for (const u of this._subs) u();
     for (const vo of this.voices) vo.audio.dispose();
     this.voices.length = 0;
     for (const car of this.cars) {
