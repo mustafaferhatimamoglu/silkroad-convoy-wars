@@ -127,6 +127,11 @@ select { background: #141a26; color: var(--text); border: 1px solid rgba(255, 25
 #race .cp { font-size: 12px; color: var(--muted); }
 #race .bar { height: 5px; background: rgba(255, 255, 255, 0.1); border-radius: 3px; margin-top: 6px; overflow: hidden; }
 #race .bar > div { height: 100%; background: linear-gradient(90deg, var(--gold-2), var(--gold)); width: 0; }
+#race .notes { min-height: 40px; margin-top: 2px; }
+#race .n1 { font: 800 21px Georgia, serif; color: var(--gold); letter-spacing: 0.5px; transition: color 0.2s; }
+#race .n1 span { font: 600 14px Consolas, monospace; color: var(--muted); margin-left: 6px; }
+#race .n1.near { color: #fff; text-shadow: 0 0 12px rgba(255, 200, 90, 0.8); }
+#race .n2 { font-size: 12px; color: var(--muted); }
 
 /* duraklat menusu */
 #pause { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.45); z-index: 45; }

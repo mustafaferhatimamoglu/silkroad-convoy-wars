@@ -92,11 +92,7 @@ export class DriveMode {
       this.hud.toast(`Kamera: ${CAMERA_NAMES[m]}`, 1.2);
     }
     if (input.pressed('KeyL')) { v.headlights = !v.headlights; this.hud.toast(v.headlights ? 'Farlar açık' : 'Farlar kapalı', 1.2); }
-    if (input.pressed('KeyR') || (input.gamepad && input.gamepad.pressed(2))) {
-      const how = v.recover();
-      this.camera.initialized = false;
-      this.hud.toast(how === 'safe' ? 'Son güvenli noktaya dönüldü' : 'Araç düzeltildi (tekrar R: son güvenli nokta)', 1.6);
-    }
+    if (input.pressed('KeyR') || (input.gamepad && input.gamepad.pressed(2))) this._recover();
     if (input.pressed('KeyT')) {
       v.sim.autoShift = !v.sim.autoShift;
       settings.set('transmission', v.sim.autoShift ? 'auto' : 'manual');
@@ -149,6 +145,13 @@ export class DriveMode {
       const p = this.app.world.fromThree(v.position.x, v.position.z);
       this.app.audio.playMusic(musicForRegion(p.rx, p.rz));
     }
+  }
+
+  /** R: araci duzelt; 4 sn icinde tekrar basilirsa son guvenli noktaya don. */
+  _recover() {
+    const how = this.vehicle.recover();
+    this.camera.initialized = false;
+    this.hud.toast(how === 'safe' ? 'Son güvenli noktaya dönüldü' : 'Araç düzeltildi (tekrar R: son güvenli nokta)', 1.6);
   }
 
   dispose() {

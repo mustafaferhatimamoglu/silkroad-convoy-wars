@@ -107,6 +107,30 @@ export class DriveHud {
         ctx.drawImage(img, x, y, regionPx, regionPx);
       }
     }
+    // ralli rotasi ve kontrol noktalari (dunya: +x dogu, -z kuzey -> harita x sag, z asagi)
+    const R = this.route;
+    if (R && R.pts) {
+      const pos = vehicle.position;
+      ctx.lineWidth = 6; ctx.strokeStyle = 'rgba(0,0,0,0.45)'; ctx.lineJoin = 'round';
+      const trace = () => {
+        ctx.beginPath();
+        let first = true;
+        for (const q of R.pts) {
+          const x = (q.x - pos.x) * S, y = (q.z - pos.z) * S;
+          if (first) { ctx.moveTo(x, y); first = false; } else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+      };
+      trace();
+      ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255, 211, 106, 0.95)'; trace();
+      R.cps.forEach((cp, k) => {
+        if (k < R.next) return;
+        const x = (cp.pos.x - pos.x) * S, y = (cp.pos.z - pos.z) * S;
+        ctx.fillStyle = k === R.next ? '#ff5a3a' : 'rgba(255,255,255,0.85)';
+        ctx.strokeStyle = '#000'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(x, y, k === R.next ? 8 : 5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      });
+    }
     ctx.restore();
     // oyuncu oku
     ctx.fillStyle = '#ffd36b'; ctx.strokeStyle = '#000'; ctx.lineWidth = 3;
