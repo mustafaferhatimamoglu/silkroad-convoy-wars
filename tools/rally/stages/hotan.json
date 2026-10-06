@@ -1,0 +1,27 @@
+{
+  "id": "hotan",
+  "name": "Hotan Vahası – Lord Yarkan Rallisi",
+  "desc": "Hotan doğu köprüsünden vaha toprak yollarına, kayalık boğazdan Taklamakan çölüne; kanyon kenarında Lord Yarkan Tapınağı manzarasında biter.",
+  "city": "hotan",
+  "bounds": [133, 141, 90, 104],
+  "waypoints": [
+    [137.25, 92.0, "Hotan Doğu Köprüsü"],
+    [138.13, 91.85, "Vaha Kavşağı"],
+    [138.6, 93.2, null],
+    [138.86, 94.45, "Hurma Düzlüğü"],
+    [138.84, 94.70, null],
+    [138.62, 94.80, null],
+    [138.2, 95.6, null],
+    [137.4, 96.3, "Uzun Viraj"],
+    [136.6, 96.6, null],
+    [136.02, 96.82, "Kuzey Yolu Kavşağı"],
+    [136.0, 98.0, null],
+    [135.97, 98.8, "Kayalık Boğaz"],
+    [135.95, 99.6, null],
+    [136.7, 99.95, "Kum Tepeleri"],
+    [137.35, 100.35, null],
+    [137.5, 100.95, "Çöl Firketesi"],
+    [136.4, 101.25, "Kanyon Kenarı"],
+    [135.85, 101.08, "Lord Yarkan Manzarası"]
+  ]
+}

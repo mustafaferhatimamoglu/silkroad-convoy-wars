@@ -18,6 +18,7 @@ Hızlı test adresleri:
 | Adres | Ne açar |
 |---|---|
 | `/?mode=drive&city=hotan` | Hotan'da serbest sürüş |
+| `/?mode=rally&variant=kartal80&prep=ralli` | Hotan rallisi (Kartal Ralli) |
 | `/?mode=kervan&city=jangan` | Kervan RPG (kayıtlı oyuna devam) |
 | `/?mode=chars&keys=player_ch_m,cos_t_horse1` | Dönüştürülmüş karakterleri inceleme |
 | `/?mode=garage&variant=kartal80&paint=lacivert` | Aracı yakından inceleme |
@@ -34,11 +35,36 @@ Hızlı test adresleri:
 | C | Kamera: takip, uzak, kaput, kokpit, sinematik |
 | Sağ fare tuşu | Etrafa bakma |
 | L | Farlar |
-| R | Aracı düzelt; iki kez basınca (ya da suya/çukura düşünce) son güvenli noktaya dön |
+| R | Aracı düzelt; iki kez basınca (ya da suya/çukura düşünce) son güvenli noktaya, rallide rotaya dön |
 | T | Otomatik / manuel şanzıman (manuelde Q / E vites) |
 | Esc | Menü |
 
 Xbox uyumlu kumanda desteklenir (RT gaz, LT fren, sol çubuk direksiyon, A el freni, Y kamera, X düzelt, LB/RB vites).
+
+## Ralli
+
+Ana menüden **Ralli**: Hotan Vahası – Lord Yarkan Rallisi, 2.6 km, 9 kontrol noktası. Hotan doğu
+köprüsünden vaha toprak yollarına ve hurma düzlüğüne, kayalık boğazdan (çıkışta kör tümsek ve
+sıçrama) Taklamakan çölünün kum tepelerine; kanyon kenarından geçip Lord Yarkan Tapınağı
+manzarasında biter. Sıradaki kapı ışık sütunuyla, ondan sonraki sönük direklerle görünür; mini
+haritada rota çizilidir. Üst paneldeki **pilot notları** yaklaşan virajın yönünü ve şiddetini
+(1 en keskin … 6 en hafif, firkete, *uzun*) ve tümsek / sıçrama / çukuru mesafesiyle söyler.
+Ralli sırasında R'ye iki kez basmak aracı rotaya (son geçilen ile sıradaki kapı arasındaki en
+yakın noktaya) geri koyar.
+
+Etaplar `tools/rally/` ile üretilir (oyun ve `node tools/devharness.mjs` açıkken):
+
+```bat
+python tools/rally/rally.py scan hotan     :: araziyi tara (4 m ızgara: eğim, su, engel, zemin)
+python tools/rally/rally.py build hotan    :: A* rota + ince engel koridoru + pilot notları -> src/data/rally.js
+python tools/rally/rally.py drive hotan kartal80 ralli   :: otomatik pilotla deneme turu
+```
+
+Etap tanımı `tools/rally/stages/<id>.json` (ara noktalar ve kontrol noktası adları). Rota
+eğim/zemin/engel yakınlığı maliyetli A* ile bulunur, görüş hattıyla sadeleştirilip spline ile
+yumuşatılır; kaktüs ve hurma gövdesi gibi 4 m ızgarada kaçan ince engeller rota koridorunun
+1 m'lik taramasıyla bulunup rotadan uzak tutulur. Otomatik pilotla temiz tur süreleri:
+Kartal Ralli 2:22, RS 6 2:07, F-150 2:12, Tank 2:22.
 
 ## Kervan RPG
 

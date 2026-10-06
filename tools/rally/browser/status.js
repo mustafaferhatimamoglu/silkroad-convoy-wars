@@ -1,0 +1,2 @@
+(() => { const a = window._ap, m = app.mode; if (!a || !m || !m.cps) return 'yok'; const l = a.log[a.log.length - 1];
+  return { durum: m.state, sure: m.time.toFixed(1), kontrol: m.cpIndex + '/' + m.cps.length, idx: a.idx, son: l, takilma: a.stuck.length, kurtarma: a.recoveries, rotaya: a.resets.length, carpma: a.impacts.length, sapmaMax: a.maxOff.toFixed(1), sapmaOrt: (a.offSum / Math.max(1, a.offN)).toFixed(1), vmax: a.maxV.toFixed(0), ara: m.splits.map(t => t.toFixed(1)).join(' ') }; })()

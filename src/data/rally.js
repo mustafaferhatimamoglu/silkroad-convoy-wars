@@ -1,6 +1,8 @@
-// Ralli etaplari. Rota, oyunun carpisma sistemiyle taranan surulebilirlik haritasi
-// uzerinde arac A* ile planlandi (tools: scratchpad rota araclari); yol [rx, rz] kesirli
-// bolge koordinatlari (bolge = 192 m), kontrol noktalari yol indeksi.
+// Ralli etaplari - tools/rally/rally.py ile uretildi (elle duzenlemeyin; etap tanimi
+// tools/rally/stages/<id>.json). Rota, oyunun carpisma sistemiyle taranan surulebilirlik
+// haritasinda planlandi; yol [rx, rz] kesirli bolge koordinatlari (bolge = 192 m),
+// kontrol noktalari yol indeksi. Pilot notlari: k = L/R viraj (g: 1 keskin .. 6 hafif,
+// 0 firkete; e: viraj sonu; long: uzun), C tumsek, J sicrama, D cukur.
 export const RALLY_STAGES = {
   hotan: {
     name: "Hotan Vahası – Lord Yarkan Rallisi",

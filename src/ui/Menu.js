@@ -36,7 +36,7 @@ export class Menu {
       <h1>SILKROAD</h1>
       <div class="ver">CONVOY WARS · V4</div>
       <button class="btn" data-a="drive">Serbest Sürüş<small>Silkroad dünyasında Tofaş Kartal ile dolaş</small></button>
-      <button class="btn" data-a="rally">Ralli: Hotan → Taklamakan<small>Kontrol noktalı zamana karşı yarış</small></button>
+      <button class="btn" data-a="rally">Ralli: Hotan Vahası → Lord Yarkan<small>2.6 km · 9 kontrol noktası · pilot notlarıyla zamana karşı</small></button>
       <button class="btn" data-a="garage">Garaj<small>Sürüm ve renk seçimi</small></button>
       <button class="btn" data-a="kervan">Kervan RPG<small>Tüccar ol: mal al, kervanla şehirden şehre taşı, haydutlara karşı koy</small></button>
       <button class="btn secondary" data-a="explore">Dünya Gezgini<small>Serbest kamera ile haritayı gez</small></button>
