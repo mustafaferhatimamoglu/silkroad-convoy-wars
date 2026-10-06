@@ -1,14 +1,14 @@
 // Rota koridoru ince engel taramasi (kaktus, hurma govdesi, direk: 4 m'lik tarama izgarasinda kacar).
 // Yol boyunca 1 m adimla, yola dik +-W m (1 m) noktalarda zemin+0.9 ve +1.7 m'de r=0.6 kure temasi.
 // Cikti: [[yol indeksi, ornek, yanal m (+ sol), x, z], ...] (Three.js koordinati)
-// Yer tutucular: __STAGE__ (etap kimligi), __W__ (yari genislik, m)
+// Yer tutucular: __STAGE__ (etap kimligi), __W__ (yari genislik, m), __KEY__ (path: rota, line: hizli cizgi)
 (async () => {
-  const STAGE = '__STAGE__', W = __W__;
+  const STAGE = '__STAGE__', W = __W__, KEY = '__KEY__';
   const { RALLY_STAGES } = await import('/src/data/rally.js?v=' + Date.now());
   const st = RALLY_STAGES[STAGE], w = app.world, col = app.collision;
   const V = (x = 0, y = 0, z = 0) => app.camera.position.clone().set(x, y, z);
   const P = ([rx, rz]) => { const ix = Math.floor(rx), iz = Math.floor(rz); return w.toThree(ix, iz, (rx - ix) * 1920, 0, (rz - iz) * 1920, V()); };
-  const pts = st.path.map(P);
+  const pts = st[KEY].map(P);
   const contacts = [];
   for (let i = 0; i < 8; i++) contacts.push({ depth: 0, normal: V(), point: V(), object: false });
   const c = V(), obs = [];

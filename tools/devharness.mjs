@@ -2,7 +2,10 @@
 // yerel bir HTTP arayuzu uzerinden komut kabul eder. Oyunu otomatik test etmek,
 // tus basmak ve ekran goruntusu almak icin kullanilir.
 //
-//   node tools/devharness.mjs [--port 9400] [--url http://localhost:5070/]
+//   node tools/devharness.mjs [--port 9400] [--url http://localhost:5070/] [--sound]
+//
+// Ses varsayilan olarak kapalidir (--mute-audio): testler kullanicinin hoparlorunden ses
+// vermesin. WebAudio islemeye devam eder (AnalyserNode olcumleri calisir); duymak icin --sound.
 //
 // Komutlar (curl ile):
 //   GET  /nav?url=...                 sayfayi ac
@@ -35,6 +38,7 @@ const chrome = spawn(CHROME, [
   '--ignore-gpu-blocklist', '--enable-gpu', '--use-angle=d3d11', '--force_high_performance_gpu',
   '--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows',
   '--autoplay-policy=no-user-gesture-required', '--no-first-run', '--no-default-browser-check',
+  ...(args.sound ? [] : ['--mute-audio']),
   START_URL,
 ], { stdio: 'ignore' });
 

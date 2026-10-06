@@ -286,7 +286,7 @@ export class RallyMode extends DriveMode {
       const a = e.target.closest('[data-a]');
       if (!a) return;
       el.remove();
-      if (a.dataset.a === 'again') window.game.startRally();
+      if (a.dataset.a === 'again') window.game.startRally(this.stageId);
       else window.game.showMainMenu();
     });
     this.app.ui.appendChild(el);

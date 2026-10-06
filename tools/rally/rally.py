@@ -11,6 +11,7 @@ SRO_HARNESS ortam degiskenleriyle degistirilebilir. Ara ciktilar tools/rally/wor
   python tools/rally/rally.py emit              src/data/rally.js (rotasi olan tum etaplar)
   python tools/rally/rally.py corridor hotan    rota koridorunda ince engel taramasi -> extra_obs.json
   python tools/rally/rally.py notes hotan       oyun ici yukseklik profili + pilot notlari
+  python tools/rally/rally.py line hotan        botlarin hizli cizgisi (viraj ici, kestirmeler) + koridor genisligi
   python tools/rally/rally.py build hotan       plan/emit/koridor (engel kalmayana dek) + notlar + emit
   python tools/rally/rally.py drive hotan kartal80 ralli [--lat 4.2] [--brk 4.5]   otomatik pilot turu
 
@@ -398,6 +399,155 @@ def cmd_plan(st, quiet=False):
     return route
 
 
+def gate_indices(st, path, cps):
+    """Kontrol kapilarinin yol indeksleri (emit ile ayni kural)."""
+    out = []
+    for x, z, name in cps:
+        out.append(min(range(len(path)), key=lambda i: (path[i][0] - x) ** 2 + (path[i][1] - z) ** 2))
+    out = [i for i in out if i > 0]
+    if st['waypoints'][-1][2]:
+        out[-1] = len(path) - 1
+    return out
+
+
+def thin_raster(blocked, extra, radius):
+    """Ince engelleri (kesirli hucre konumu) verilen yaricapla izgaraya bas."""
+    m = blocked.copy()
+    H, W = m.shape
+    r = int(math.ceil(radius))
+    for gx, gz in extra:
+        for dz in range(-r, r + 1):
+            for dx in range(-r, r + 1):
+                x, z = int(round(gx)) + dx, int(round(gz)) + dz
+                if 0 <= z < H and 0 <= x < W and (x - gx) ** 2 + (z - gz) ** 2 <= radius * radius:
+                    m[z, x] = True
+    return m
+
+
+def cmd_line(st):
+    """Botlarin hizli cizgisi: rota, kapilardan (5 m icinde) gecmek sartiyla gergin ip gibi cekilir;
+    viraj icleri ve acik arazideki kestirmeler boyle cikar. Engellerden en az ~6 m, egim < 18 derece."""
+    g = Grid(st)
+    blocked, extra = load_blocked(st, g)
+    r = json.load(open(wpath(st, 'route.json'), encoding='utf-8'))
+    P = [list(g.to_grid(x, z)) for x, z in r['path']]
+    gates = gate_indices(st, r['path'], r['cps'])
+    fin = gates[-1]
+    P = P[:fin + 1]                       # cizgi finis kapisinda biter (sonrasi rota)
+    n = len(P)
+    free = ~thin_raster(dilate(blocked, 1), extra, 1.5) & (g.s < 18)
+    H, W = free.shape
+
+    def ok(x, z):
+        ix, iz = int(round(x)), int(round(z))
+        return 0 <= iz < H and 0 <= ix < W and free[iz, ix]
+
+    def seg_ok(a, b):
+        L = math.hypot(b[0] - a[0], b[1] - a[1])
+        k = max(1, int(L * 2))
+        for q in range(k + 1):
+            t = q / k
+            if not ok(a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t):
+                return False
+        return True
+
+    # gergin ip: her kosedan, siradaki kapiyi atlamadan, dumduz ve engelsiz gidilebilen en uzak
+    # rota noktasina baglan (en kisa yol yaklasimi: viraj icleri ve acik arazide kestirmeler)
+    gate_set = sorted(i for i in gates if i < n)
+    verts, i = [0], 0
+    MAXJ = 70                              # en uzun duz parca ~560 m
+    while i < n - 1:
+        nxt = next((gi for gi in gate_set if gi > i), n - 1)
+        j = min(n - 1, i + MAXJ, nxt)
+        while j > i + 1 and not seg_ok(P[i], P[j]):
+            j -= 1
+        verts.append(j)
+        i = j
+    V = [list(P[k]) for k in verts]
+    gi_v = {k: verts.index(gi) for k, gi in enumerate(gate_set) if gi in verts}
+    # kapi koseleri: kapi merkezinden en fazla 5 m oynayabilir; komsu koselerin dogrusuna yaklas
+    for _ in range(6):
+        for gk, vi in gi_v.items():
+            if vi <= 0 or vi >= len(V) - 1:
+                continue
+            cx, cz = P[gate_set[gk]]
+            ax, az = V[vi - 1]; bx, bz = V[vi + 1]
+            dx, dz = bx - ax, bz - az
+            L2 = dx * dx + dz * dz or 1
+            t = max(0.0, min(1.0, ((cx - ax) * dx + (cz - az) * dz) / L2))
+            px, pz = ax + dx * t, az + dz * t
+            d = math.hypot(px - cx, pz - cz)
+            if d > 1.25:
+                px, pz = cx + (px - cx) * 1.25 / d, cz + (pz - cz) * 1.25 / d
+            if ok(px, pz) and seg_ok(V[vi - 1], (px, pz)) and seg_ok((px, pz), V[vi + 1]):
+                V[vi] = [px, pz]
+    # koseleri yumusat (Chaikin), serbest alandan cikmayacak kadar
+    for _ in range(3):
+        out = [V[0]]
+        for k in range(len(V) - 1):
+            a0, a1 = V[k], V[k + 1]
+            q = [0.75 * a0[0] + 0.25 * a1[0], 0.75 * a0[1] + 0.25 * a1[1]]
+            r_ = [0.25 * a0[0] + 0.75 * a1[0], 0.25 * a0[1] + 0.75 * a1[1]]
+            out.append(q if ok(*q) else a0)
+            out.append(r_ if ok(*r_) else a1)
+        out.append(V[-1])
+        cand = [out[0]] + [p_ for p_ in out[1:] if p_ != out[0]]
+        if all(seg_ok(cand[k], cand[k + 1]) for k in range(len(cand) - 1)):
+            V = cand
+    # yogun ornekle (1 hucre) sonra seyrelt
+    P = []
+    for k in range(len(V) - 1):
+        a0, a1 = V[k], V[k + 1]
+        L = math.hypot(a1[0] - a0[0], a1[1] - a0[1])
+        m = max(1, int(L))
+        for q in range(m):
+            t = q / m
+            P.append([a0[0] + (a1[0] - a0[0]) * t, a0[1] + (a1[1] - a0[1]) * t])
+    P.append(V[-1])
+    n = len(P)
+    it = len(verts)
+    # ~8 m aralikla yeniden ornekle
+    out, acc = [tuple(P[0])], 0.0
+    for i in range(1, n):
+        acc += math.hypot(P[i][0] - P[i - 1][0], P[i][1] - P[i - 1][1])
+        if acc >= 2.0 or i == n - 1:
+            out.append(tuple(P[i])); acc = 0.0
+    L_line = sum(math.hypot(out[i][0] - out[i - 1][0], out[i][1] - out[i - 1][1]) for i in range(1, len(out))) * CELL
+    L_route = sum(math.hypot(r['path'][i][0] - r['path'][i - 1][0], r['path'][i][1] - r['path'][i - 1][1]) for i in range(1, fin + 1)) * 192
+    line = [g.to_region(x, z) for x, z in out]
+    json.dump(line, open(wpath(st, 'line.json'), 'w'))
+    print(f'hizli cizgi: {L_line:.0f} m (rota finise kadar {L_route:.0f} m, {100 * (1 - L_line / L_route):.1f}% kisa), {len(line)} nokta, {it} kose')
+    cmd_widths(st, g, blocked, extra, r)
+    return line
+
+
+def cmd_widths(st, g, blocked, extra, r):
+    """Rota koridoru: her yol noktasinda sola/saga engele, suya, dik yamaca kadar serbest mesafe (m, en fazla 15)."""
+    wall = thin_raster(blocked | (g.s >= 20), extra, 1.0)
+    H, W = wall.shape
+    P = [g.to_grid(x, z) for x, z in r['path']]
+    n = len(P)
+    wl, wr = [], []
+    for i in range(n):
+        a, b = P[max(0, i - 1)], P[min(n - 1, i + 1)]
+        tx, tz = b[0] - a[0], b[1] - a[1]
+        tl = math.hypot(tx, tz) or 1
+        tx, tz = tx / tl, tz / tl
+        res = []
+        for nx, nz in ((-tz, tx), (tz, -tx)):           # sol, sag (izgara: x dogu, z kuzey)
+            k = 0.25
+            while k <= 3.75:
+                x, z = int(round(P[i][0] + nx * k)), int(round(P[i][1] + nz * k))
+                if not (0 <= z < H and 0 <= x < W) or wall[z, x]:
+                    break
+                k += 0.25
+            res.append(max(1, int(round((k - 0.25) * CELL))))
+        wl.append(res[0]); wr.append(res[1])
+    json.dump({'wl': wl, 'wr': wr}, open(wpath(st, 'widths.json'), 'w'))
+    narrow = sum(1 for a, b in zip(wl, wr) if a + b < 10)
+    print(f'koridor genisligi: ortalama {sum(wl) / n + sum(wr) / n:.1f} m, 10 m altinda {narrow} nokta')
+
+
 def render(st, g, route=None, SCALE=2):
     """Renk haritasi uzerine egim/su/engel boyamasi, 5 m es yukselti, rota ve kontrol noktalari."""
     from PIL import Image, ImageDraw
@@ -467,7 +617,10 @@ def cmd_emit():
             bi = min(range(len(path)), key=lambda i: (path[i][0] - x) ** 2 + (path[i][1] - z) ** 2)
             cps.append({'name': name, 'i': bi})
         cps = [c for c in cps if c['i'] > 0]   # ilk ara nokta baslangic, kapi degil
-        cps[-1]['i'] = len(path) - 1            # son kontrol noktasi = finis
+        # son kontrol noktasi = finis; etap tanimi finisten sonra adsiz ara nokta(lar)la bitiyorsa
+        # rota orada devam eder (finis sonrasi guvenli durma / kacis yolu)
+        if st['waypoints'][-1][2]:
+            cps[-1]['i'] = len(path) - 1
         js.append(f"  {st['id']}: {{")
         js.append(f"    name: {json.dumps(st['name'], ensure_ascii=False)},")
         js.append(f"    desc: {json.dumps(st['desc'], ensure_ascii=False)},")
@@ -486,6 +639,24 @@ def cmd_emit():
         for c in cps:
             js.append(f"      {{ name: {json.dumps(c['name'], ensure_ascii=False)}, i: {c['i']} }},")
         js.append('    ],')
+        wf = wpath(st, 'widths.json')
+        if os.path.exists(wf):
+            w = json.load(open(wf))
+            if len(w['wl']) == len(path):
+                js.append(f"    wl: [{', '.join(map(str, w['wl']))}],")
+                js.append(f"    wr: [{', '.join(map(str, w['wr']))}],")
+        lf = wpath(st, 'line.json')
+        if os.path.exists(lf):
+            js.append('    line: [')
+            ln = '      '
+            for x, z in json.load(open(lf)):
+                item = f'[{x:.4f}, {z:.4f}], '
+                if len(ln) + len(item) > 110:
+                    js.append(ln.rstrip())
+                    ln = '      '
+                ln += item
+            js.append(ln.rstrip())
+            js.append('    ],')
         nf = wpath(st, 'notes.json')
         if os.path.exists(nf):
             js.append('    notes: [')
@@ -504,9 +675,9 @@ def cmd_emit():
 
 # ---------------------------------------------------------------- ince engel koridoru
 
-def cmd_corridor(st, width=12):
+def cmd_corridor(st, width=12, key='path'):
     ensure_game(st)
-    obs = json.loads(ev(script('corridor.js', STAGE=st['id'], W=width)))
+    obs = json.loads(ev(script('corridor.js', STAGE=st['id'], W=width, KEY=key)))
     ep = wpath(st, 'extra_obs.json')
     cur = set(map(tuple, json.load(open(ep)))) if os.path.exists(ep) else set()
     n0 = len(cur)
@@ -517,7 +688,7 @@ def cmd_corridor(st, width=12):
             near[i] = lat
     json.dump(sorted(cur), open(ep, 'w'))
     close = sorted((i, l) for i, l in near.items() if abs(l) <= 4)
-    print(f'koridor: {len(obs)} engel ornegi, ince engel {n0} -> {len(cur)}; yola 4 m icinde: {close}')
+    print(f'koridor ({key}): {len(obs)} engel ornegi, ince engel {n0} -> {len(cur)}; 4 m icinde: {close}')
     return close, len(cur) - n0
 
 
@@ -617,6 +788,13 @@ def cmd_build(st, rounds=6):
         if not close:
             break
         print(f'tur {it + 1}: yola yakin engel var, yeniden planlaniyor')
+    for it in range(4):
+        cmd_line(st)
+        cmd_emit()
+        close, added = cmd_corridor(st, 10, 'line')
+        if not close:
+            break
+        print(f'cizgi turu {it + 1}: ince engel var, yeniden geriliyor')
     cmd_notes(st)
     cmd_emit()
 
@@ -646,7 +824,7 @@ def cmd_drive(st, variant, prep, lat=None, brk=None, vmax=None, limit=600):
 
 def main():
     ap = argparse.ArgumentParser(description='Ralli etabi araclari')
-    ap.add_argument('cmd', choices=['scan', 'plan', 'emit', 'corridor', 'notes', 'build', 'drive'])
+    ap.add_argument('cmd', choices=['scan', 'plan', 'emit', 'corridor', 'notes', 'line', 'build', 'drive'])
     ap.add_argument('stage', nargs='?')
     ap.add_argument('variant', nargs='?', default='kartal80')
     ap.add_argument('prep', nargs='?', default='ralli')
@@ -660,7 +838,7 @@ def main():
         ap.error('etap kimligi gerekli (or. hotan)')
     st = load_stage(a.stage)
     {'scan': lambda: cmd_scan(st), 'plan': lambda: cmd_plan(st), 'corridor': lambda: cmd_corridor(st),
-     'notes': lambda: cmd_notes(st), 'build': lambda: cmd_build(st),
+     'notes': lambda: cmd_notes(st), 'build': lambda: cmd_build(st), 'line': lambda: (cmd_line(st), cmd_emit()),
      'drive': lambda: cmd_drive(st, a.variant, a.prep, a.lat, a.brk, a.vmax)}[a.cmd]()
 
 

@@ -130,6 +130,14 @@ export class DriveHud {
         ctx.strokeStyle = '#000'; ctx.lineWidth = 2;
         ctx.beginPath(); ctx.arc(x, y, k === R.next ? 8 : 5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
       });
+      // yaristaki diger araclar
+      if (R.cars) for (const c of R.cars) {
+        if (!c.vehicle || c.vehicle === vehicle) continue;
+        const q = c.vehicle.position;
+        const x = (q.x - pos.x) * S, y = (q.z - pos.z) * S;
+        ctx.fillStyle = c.color || '#fff'; ctx.strokeStyle = c.human ? '#ffd36b' : '#000'; ctx.lineWidth = c.human ? 3 : 2;
+        ctx.beginPath(); ctx.arc(x, y, 6, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      }
     }
     ctx.restore();
     // oyuncu oku

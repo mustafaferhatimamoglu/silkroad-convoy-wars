@@ -80,12 +80,19 @@ export class DriveMode {
   }
 
   update(dt) {
-    const { input, settings } = this.app;
-    const v = this.vehicle;
+    const { input } = this.app;
     if (input.pressed('Escape') && this.onPause) { this.onPause(); }
     if (this.paused) { this.camera.update(0, input); return; }
     const c = this._readControls(dt);
-    // tus komutlari
+    this._keys();
+    this._stepVehicles(dt, c);
+    this._afterVehicle(dt);
+  }
+
+  /** Tus komutlari: kamera, far, duzeltme, sanziman, yardim, motor sesi, muzik, korna. */
+  _keys() {
+    const { input, settings } = this.app;
+    const v = this.vehicle;
     if (input.pressed('KeyC') || (input.gamepad && input.gamepad.pressed(3))) {
       const m = this.camera.next();
       settings.set('camera', m);
@@ -109,8 +116,17 @@ export class DriveMode {
       this.hud.toast(this.app.audio.musicMuted ? 'Müzik kapalı' : 'Müzik açık', 1.2);
     }
     this.sound.horn(input.down('KeyH') || !!(input.gamepad && input.gamepad.buttons[10] > 0.5));
+  }
 
-    v.update(dt, c);
+  /** Fizik: serbest suruste yalniz oyuncu araci (yaris modu tum araclari birlikte adimlar). */
+  _stepVehicles(dt, c) {
+    this.vehicle.update(dt, c);
+  }
+
+  /** Arac adimindan sonra: gostergeler, hasar olaylari, kir, kamera, ses, efektler, HUD, muzik. */
+  _afterVehicle(dt) {
+    const { input } = this.app;
+    const v = this.vehicle;
     v.updateGauges(dt);
     // carpismalarda kamera sarsintisi
     if (v.sim.impacts.length) {

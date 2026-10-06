@@ -226,16 +226,35 @@ export class Game {
     this._hideOverlay();
   }
 
-  async startRally() {
+  async startRally(stage = 'hotan') {
     const { RallyMode } = await import('./modes/RallyMode.js');
     const app = this.app;
     this.menu.clear();
-    const start = RallyMode.startPosition(app.world);
+    const start = RallyMode.startPosition(app.world, stage);
     await this.loadArea(start, 'Ralli parkuru yükleniyor…');
-    const mode = new RallyMode(app, { onPause: () => this.pauseDrive(), onFinish: (r) => this.rallyFinished(r) });
+    const mode = new RallyMode(app, { stage, onPause: () => this.pauseDrive(), onFinish: (r) => this.rallyFinished(r) });
     app.setMode(mode);
     this.drive = mode;
     this._hideOverlay();
+  }
+
+  /** Botlara karsi yaris (RaceMode). opts: { stage, bots, level, cars, grid, seed } */
+  async startRace(opts = {}) {
+    const { RaceMode } = await import('./modes/RaceMode.js');
+    const app = this.app;
+    this.menu.clear();
+    const start = RaceMode.startPosition(app.world, opts.stage);
+    await this.loadArea(start, 'Yarış parkuru yükleniyor…');
+    const mode = new RaceMode(app, { ...opts, onPause: () => this.pauseDrive(), onFinish: (r) => this.raceFinished(r) });
+    app.setMode(mode);
+    this.drive = mode;
+    this._hideOverlay();
+  }
+
+  raceFinished(result) {
+    const key = `raceBest_${result.stage}`;
+    const best = this.app.settings.get(key);
+    if (result.finished && (!best || result.place < best.place || (result.place === best.place && result.time < best.time))) this.app.settings.set(key, { place: result.place, time: result.time });
   }
 
   rallyFinished(result) {
@@ -253,7 +272,7 @@ export class Game {
       onResume: () => this._resume(mode),
       onTeleport: mode.teleportable === false ? null : (id) => { this._resume(mode); this.teleport(id); },
       onGarage: () => this.menu.garage(() => { this._applyVehicleLook(mode); this.pauseDrive2(mode); }),
-      onRepair: () => { mode.vehicle.repair(); this._resume(mode); if (mode.hud) mode.hud.toast('Araç onarıldı ve yıkandı', 1.8); },
+      onRepair: mode.repairable === false ? null : () => { mode.vehicle.repair(); this._resume(mode); if (mode.hud) mode.hud.toast('Araç onarıldı ve yıkandı', 1.8); },
       onSettings: () => this.menu.settings(() => this.pauseDrive2(mode)),
       onMain: () => { this.menu.clear(); this.showMainMenu(); },
     });

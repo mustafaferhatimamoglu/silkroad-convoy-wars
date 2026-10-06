@@ -1,6 +1,16 @@
 import { CITIES } from '../data/cities.js';
 import { PAINTS } from '../vehicle/model/KartalModel.js';
 import { QUALITY } from '../core/Settings.js';
+import { RALLY_STAGES } from '../data/rally.js';
+import { DIFFICULTY } from '../race/BotDriver.js';
+
+const LEVEL_DESC = {
+  kolay: 'Temiz sürer, sık hata yapar; kirli numara yok',
+  orta: 'Hızlı; arada blok, itme ve kestirme',
+  zor: 'Sınırda sürer, kestirmeleri bilir, PIT atar',
+  acimasiz: 'Her fırsatta PIT, fren testi, seni bariyer gibi kullanır',
+};
+const stageInfo = (st) => `${(st.length / 1000).toFixed(1)} km · ${st.cps.length} kapı`;
 
 // Menu arayuzu: ana menu, sehir secimi, garaj, ayarlar, duraklatma.
 // Her ekran DOM olarak kurulur; geri cagirimlar Game denetleyicisine baglanir.
@@ -36,7 +46,8 @@ export class Menu {
       <h1>SILKROAD</h1>
       <div class="ver">CONVOY WARS · V4</div>
       <button class="btn" data-a="drive">Serbest Sürüş<small>Silkroad dünyasında Tofaş Kartal ile dolaş</small></button>
-      <button class="btn" data-a="rally">Ralli: Hotan Vahası → Lord Yarkan<small>2.6 km · 9 kontrol noktası · pilot notlarıyla zamana karşı</small></button>
+      <button class="btn" data-a="race">Yarış: Botlara Karşı<small>8 araç · PIT manevrası, blok, kestirme; 4 zorluk seviyesi</small></button>
+      <button class="btn" data-a="rally">Ralli: Zamana Karşı<small>${Object.keys(RALLY_STAGES).length} etap · pilot notlarıyla kontrol noktalı etap</small></button>
       <button class="btn" data-a="garage">Garaj<small>Sürüm ve renk seçimi</small></button>
       <button class="btn" data-a="kervan">Kervan RPG<small>Tüccar ol: mal al, kervanla şehirden şehre taşı, haydutlara karşı koy</small></button>
       <button class="btn secondary" data-a="explore">Dünya Gezgini<small>Serbest kamera ile haritayı gez</small></button>
@@ -50,7 +61,8 @@ export class Menu {
       const act = a.dataset.a;
       if (act === 'drive') this.cityPicker('drive');
       else if (act === 'explore') this.cityPicker('explore');
-      else if (act === 'rally') this.game.startRally();
+      else if (act === 'rally') this.stagePicker();
+      else if (act === 'race') this.raceSetup();
       else if (act === 'kervan') this.kervanMenu();
       else if (act === 'garage') this.garage();
       else if (act === 'settings') this.settings(() => this.main());
@@ -112,6 +124,72 @@ export class Menu {
       if (a.dataset.a === 'back') this.main();
       if (a.dataset.a === 'continue') { this.clear(); this.game.startKervan(save.city || 'jangan', { look: save.look || look }); }
       if (a.dataset.a === 'new') { s.set('kervanLook', look); this.clear(); this.game.startKervan('jangan', { fresh: true, look }); }
+    });
+    this.root.appendChild(el);
+    this.layer = el;
+  }
+
+  /** Ralli (zamana karsi): etap secimi. */
+  stagePicker() {
+    this.clear();
+    const s = this.game.app.settings;
+    let sel = RALLY_STAGES[s.get('rallyStage')] ? s.get('rallyStage') : Object.keys(RALLY_STAGES)[0];
+    const el = h(`<div class="panel dialog interactive">
+      <h2>Ralli etabı</h2>
+      <div class="grid2">${Object.entries(RALLY_STAGES).map(([id, st]) => `<div class="card ${id === sel ? 'sel' : ''}" data-s="${id}"><b>${st.name}</b><span>${stageInfo(st)}</span></div>`).join('')}</div>
+      <div class="row" style="margin-top:16px"><button class="btn secondary" data-a="back" style="width:auto">← Geri</button><div style="flex:1"></div>
+      <button class="btn" data-a="go" style="width:auto">Başla →</button></div>
+    </div>`);
+    el.addEventListener('click', (e) => {
+      const c = e.target.closest('[data-s]');
+      if (c) { sel = c.dataset.s; el.querySelectorAll('[data-s]').forEach((x) => x.classList.toggle('sel', x === c)); return; }
+      const a = e.target.closest('[data-a]');
+      if (!a) return;
+      if (a.dataset.a === 'back') this.main();
+      if (a.dataset.a === 'go') { s.set('rallyStage', sel); this.clear(); this.game.startRally(sel); }
+    });
+    this.root.appendChild(el);
+    this.layer = el;
+  }
+
+  /** Botlara karsi yaris: etap, rakip sayisi, zorluk, araclar, baslangic sirasi. */
+  raceSetup() {
+    this.clear();
+    const s = this.game.app.settings;
+    const cfg = {
+      stage: RALLY_STAGES[s.get('raceStage')] ? s.get('raceStage') : Object.keys(RALLY_STAGES)[0],
+      bots: s.get('raceBots') ?? 7, level: s.get('raceLevel') || 'orta', cars: s.get('raceCars') || 'same', grid: s.get('raceGrid') || 'back',
+    };
+    const opt = (k, items) => items.map(([v, l]) => `<option value="${v}" ${String(cfg[k]) === String(v) ? 'selected' : ''}>${l}</option>`).join('');
+    const el = h(`<div class="panel dialog interactive" style="width:min(760px,94vw)">
+      <h2>Yarış: Botlara Karşı</h2>
+      <div style="color:var(--muted);font-size:13px;margin-bottom:6px">Etap</div>
+      <div class="grid2">${Object.entries(RALLY_STAGES).map(([id, st]) => `<div class="card ${id === cfg.stage ? 'sel' : ''}" data-s="${id}"><b>${st.name}</b><span>${stageInfo(st)}</span></div>`).join('')}</div>
+      <div style="color:var(--muted);font-size:13px;margin:14px 0 6px">Bot zorluğu <span style="opacity:.7">(aynı araçlar, ek güç yok: fark sürüş becerisi ve kirli taktiklerde)</span></div>
+      <div class="grid2">${Object.entries(DIFFICULTY).map(([id, d]) => `<div class="card ${id === cfg.level ? 'sel' : ''}" data-l="${id}"><b>${d.label}</b><span>${LEVEL_DESC[id]}</span></div>`).join('')}</div>
+      <div class="setting" style="margin-top:12px"><label>Rakip sayısı</label><select data-k="bots">${opt('bots', [1, 2, 3, 4, 5, 6, 7].map((n) => [n, `${n} bot (${n + 1} araç)`]))}</select></div>
+      <div class="setting"><label>Botların araçları</label><select data-k="cars">${opt('cars', [['same', 'Herkes benim aracımla'], ['mixed', 'Karışık (garajdaki tüm araçlar)']])}</select></div>
+      <div class="setting"><label>Başlangıç sırası</label><select data-k="grid">${opt('grid', [['back', 'En arkadan'], ['random', 'Rastgele'], ['front', 'En önden']])}</select></div>
+      <div class="row" style="margin-top:16px"><button class="btn secondary" data-a="back" style="width:auto">← Geri</button><div style="flex:1"></div>
+      <button class="btn" data-a="go" style="width:auto">Yarışa başla →</button></div>
+    </div>`);
+    el.addEventListener('input', (e) => {
+      const k = e.target.dataset.k;
+      if (k) cfg[k] = k === 'bots' ? Number(e.target.value) : e.target.value;
+    });
+    el.addEventListener('click', (e) => {
+      const st = e.target.closest('[data-s]');
+      if (st) { cfg.stage = st.dataset.s; el.querySelectorAll('[data-s]').forEach((x) => x.classList.toggle('sel', x === st)); return; }
+      const l = e.target.closest('[data-l]');
+      if (l) { cfg.level = l.dataset.l; el.querySelectorAll('[data-l]').forEach((x) => x.classList.toggle('sel', x === l)); return; }
+      const a = e.target.closest('[data-a]');
+      if (!a) return;
+      if (a.dataset.a === 'back') this.main();
+      if (a.dataset.a === 'go') {
+        s.set('raceStage', cfg.stage); s.set('raceBots', cfg.bots); s.set('raceLevel', cfg.level); s.set('raceCars', cfg.cars); s.set('raceGrid', cfg.grid);
+        this.clear();
+        this.game.startRace({ ...cfg });
+      }
     });
     this.root.appendChild(el);
     this.layer = el;

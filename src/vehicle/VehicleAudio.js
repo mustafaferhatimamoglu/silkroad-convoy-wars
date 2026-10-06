@@ -16,10 +16,12 @@ const VIEW_MIX = {
 const viewKey = (mode) => (mode === 'cockpit' ? 'int' : mode === 'hood' ? 'hood' : 'ext');
 
 export class VehicleAudio {
-  constructor(audio, vehicle, { engine = true } = {}) {
+  constructor(audio, vehicle, { engine = true, spatial = false, level = 0.9 } = {}) {
     this.audio = audio;
     this.vehicle = vehicle;
     this.engineOn = engine;
+    this.spatial = spatial;     // rakip araclar: konumlu ses (PannerNode), oyuncu araci: kabin/dis karisimi
+    this.level = level;
     this.ctx = null;
     this.lastGear = null;
     this.hornOn = false;
@@ -30,8 +32,11 @@ export class VehicleAudio {
     this.ctx = ctx;
     const a = this.audio;
     this.out = ctx.createGain();
-    this.out.gain.value = 0.9;
-    this.out.connect(a.sfx);
+    this.out.gain.value = this.level;
+    if (this.spatial) {
+      this.panner = new PannerNode(ctx, { panningModel: 'equalpower', distanceModel: 'inverse', refDistance: 7, maxDistance: 400, rolloffFactor: 1.25 });
+      this.out.connect(this.panner).connect(a.sfx);
+    } else this.out.connect(a.sfx);
     try {
       const P = this.vehicle.params;
       const profile = (P.engine && P.engine.sound) || P.id || 'kartal';
@@ -88,6 +93,10 @@ export class VehicleAudio {
     if (!ctx) return;
     const v = this.vehicle, sim = v.sim;
     const t = ctx.currentTime;
+    if (this.panner) {
+      const p = v.position, pn = this.panner;
+      pn.positionX.setTargetAtTime(p.x, t, 0.03); pn.positionY.setTargetAtTime(p.y, t, 0.03); pn.positionZ.setTargetAtTime(p.z, t, 0.03);
+    }
     const speed = v.velocity.length();
     if (this.engine) {
       const p = this.engine.parameters;
@@ -245,5 +254,24 @@ export class VehicleAudio {
     if (this.tires) this.tires.disconnect();
     if (this.engine) { this.engine.disconnect(); this.engine.port.postMessage({ stop: true }); }
     this.out.disconnect();
+    if (this.panner) this.panner.disconnect();
   }
 }
+
+/** Dinleyiciyi kameraya bagla (konumlu rakip sesleri icin). */
+export function updateListener(audio, camera) {
+  const ctx = audio.ctx;
+  if (!ctx) return;
+  const L = ctx.listener, t = ctx.currentTime, p = camera.position;
+  const e = camera.matrixWorld.elements;
+  const f = { x: -e[8], y: -e[9], z: -e[10] };   // kameranin bakis yonu (-z ekseni)
+  if (L.positionX) {
+    L.positionX.setTargetAtTime(p.x, t, 0.03); L.positionY.setTargetAtTime(p.y, t, 0.03); L.positionZ.setTargetAtTime(p.z, t, 0.03);
+    L.forwardX.setTargetAtTime(f.x, t, 0.03); L.forwardY.setTargetAtTime(f.y, t, 0.03); L.forwardZ.setTargetAtTime(f.z, t, 0.03);
+    L.upX.value = 0; L.upY.value = 1; L.upZ.value = 0;
+  } else {
+    L.setPosition(p.x, p.y, p.z);
+    L.setOrientation(f.x, f.y, f.z, 0, 1, 0);
+  }
+}
+

@@ -75,7 +75,12 @@ async function main() {
   const mode = params.get('mode');
   if (mode === 'drive') game.startDrive(city || app.settings.get('lastCity'));
   else if (mode === 'explore') game.startExplore(city || 'jangan');
-  else if (mode === 'rally') game.startRally();
+  else if (mode === 'rally') game.startRally(params.get('stage') || 'hotan');
+  else if (mode === 'race') {
+    // test kisayolu: &stage=hotan&bots=7&level=zor&cars=mixed&grid=back&seed=1&auto=1 (auto: oyuncu aracini da bot surer)
+    game.startRace({ stage: params.get('stage') || 'hotan', bots: Number(params.get('bots') ?? 7), level: params.get('level') || 'orta',
+      cars: params.get('cars') || 'same', grid: params.get('grid') || 'back', seed: Number(params.get('seed') || 0) || undefined, auto: params.get('auto') === '1' });
+  }
   else if (mode === 'garage') game.menu.garage();
   else if (mode === 'kervan') game.startKervan(city || 'jangan');
   else if (mode === 'chars') game.startCharView(city || 'jangan', params.get('keys') ? params.get('keys').split(',') : null);

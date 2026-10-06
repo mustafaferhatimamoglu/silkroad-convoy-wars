@@ -19,7 +19,7 @@ const _p = new THREE.Vector3();
 const _d = new THREE.Vector3();
 
 export class Vehicle {
-  constructor(app, { variant = 'kartal80', paint = 'lacivert', prep = null, params = null } = {}) {
+  constructor(app, { variant = 'kartal80', paint = 'lacivert', prep = null, params = null, reflections = true } = {}) {
     this.app = app;
     this.prep = prep || (app.settings ? app.settings.get('vehiclePrep') : 'ralli') || 'ralli';
     this.params = params || presetFor(variant, this.prep);
@@ -40,9 +40,12 @@ export class Vehicle {
     this._gaugeT = 0;
     this.shadow = this._makeShadowBlob();
     app.scene.add(this.shadow);
-    this.reflections = new VehicleReflections(app, { size: 128 });
-    this.reflections.enabled = app.settings ? app.settings.get('quality') !== 'dusuk' : true;
-    this.reflections.track(this.model.reflectiveMaterials());
+    // dinamik yansima (kup kamera) yalniz oyuncu aracinda; rakipler oyuncununkini paylasir (shareReflections)
+    this.reflections = reflections ? new VehicleReflections(app, { size: 128 }) : null;
+    if (this.reflections) {
+      this.reflections.enabled = app.settings ? app.settings.get('quality') !== 'dusuk' : true;
+      this.reflections.track(this.model.reflectiveMaterials());
+    }
     // menteseli parcalar (kapi, kaput, bagaj): kilit kirilir, savrulur, kopar
     this.root.updateMatrixWorld(true);
     this.damage = new VehicleDamage(this);
@@ -137,27 +140,48 @@ export class Vehicle {
     if (list.length > 80) list.shift();
   }
 
+  /** Aracin altindaki bolge (carpisma geometrisi) yuklu mu; degilse fizik beklemeli. */
+  groundReady() {
+    if (!this.ground) return true;
+    const b = this.sim.body;
+    return this.app.world.isLoadedAt(b.pos.x, b.pos.z);
+  }
+
   update(dt, controls) {
-    const ground = this.ground;
-    if (ground) {
-      // arac alti yuklenmemisse fizigi beklet (hizli surerken akis gecikirse)
-      const b = this.sim.body;
-      if (!this.app.world.isLoadedAt(b.pos.x, b.pos.z)) { this._sync(1); return; }
-    }
+    // arac alti yuklenmemisse fizigi beklet (hizli surerken akis gecikirse)
+    if (!this.groundReady()) { this._sync(1); return; }
     this.acc += Math.min(dt, 0.1);
     let n = 0;
     while (this.acc >= STEP && n < 24) {
-      this.sim.step(STEP, controls, ground || this.flatGround);
+      this.physicsStep(STEP, controls);
       this.acc -= STEP;
       n++;
     }
     if (n >= 24) this.acc = 0;
     this.steps = n;
-    if (ground) this._trackSafe(dt);
-    this._sync(this.acc / STEP);
+    this.postStep(dt, this.acc / STEP);
+  }
+
+  /** Tek sabit fizik adimi (yaris dunyasi tum araclari ayni adimla birlikte ilerletir). */
+  physicsStep(dt, controls) {
+    this.sim.step(dt, controls, this.ground || this.flatGround);
+  }
+
+  /** Adimlardan sonra: guvenli nokta kaydi, gorsel senkron (alpha: ara degerleme), hasar, yansima. */
+  postStep(dt, alpha) {
+    if (this.ground) this._trackSafe(dt);
+    this._sync(alpha);
     this.damage.update(dt);
-    this._reflPos.copy(this.position).y += 0.6;
-    this.reflections.update(this._reflPos, [this.root, this.shadow]);
+    if (this.reflections) {
+      this._reflPos.copy(this.position).y += 0.6;
+      this.reflections.update(this._reflPos, [this.root, this.shadow]);
+    }
+  }
+
+  /** Bu aracin boya/krom/cam malzemeleri baska bir aracin yansima haritasini kullansin. */
+  shareReflections(from) {
+    if (!from.reflections) return;
+    for (const m of this.model.reflectiveMaterials()) if (!from.reflections.materials.includes(m)) from.reflections.materials.push(m);
   }
 
   _sync(alpha) {
@@ -262,6 +286,6 @@ export class Vehicle {
     this.damage.dispose();
     this.app.scene.remove(this.root);
     this.app.scene.remove(this.shadow);
-    this.reflections.dispose();
+    if (this.reflections) this.reflections.dispose();
   }
 }

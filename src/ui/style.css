@@ -208,3 +208,20 @@ select { background: #141a26; color: var(--text); border: 1px solid rgba(255, 25
 #worldMap .wmHead b { color: var(--gold); font-family: Georgia, serif; font-size: 20px; font-weight: 500; }
 #worldMap .wmHead span { color: var(--muted); font-size: 12px; }
 #worldMap kbd { display: inline-block; padding: 0 5px; border: 1px solid rgba(232, 193, 112, 0.55); border-radius: 3px; color: var(--gold); font: 600 11px Consolas, monospace; }
+
+/* yaris: sira, siralama tablosu, sonuc */
+#race .pos { font: 800 15px Georgia, serif; color: var(--muted); margin-top: -2px; }
+#race .pos b { font-size: 30px; color: var(--gold); }
+#standings { position: absolute; top: 120px; left: 14px; min-width: 230px; padding: 8px 10px; font-size: 13px; }
+#standings .h { font-size: 11px; letter-spacing: 1px; color: var(--muted); margin-bottom: 4px; }
+#standings .row { display: flex; align-items: center; gap: 6px; padding: 2px 0; color: var(--text); }
+#standings .row.me { color: #fff; font-weight: 700; }
+#standings .p { width: 16px; text-align: right; color: var(--gold); font-weight: 700; }
+#standings .n { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#standings .g { font: 12px Consolas, monospace; color: var(--muted); }
+.dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; border: 1px solid rgba(0,0,0,0.6); margin-right: 4px; vertical-align: middle; }
+#standings .row .dot { margin-right: 0; }
+.results-panel table.results { width: 100%; border-collapse: collapse; font-size: 14px; }
+.results-panel th { text-align: left; font-weight: 600; color: var(--muted); font-size: 12px; padding: 4px 6px; border-bottom: 1px solid rgba(255,255,255,0.12); }
+.results-panel td { padding: 4px 6px; color: var(--text); }
+.results-panel tr.me td { color: #fff; font-weight: 700; background: rgba(255, 211, 107, 0.08); }
