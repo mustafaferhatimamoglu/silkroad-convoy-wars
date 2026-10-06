@@ -1,0 +1,8 @@
+{
+  "id": "constantinople",
+  "name": "Konstantiniyye Kıyıları",
+  "desc": "",
+  "city": "constantinople",
+  "bounds": [73, 81, 99, 110],
+  "waypoints": []
+}

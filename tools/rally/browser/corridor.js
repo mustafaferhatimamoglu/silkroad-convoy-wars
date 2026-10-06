@@ -11,7 +11,8 @@
   const pts = st[KEY].map(P);
   const contacts = [];
   for (let i = 0; i < 8; i++) contacts.push({ depth: 0, normal: V(), point: V(), object: false });
-  const c = V(), obs = [];
+  const c = V(), obs = [], down = V(0, -1, 0);
+  const hit = { distance: 0, point: V(), normal: V(), object: false, surface: 0 };
   const CH = 24;
   let s = 0;
   for (let c0 = 0; c0 < pts.length - 1; c0 += CH) {
@@ -28,8 +29,13 @@
           const x = x0 + px * l, z = z0 + pz * l;
           const h = w.heightAt(x, z);
           if (h === null || h === undefined) continue;
-          let hitObj = false;
+          // ince su (hendek, kanal): 4 m'lik taramada kacabilir; engel say
+          const wl = w.waterAt(x, z);
+          let hitObj = wl !== null && wl !== undefined && wl > h + 0.2;
+          // kopru: su ustunde surulebilir obje yuzeyi varsa su degil
+          if (hitObj && col.raycast(c.set(x, wl + 30, z), down, 40, hit) && hit.object && hit.point.y > wl) hitObj = false;
           for (const dy of [0.9, 1.7]) {
+            if (hitObj) break;
             c.set(x, h + dy, z);
             const cnt = col.sphereContacts(c, 0.6, contacts, 8);
             for (let q = 0; q < cnt; q++) if (contacts[q].object && Math.abs(contacts[q].normal.y) < 0.75) { hitObj = true; break; }

@@ -19,10 +19,10 @@ import { surfaceInfo } from '../vehicle/presets.js';
 //  - kestirme: hizli cizgideki kestirmeleri kullanir (kapilar yine gecilmek zorunda)
 
 export const DIFFICULTY = {
-  kolay: { label: 'Kolay', grip: 0.6, brake: 0.55, aggression: 0.15, dirty: 0.0, shortcut: 0.0, line: 0.0, mistakes: 0.3, crest: 0.75 },
-  orta: { label: 'Orta', grip: 0.7, brake: 0.66, aggression: 0.4, dirty: 0.35, shortcut: 0.45, line: 0.6, mistakes: 0.12, crest: 0.85 },
-  zor: { label: 'Zor', grip: 0.79, brake: 0.75, aggression: 0.65, dirty: 0.7, shortcut: 0.85, line: 1.0, mistakes: 0.05, crest: 0.95 },
-  acimasiz: { label: 'Acımasız', grip: 0.85, brake: 0.8, aggression: 0.95, dirty: 1.0, shortcut: 1.0, line: 1.0, mistakes: 0.02, crest: 1.0 },
+  kolay: { label: 'Kolay', grip: 0.6, brake: 0.55, aggression: 0.15, dirty: 0.0, shortcut: 0.0, line: 0.0, mistakes: 0.3, crest: 0.6 },
+  orta: { label: 'Orta', grip: 0.7, brake: 0.66, aggression: 0.4, dirty: 0.35, shortcut: 0.45, line: 0.6, mistakes: 0.12, crest: 0.7 },
+  zor: { label: 'Zor', grip: 0.79, brake: 0.75, aggression: 0.65, dirty: 0.7, shortcut: 0.85, line: 1.0, mistakes: 0.05, crest: 0.8 },
+  acimasiz: { label: 'Acımasız', grip: 0.85, brake: 0.8, aggression: 0.95, dirty: 1.0, shortcut: 1.0, line: 1.0, mistakes: 0.02, crest: 0.85 },
 };
 
 // Rakip kadrosu: kisilik carpanlari (saldirganlik, kirlilik, beceri farki, kestirme egilimi)
@@ -119,6 +119,8 @@ export class BotDriver {
   /** Aktif yol: hizli cizgi (kestirmesi reddedilmis bolumlerde rota). */
   _path() {
     const C = this.course, idx = this.car.state.idx || 0;
+    // bu bolumde hizli cizgide takildi: bir sure rotayi izle
+    if (this.avoidLine && (this.car.state.progress || 0) < this.avoidLine) return C.route;
     if (!this.useLine && !this.takeCut.some(Boolean)) return C.route;
     if (!C.line) return C.route;
     const cuts = C.shortcuts || [];
@@ -333,7 +335,14 @@ export class BotDriver {
     // --- kurtarma: takla, takilma, rotadan kopma
     const up = 1 - 2 * (b.q.x * b.q.x + b.q.z * b.q.z);
     this.flipT = up < 0.35 ? this.flipT + dt : 0;
-    if (this.flipT > 1.2) { v.recover(); this.flipT = 0; this._log('takla', st); return c; }
+    if (this.flipT > 1.2) {
+      // ayni yerde ust uste takla: yerinde duzeltmek ayni tuzaga koyar -> rotaya don
+      const again = this._lastFlip && sim.time - this._lastFlip.t < 15 && Math.abs((st.idx || 0) - this._lastFlip.i) < 6;
+      this._lastFlip = { t: sim.time, i: st.idx || 0 };
+      if (again) { race.toRoute(me); this._log('rotaya (takla)', st); } else { v.recover(); this._log('takla', st); }
+      this.flipT = 0;
+      return c;
+    }
     if (this.revT > 0) {
       this.revT -= dt;
       c.decel = 1; c.steer = this._revSteer;
@@ -346,6 +355,8 @@ export class BotDriver {
       this.lastStuckIdx = st.idx || 0;
       if (this.stuckN >= 3) { race.toRoute(me); this.stuckN = 0; this._log('rotaya (takildi)', st); return c; }
       this.revT = 1.3; this._revSteer = -Math.sign(this._lastSteer || 1) * 0.8;
+      if (this._path() !== this.course.route) this.avoidLine = (st.progress || 0) + 160;
+      if (this.tactic) this._endTactic(this.tactic, 4);
       this._log('takildi', st);
       return c;
     }
@@ -408,6 +419,7 @@ export class BotDriver {
         }
       } else if (T.type === 'lean') {
         leanUntil = T.until;
+        if (Math.abs(sp) < 7) this._endTactic(T, 3);
         offAdd = T.side * 0.9;                     // disariya, rakibe dogru yaslan
         if (s > T.until) { this._endTactic(T, 3); if (sim.lastCarContact && sim.time - sim.lastCarContact < 2) this._event('lean', T.target); }
       } else if (T.type === 'brake') {

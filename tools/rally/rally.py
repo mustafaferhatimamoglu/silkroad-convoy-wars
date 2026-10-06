@@ -7,6 +7,7 @@ SRO_HARNESS ortam degiskenleriyle degistirilebilir. Ara ciktilar tools/rally/wor
 (git disi): tarama bloklari, grid.npz, extra_obs.json, route.json, profile.json, notes.json, map.png.
 
   python tools/rally/rally.py scan hotan        arazi taramasi (bounds icindeki bolgeler, 4 m izgara)
+  python tools/rally/rally.py reach hotan       ilk ara noktadan araçla ulasilabilen alan -> reach.png
   python tools/rally/rally.py plan hotan        A* + duzeltme -> route.json, map.png
   python tools/rally/rally.py emit              src/data/rally.js (rotasi olan tum etaplar)
   python tools/rally/rally.py corridor hotan    rota koridorunda ince engel taramasi -> extra_obs.json
@@ -176,7 +177,7 @@ def cmd_scan(st):
 
 # ---------------------------------------------------------------- planlama
 
-def astar(g, blocked, near_pen, a, b):
+def astar(g, blocked, near_pen, a, b, road=0.8, rough=None, step=0.42, scost=(8, 0.06)):
     h, s, m = g.h, g.s, g.m
     H, W = h.shape
     sx, sz = int(round(a[0])), int(round(a[1]))
@@ -198,12 +199,14 @@ def astar(g, blocked, near_pen, a, b):
                 continue
             if dz and dx and (blocked[z, nx] or blocked[nz, x]):
                 continue
-            # basamak: komsu hucre yukseklik farki -> egim (en fazla ~23 derece)
-            if abs(int(h[nz, nx]) - int(h[z, x])) / 10.0 / (ln * CELL) > 0.42:
+            # basamak: komsu hucre yukseklik farki -> egim (varsayilan en fazla ~23 derece)
+            if abs(int(h[nz, nx]) - int(h[z, x])) / 10.0 / (ln * CELL) > step:
                 continue
-            c = 1.0 + max(0, int(s[nz, nx]) - 8) * 0.06 + near_pen[nz, nx]
+            c = 1.0 + max(0, int(s[nz, nx]) - scost[0]) * scost[1] + near_pen[nz, nx]
+            if rough is not None:
+                c += rough[nz, nx]                                  # tumsek/set (sicrama) cezasi
             sf = m[nz, nx]
-            c *= 0.8 if sf == 0 else (1.15 if sf == 1 else 1.0)   # toprak yol tercih, kum biraz pahali
+            c *= road if sf == 0 else (1.15 if sf == 1 else 1.0)   # toprak yol tercih, kum biraz pahali
             nd = dcur + ln * c
             if nd < dist[nz, nx]:
                 dist[nz, nx] = nd
@@ -318,25 +321,38 @@ def cmd_plan(st, quiet=False):
     g = Grid(st)
     s = g.s
     blocked, extra = load_blocked(st, g)
+    # etap ayari maxslope: bu egimden dik hucreler rota icin gecilmez (arkadan itisli arac cimende
+    # ~15 dereceden dik yokusu yavas girince cikamaz; yaris rotalari yumusak olmali)
+    max_slope = st.get('maxslope', 24)
+    step = math.tan(math.radians(min(23, max_slope)))
+    if max_slope < 24:
+        blocked = blocked | (g.s >= max_slope)
     hard = dilate(blocked & ~((g.f & 1) > 0), 1)
     blocked2 = blocked | hard
     # engele yakinlik cezasi: 2 ve 3 hucre uzakliktaki hucreler pahali
     d2 = dilate(blocked, 2) & ~hard
     d3 = dilate(blocked, 3) & ~dilate(blocked, 2)
     near_pen = d2 * 1.0 + d3 * 0.4
-    # ara noktalari en yakin serbest hucreye kaydir (en fazla 8 hucre = 32 m)
+    # ara noktalari baslangictan ulasilabilen en yakin hucreye kaydir (en fazla 14 hucre = 56 m)
+    w0 = st['waypoints'][0]
+    # ulasilabilirlik: baslangicin en yakin serbest hucresinden (ince engel baslangici kapatmasin)
+    sx, sz = (int(round(v)) for v in g.to_grid(w0[0], w0[1]))
+    cand = [(abs(dx) + abs(dz), sx + dx, sz + dz) for dz in range(-6, 7) for dx in range(-6, 7)
+            if 0 <= sz + dz < blocked2.shape[0] and 0 <= sx + dx < blocked2.shape[1] and not blocked2[sz + dz, sx + dx]]
+    _, fx, fz = min(cand)
+    reach = reachable(g, blocked2, (fx, fz), step)
     wps = []
     for w in st['waypoints']:
         gx, gz = g.to_grid(w[0], w[1])
         gx, gz = int(round(gx)), int(round(gz))
         best = None
-        for r in range(0, 9):
+        for r in range(0, 15):
             for dz in range(-r, r + 1):
                 for dx in range(-r, r + 1):
                     if max(abs(dx), abs(dz)) != r:
                         continue
                     z, x = gz + dz, gx + dx
-                    if 0 <= z < blocked2.shape[0] and 0 <= x < blocked2.shape[1] and not blocked2[z, x]:
+                    if 0 <= z < blocked2.shape[0] and 0 <= x < blocked2.shape[1] and not blocked2[z, x] and (reach[z, x] or w is w0):
                         d = math.hypot(dx, dz)
                         if best is None or d < best[0]:
                             best = (d, x, z)
@@ -347,9 +363,19 @@ def cmd_plan(st, quiet=False):
         if best[0] > 0 and not quiet:
             print(f'  kaydirildi {w[2] or ""} {best[0] * CELL:.0f} m')
         wps.append((*g.to_region(best[1], best[2]), w[2]))
+    # etap ayarlari: road = toprak yol maliyet carpani (kucuk: yolu sikica izle, tarlalar kestirme
+    # olur), smooth = tumsek cezasi (yukseklik alaninin Laplasyeni, m basina)
+    road = st.get('road', 0.8)
+    rough = None
+    if st.get('smooth'):
+        hm = g.h.astype(np.float32) / 10
+        lap = np.zeros_like(hm)
+        lap[1:-1, 1:-1] = np.abs(hm[2:, 1:-1] + hm[:-2, 1:-1] + hm[1:-1, 2:] + hm[1:-1, :-2] - 4 * hm[1:-1, 1:-1])
+        rough = np.clip(lap - 0.15, 0, 3) * st['smooth']
     full, seg_len = [], []
     for i in range(len(wps) - 1):
-        path = astar(g, blocked2, near_pen, g.to_grid(*wps[i][:2]), g.to_grid(*wps[i + 1][:2]))
+        path = astar(g, blocked2, near_pen, g.to_grid(*wps[i][:2]), g.to_grid(*wps[i + 1][:2]), road, rough, step,
+                     (10, st['slopecost']) if st.get('slopecost') else (8, 0.06))
         if path is None:
             raise RuntimeError(f'yol yok: {wps[i]} -> {wps[i + 1]}')
         seg_len.append(len(path) * CELL)
@@ -426,7 +452,7 @@ def thin_raster(blocked, extra, radius):
 
 def cmd_line(st):
     """Botlarin hizli cizgisi: rota, kapilardan (5 m icinde) gecmek sartiyla gergin ip gibi cekilir;
-    viraj icleri ve acik arazideki kestirmeler boyle cikar. Engellerden en az ~6 m, egim < 18 derece."""
+    viraj icleri ve acik arazideki kestirmeler boyle cikar. Engellerden en az ~6 m, egim < 12 derece."""
     g = Grid(st)
     blocked, extra = load_blocked(st, g)
     r = json.load(open(wpath(st, 'route.json'), encoding='utf-8'))
@@ -435,7 +461,8 @@ def cmd_line(st):
     fin = gates[-1]
     P = P[:fin + 1]                       # cizgi finis kapisinda biter (sonrasi rota)
     n = len(P)
-    free = ~thin_raster(dilate(blocked, 1), extra, 1.5) & (g.s < 18)
+    # hizli cizgi: yamac kesmesin (arkadan itisli arac cimende 12 dereceden diki zor tirmanir)
+    free = ~thin_raster(dilate(blocked, 1), extra, 1.5) & (g.s < 12)
     H, W = free.shape
 
     def ok(x, z):
@@ -546,6 +573,59 @@ def cmd_widths(st, g, blocked, extra, r):
     json.dump({'wl': wl, 'wr': wr}, open(wpath(st, 'widths.json'), 'w'))
     narrow = sum(1 for a, b in zip(wl, wr) if a + b < 10)
     print(f'koridor genisligi: ortalama {sum(wl) / n + sum(wr) / n:.1f} m, 10 m altinda {narrow} nokta')
+
+
+def reachable(g, blocked2, start, step=0.42):
+    """Baslangic hucresinden arac kurallariyla (A* ile ayni: engel, basamak egimi) ulasilabilen hucreler."""
+    H, W = g.h.shape
+    seen = np.zeros((H, W), bool)
+    sx, sz = int(round(start[0])), int(round(start[1]))
+    stack = [(sz, sx)]
+    seen[sz, sx] = True
+    h = g.h
+    while stack:
+        z, x = stack.pop()
+        for dz, dx, ln in ((-1, 0, 1), (1, 0, 1), (0, -1, 1), (0, 1, 1), (-1, -1, 1.414), (-1, 1, 1.414), (1, -1, 1.414), (1, 1, 1.414)):
+            nz, nx = z + dz, x + dx
+            if nz < 0 or nz >= H or nx < 0 or nx >= W or seen[nz, nx] or blocked2[nz, nx]:
+                continue
+            if dz and dx and (blocked2[z, nx] or blocked2[nz, x]):
+                continue
+            if abs(int(h[nz, nx]) - int(h[z, x])) / 10.0 / (ln * CELL) > step:
+                continue
+            seen[nz, nx] = True
+            stack.append((nz, nx))
+    return seen
+
+
+def cmd_reach(st):
+    """Ilk ara noktadan ulasilabilen alan haritasi (ulasilamayan yerler karartilir): work/<id>/reach.png"""
+    from PIL import Image
+    g = Grid(st)
+    blocked, extra = load_blocked(st, g)
+    max_slope = st.get('maxslope', 24)
+    step = math.tan(math.radians(min(23, max_slope)))
+    if max_slope < 24:
+        blocked = blocked | (g.s >= max_slope)
+    blocked2 = blocked | dilate(blocked & ~((g.f & 1) > 0), 1)
+    w0 = st['waypoints'][0]
+    seen = reachable(g, blocked2, g.to_grid(w0[0], w0[1]), step)
+    render(st, g, None)
+    im = np.asarray(Image.open(wpath(st, 'map.png')).convert('RGB')).astype(np.float32)
+    S = im.shape[0] // seen.shape[0]
+    mask = np.repeat(np.repeat(~seen[::-1], S, 0), S, 1)
+    im[mask] *= 0.35
+    img = Image.fromarray(im.clip(0, 255).astype(np.uint8))
+    from PIL import ImageDraw
+    d = ImageDraw.Draw(img)
+    px = 48 * S
+    for k, w in enumerate(st['waypoints']):
+        X, Y = (w[0] - g.RX0) * px, (g.RZ1 + 1 - w[1]) * px
+        ok = seen[int(round((w[1] - g.RZ0) * 48)), int(round((w[0] - g.RX0) * 48))]
+        d.ellipse([X - 6, Y - 6, X + 6, Y + 6], outline=(0, 255, 0) if ok else (255, 0, 0), width=3)
+        d.text((X + 8, Y - 6), f'{k} {w[2] or ""}', fill=(255, 255, 255))
+    img.save(wpath(st, 'reach.png'))
+    print(f"ulasilabilir hucre: {seen.sum()} / {seen.size}; ara noktalar: {[(k, bool(seen[int(round((w[1] - g.RZ0) * 48)), int(round((w[0] - g.RX0) * 48))])) for k, w in enumerate(st['waypoints'])]}")
 
 
 def render(st, g, route=None, SCALE=2):
@@ -824,7 +904,7 @@ def cmd_drive(st, variant, prep, lat=None, brk=None, vmax=None, limit=600):
 
 def main():
     ap = argparse.ArgumentParser(description='Ralli etabi araclari')
-    ap.add_argument('cmd', choices=['scan', 'plan', 'emit', 'corridor', 'notes', 'line', 'build', 'drive'])
+    ap.add_argument('cmd', choices=['scan', 'plan', 'emit', 'corridor', 'notes', 'line', 'build', 'drive', 'reach'])
     ap.add_argument('stage', nargs='?')
     ap.add_argument('variant', nargs='?', default='kartal80')
     ap.add_argument('prep', nargs='?', default='ralli')
@@ -838,7 +918,7 @@ def main():
         ap.error('etap kimligi gerekli (or. hotan)')
     st = load_stage(a.stage)
     {'scan': lambda: cmd_scan(st), 'plan': lambda: cmd_plan(st), 'corridor': lambda: cmd_corridor(st),
-     'notes': lambda: cmd_notes(st), 'build': lambda: cmd_build(st), 'line': lambda: (cmd_line(st), cmd_emit()),
+     'notes': lambda: cmd_notes(st), 'build': lambda: cmd_build(st), 'line': lambda: (cmd_line(st), cmd_emit()), 'reach': lambda: cmd_reach(st),
      'drive': lambda: cmd_drive(st, a.variant, a.prep, a.lat, a.brk, a.vmax)}[a.cmd]()
 
 
