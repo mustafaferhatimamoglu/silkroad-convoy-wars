@@ -1,5 +1,7 @@
 import { App } from './core/App.js';
 import { Game } from './Game.js';
+import { hostBase } from './version.js';
+import { requestPersistence, dropStale } from './net/AssetSync.js';
 
 // Giris noktasi: yukleme ekrani -> uygulama -> ana menu.
 // Test kisayollari: ?mode=drive&city=hotan | ?mode=explore&city=jangan | ?mode=garage | ?mode=rally | &debug=1
@@ -7,6 +9,8 @@ import { Game } from './Game.js';
 const ui = document.getElementById('ui');
 const canvas = document.getElementById('view');
 const params = new URLSearchParams(location.search);
+// istenen dosyalarin tam listesi (etap paketlerini olusturan arac okur: tools/packs.py)
+try { performance.setResourceTimingBufferSize(200000); } catch { /* */ }
 
 const TIPS = [
   'Silkroad zemin dokuları orijinal oyundan alınmıştır; yakından bakınca taş, kum ve çimen ayrıntıları görünür.',
@@ -56,8 +60,42 @@ ${p ? `bölge ${p.rx},${p.rz}  yerel ${p.lx.toFixed(0)},${p.lz.toFixed(0)}  y ${
   addEventListener('keydown', (e) => { if (e.code === 'F3') { e.preventDefault(); el.classList.toggle('hidden'); } });
 }
 
+/**
+ * Oyun sunucusu: sayfa dogrudan sunucudan aciliyorsa 'local'. GitHub Pages kopyasi davetle
+ * (?host=...) aciliyorsa service worker Silkroad dosyalarini davet edenden indirip kalici
+ * onbellekte tutar ('remote'). Pages davetsiz acildiysa 'nohost'.
+ */
+async function setupHost() {
+  const host = hostBase();
+  if (!host) return /github\.io$/.test(location.hostname) ? 'nohost' : 'local';
+  if (!('serviceWorker' in navigator) || !('caches' in self)) throw new Error('Bu tarayıcı desteklemiyor: Chrome ya da Edge kullanın.');
+  // adres once onbellege yazilir: service worker ilk istekte de bilsin (yeniden basladiysa bile)
+  const scope = new URL('./', location.href).href;
+  await (await caches.open('sro-assets')).put(new URL('__sro_host__', scope).href, new Response(host));
+  const reg = await navigator.serviceWorker.register('sw.js');
+  if (!navigator.serviceWorker.controller) {
+    await new Promise((r) => { navigator.serviceWorker.addEventListener('controllerchange', r, { once: true }); setTimeout(r, 5000); });
+  }
+  const sw = navigator.serviceWorker.controller || reg.active;
+  if (sw) sw.postMessage({ host });
+  requestPersistence();
+  return 'remote';
+}
+
 async function main() {
+  const hostMode = await setupHost();
+  if (hostMode === 'nohost') {
+    ui.innerHTML = `<div class="panel dialog" style="text-align:center"><h2>Silkroad: Convoy Wars</h2>
+      <p>Bu sayfa bir yarış davetiyle açılır. Arkadaşından gelen <b>davet dosyasını (.html)</b> aç ve
+      “Yarışa katıl”a bas; oyun ve Silkroad dosyaları oradan yüklenir.</p></div>`;
+    return;
+  }
   const loading = loadingScreen();
+  if (hostMode === 'remote' && params.get('stage')) {
+    // davetle acilis: onbellekte eski kalmis dosyalari (davet eden degistirdiyse) once temizle
+    loading.set(0.02, 'Dosya sürümleri denetleniyor…');
+    try { await dropStale(params.get('stage')); } catch { /* davet edene ulasilamadi: onbellekle acilir */ }
+  }
   const app = new App(canvas, ui);
   window.app = app; // hata ayiklama icin
   await app.init((p, m) => loading.set(p, m));
@@ -91,6 +129,9 @@ async function main() {
   else if (mode === 'kervan') game.startKervan(city || 'jangan');
   else if (mode === 'chars') game.startCharView(city || 'jangan', params.get('keys') ? params.get('keys').split(',') : null);
 }
+
+// geri/ileri onbellekten donen sayfa: ag baglantisi kapanmistir, temiz baslat
+addEventListener('pageshow', (e) => { if (e.persisted) location.reload(); });
 
 main().catch((e) => {
   console.error(e);

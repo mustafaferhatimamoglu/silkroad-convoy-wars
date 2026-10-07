@@ -4,6 +4,7 @@ import { QUALITY } from '../core/Settings.js';
 import { RALLY_STAGES } from '../data/rally.js';
 import { DIFFICULTY } from '../race/BotDriver.js';
 import { downloadInvite, inviteLink } from '../net/invite.js';
+import { hostBase } from '../version.js';
 
 const LEVEL_DESC = {
   kolay: 'Temiz sürer, sık hata yapar; kirli numara yok',
@@ -219,7 +220,7 @@ export class Menu {
     this.layer = el;
     const err = (t) => { el.querySelector('.err').textContent = t || ''; };
     const name = () => (el.querySelector('[data-k="name"]').value.trim() || 'Oyuncu').slice(0, 20);
-    fetch('/api/info').then((r) => r.json()).then((info) => {
+    fetch(`${hostBase()}/api/info`).then((r) => r.json()).then((info) => {
       const lan = info.lan && info.addresses.length
         ? `Yerel ağdaki arkadaşların tarayıcıda şu adresi açsın: ${info.addresses.map((a) => `<b style="color:var(--gold)">http://${a}:${info.port}/</b>`).join(' ya da ')} — sonra “Çok Oyunculu”dan odana katılsın.`
         : '';
@@ -267,9 +268,36 @@ export class Menu {
     this.layer = el;
     const body = el.querySelector('.body');
     const sel = (k, items, val, dis) => `<select data-c="${k}" ${dis ? 'disabled' : ''}>${items.map(([v, l]) => `<option value="${esc(v)}" ${String(val) === String(v) ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
+    const mb = (b) => `${(b / 1048576).toFixed(b < 10485760 ? 1 : 0)} MB`;
+    // oyuncu durumu: surum, etap dosyalari, hazirlik
+    const status = (r) => {
+      if (r.host) return 'kurucu';
+      if (r.pending) return '<span style="color:var(--muted)">bağlanıyor…</span>';
+      if (!lob.compat(r.ver)) return '<span style="color:#ff8a7a">sürüm farklı</span>';
+      if (r.pack !== lob.cfg.stage) return r.prog === -1 ? '<span style="color:#ff8a7a">indirme hatası</span>' : `<span style="color:var(--muted)">dosyalar iniyor${r.prog !== null && r.prog !== undefined ? ` %${r.prog}` : ''}</span>`;
+      return r.ready ? '<b style="color:#8fdc7a">Hazır</b>' : '<span style="color:var(--muted)">bekliyor</span>';
+    };
+    // uye: etap paketi ilerlemesi (kurucunun dosyalari kendinde)
+    const packRow = () => {
+      if (net.isHost) {
+        const old = lob.rows().some((r) => !r.bot && !r.host && !r.pending && !lob.compat(r.ver));
+        return old ? `<div style="margin-top:10px;font-size:13px;color:#ff8a7a">Bir oyuncunun oyun sürümü seninkinden farklı. Değişikliklerini yayınla
+          (<code>python tools/publish_pages.py publish</code>), sonra arkadaşın sayfayı yenilesin.</div>` : '';
+      }
+      const P = lob.pack;
+      if (!lob.versionOk) {
+        const hv = lob.hostVer || {};
+        return `<div style="margin-top:10px;font-size:13px;color:#ff8a7a">Oyun sürümün kurucununkinden farklı (kurucu: ${esc(hv.build || '?')}, sen: ${esc(lob.verInfo().build)}). Kurucu yeni sürümü yayınlamalı; sonra bu sayfayı yenile.</div>`;
+      }
+      if (P.state === 'error') return `<div style="margin-top:10px;font-size:13px;color:#ff8a7a">${esc(P.error || 'İndirme hatası')} <button class="btn secondary" data-a="retry" style="width:auto;padding:4px 10px">Tekrar dene</button></div>`;
+      if (P.state === 'ready') return `<div style="margin-top:10px;font-size:13px;color:#8fdc7a">Etap dosyaları hazır ✓ <span style="color:var(--muted)">(${mb(P.totalBytes)} · ${P.downloaded ? `${mb(P.downloaded)} indirildi` : 'hepsi bu bilgisayarda kayıtlıydı'})</span></div>`;
+      const pct = P.totalBytes ? Math.round((P.bytes / P.totalBytes) * 100) : 0;
+      return `<div style="margin-top:10px;font-size:13px">Etap dosyaları indiriliyor: ${mb(P.bytes)} / ${P.totalBytes ? mb(P.totalBytes) : '…'} (%${pct}) — bitince “Hazırım” açılır
+        <div style="height:6px;background:rgba(255,255,255,0.1);border-radius:3px;margin-top:4px;overflow:hidden"><div style="height:100%;width:${pct}%;background:linear-gradient(90deg,var(--gold-2),var(--gold))"></div></div></div>`;
+    };
     // internet daveti (sunucu tuneli aciksa): davet dosyasi / baglanti
     let info = null, copied = false;
-    const loadInfo = () => fetch('/api/info').then((r) => r.json()).then((x) => { info = x; render(); if (x.tunnelWanted && !x.tunnel && el.isConnected) setTimeout(loadInfo, 3000); }).catch(() => {});
+    const loadInfo = () => fetch(`${hostBase()}/api/info`).then((r) => r.json()).then((x) => { info = x; render(); if (x.tunnelWanted && !x.tunnel && el.isConnected) setTimeout(loadInfo, 3000); }).catch(() => {});
     const inviteRow = () => {
       if (!info) return '';
       if (info.tunnel) {
@@ -278,38 +306,47 @@ export class Menu {
           <button class="btn" data-a="invite" style="width:auto;padding:6px 12px">Davet dosyası (.html)</button>
           <button class="btn secondary" data-a="copy" style="width:auto;padding:6px 12px">${copied ? 'Kopyalandı ✓' : 'Bağlantıyı kopyala'}</button></div>`;
       }
+      if (!net.isHost) return '';   // sunucu ayari yalniz kurucuyu ilgilendirir
       if (info.tunnelWanted) return '<div style="margin-top:10px;font-size:13px;color:var(--muted)">İnternet tüneli açılıyor…</div>';
       return '<div style="margin-top:10px;font-size:12px;color:var(--muted)">İnternetten arkadaş çağırmak için oyunu <b>INTERNET_OYUNU.bat</b> ile başlat.</div>';
     };
+    // lobi sik guncellenir (indirme ilerlemesi): yalniz degisen bolum yeniden yazilir, boylece
+    // acik bir secim kutusu ya da tiklanan dugme kaybolmaz
+    body.innerHTML = `<h2 data-s="title"></h2><div data-s="table"></div><div data-s="settings"></div><div data-s="pack"></div>
+      <div data-s="invite"></div><div data-s="err" class="err" style="color:#ff8a7a;margin-top:6px"></div><div data-s="actions"></div>`;
+    const last = {};
+    const put = (k, html) => { if (last[k] === html) return; last[k] = html; body.querySelector(`[data-s="${k}"]`).innerHTML = html; };
     const render = () => {
       if (!el.isConnected) return;
       const host = net.isHost, cfg = lob.cfg, rows = lob.rows();
       const humans = net.members.length;
       const carName = (v) => (VARIANTS[v] ? VARIANTS[v].name : v || '—');
       const dot = (p) => `<span class="dot" style="background:${PAINTS[p] ? PAINTS[p].color : '#888'}"></span>`;
-      body.innerHTML = `<h2>Oda <span style="letter-spacing:4px;color:var(--gold)">${esc(net.room ? net.room.code : '')}</span></h2>
-        <table class="results" style="margin-bottom:12px"><tr><th></th><th>Sürücü</th><th>Araç</th><th>Durum</th></tr>
+      put('title', `Oda <span style="letter-spacing:4px;color:var(--gold)">${esc(net.room ? net.room.code : '')}</span>`);
+      put('table', `<table class="results" style="margin-bottom:12px"><tr><th></th><th>Sürücü</th><th>Araç</th><th>Durum</th></tr>
         ${rows.map((r, i) => `<tr class="${r.me ? 'me' : ''}"><td>${i + 1}.</td><td>${r.host ? '👑 ' : ''}${esc(r.name)}${r.bot ? ' <span style="color:var(--muted)">(bot)</span>' : ''}</td>
           <td>${r.bot ? `<span style="color:var(--muted)">${cfg.botCars === 'mixed' ? 'karışık' : 'kurucunun aracı'}</span>` : `${dot(r.paint)}${esc(carName(r.variant))}`}</td>
-          <td>${r.bot ? `<span style="color:var(--muted)">${esc((DIFFICULTY[cfg.level] || {}).label || '')}</span>` : r.host ? 'kurucu' : r.ready ? '<b style="color:#8fdc7a">Hazır</b>' : '<span style="color:var(--muted)">bekliyor</span>'}</td></tr>`).join('')}
-        </table>
-        <div class="grid2" style="gap:6px 14px">
+          <td>${r.bot ? `<span style="color:var(--muted)">${esc((DIFFICULTY[cfg.level] || {}).label || '')}</span>` : status(r)}</td></tr>`).join('')}
+        </table>`);
+      put('settings', `<div class="grid2" style="gap:6px 14px">
           <div class="setting"><label>Etap</label>${sel('stage', Object.entries(RALLY_STAGES).map(([id, st]) => [id, `${st.name} (${(st.length / 1000).toFixed(1)} km)`]), cfg.stage, !host)}</div>
           <div class="setting"><label>Mod</label>${sel('mode', [['ffa', 'Herkes kendi için'], ['team', 'Takım: oyuncular botlara karşı (co-op)']], cfg.mode, !host)}</div>
           <div class="setting"><label>Bot sayısı</label>${sel('bots', [...Array(8 - humans + 1).keys()].map((n) => [n, `${n} bot`]), Math.min(cfg.bots, 8 - humans), !host)}</div>
           <div class="setting"><label>Bot zorluğu</label>${sel('level', Object.entries(DIFFICULTY).map(([id, d]) => [id, d.label]), cfg.level, !host)}</div>
           <div class="setting"><label>Bot araçları</label>${sel('botCars', [['same', 'Kurucunun aracı'], ['mixed', 'Karışık']], cfg.botCars, !host)}</div>
           <div class="setting"><label>Aracın</label>${sel('myVariant', Object.entries(VARIANTS).map(([id, v]) => [id, v.name]), s.get('vehicleVariant'), lob.ready && !host)} ${sel('myPaint', Object.entries(PAINTS).map(([id, p]) => [id, p.name]), s.get('vehicleColor'), lob.ready && !host)}</div>
-        </div>
-        ${inviteRow()}
-        <div class="err" style="color:#ff8a7a;margin-top:6px">${esc(lob.error || '')}</div>
-        <div class="row" style="margin-top:14px;align-items:center">
+        </div>`);
+      put('pack', packRow());
+      put('invite', inviteRow());
+      put('err', esc(lob.error || ''));
+      put('actions', `<div class="row" style="margin-top:14px;align-items:center">
           <button class="btn secondary" data-a="leave" style="width:auto">← Odadan çık</button><div style="flex:1"></div>
-          ${host ? `<span style="color:var(--muted);font-size:12px;margin-right:10px">${lob.canStart() ? '' : 'Herkes “Hazır” olunca başlatabilirsin'}</span><button class="btn" data-a="start" style="width:auto" ${lob.canStart() ? '' : 'disabled'}>Yarışı başlat →</button>`
-            : `<button class="btn" data-a="ready" style="width:auto">${lob.ready ? 'Hazır değilim' : 'Hazırım ✓'}</button>`}
-        </div>`;
+          ${host ? `<span style="color:var(--muted);font-size:12px;margin-right:10px">${lob.canStart() ? '' : 'Herkesin dosyaları inip “Hazır” olunca başlatabilirsin'}</span><button class="btn" data-a="start" style="width:auto" ${lob.canStart() ? '' : 'disabled'}>Yarışı başlat →</button>`
+            : `<button class="btn" data-a="ready" style="width:auto" ${lob.ready || lob.canReady() ? '' : 'disabled'}>${lob.ready ? 'Hazır değilim' : !lob.versionOk ? 'Sürüm farklı' : lob.pack.state === 'ready' ? 'Hazırım' : lob.pack.state === 'error' ? 'Dosyalar eksik' : 'Dosyalar iniyor…'}</button>`}
+        </div>`);
     };
     lob.onChange = render;
+    lob.onPack = () => { if (el.isConnected) put('pack', packRow()); };
     el.addEventListener('change', (e) => {
       const k = e.target.dataset.c;
       if (!k) return;
@@ -323,6 +360,7 @@ export class Menu {
       if (!a) return;
       if (a.dataset.a === 'leave') { this.game.leaveNet(); this.multiplayer(); }
       if (a.dataset.a === 'ready') lob.toggleReady();
+      if (a.dataset.a === 'retry') lob.retryPack();
       if (a.dataset.a === 'start') lob.start();
       if ((a.dataset.a === 'invite' || a.dataset.a === 'copy') && info && info.tunnel && net.room) {
         const host = (lob.players[net.room.host] && lob.players[net.room.host].name) || net.name;

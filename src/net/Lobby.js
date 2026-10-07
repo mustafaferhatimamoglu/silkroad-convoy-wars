@@ -2,6 +2,8 @@ import { net } from './Net.js';
 import { RALLY_STAGES } from '../data/rally.js';
 import { BOTS } from '../race/BotDriver.js';
 import { PAINTS } from '../vehicle/model/KartalModel.js';
+import { PROTOCOL, BUILD, dataHash } from '../version.js';
+import { syncPack } from './AssetSync.js';
 
 // Cok oyunculu lobi: oda kurucusu (host) ayarlari ve oyuncu listesini tutar, uyelere yayinlar.
 // Uyeler kendi bilgilerini (isim, arac, renk, hazirlik) kurucuya gonderir. Kurucu "baslat"
@@ -10,8 +12,14 @@ import { PAINTS } from '../vehicle/model/KartalModel.js';
 //
 // Modlar: 'ffa' herkes kendi icin; 'team' oyuncular takim (co-op) botlara karsi - botlar
 // yalniz oyunculara saldirir, sonucta takim puanlari toplanir.
+//
+// Uyeler kurucunun sectigi etabin dosya paketini hemen indirir/dogrular (AssetSync); paket
+// tamamlanmadan ve surum (ag protokolu + etap verisi) kurucuyla ayni olmadan "Hazirim" acilmaz,
+// kurucu da yarisi baslatamaz.
 
 const MAX = 8;
+let dataVer = null;   // etap verisi ozeti (bir kez hesaplanir)
+const DATA = () => dataVer || (dataVer = dataHash(RALLY_STAGES));
 
 export class Lobby {
   constructor(game) {
@@ -26,11 +34,16 @@ export class Lobby {
     this.players = {};
     this.ready = false;
     this.onChange = null;
+    this.onPack = null;     // yalniz indirme ilerlemesi degisti (hafif yenileme)
     this.error = null;
+    this.pack = { stage: null, state: 'idle', done: 0, total: 0, bytes: 0, totalBytes: 0 };
+    this.hostVer = null;
+    this._sync = null;
+    this._renderT = 0;
     this._subs = [
       net.on('room', () => this._onRoom()),
       net.on('r:info', (d, from) => this._onInfo(d, from)),
-      net.on('r:lobby', (d) => { this.cfg = d.cfg; this.players = d.players; this._changed(); }),
+      net.on('r:lobby', (d) => { this.cfg = d.cfg; this.players = d.players; this.hostVer = d.ver || null; this._ensurePack(); this._changed(); }),
       net.on('r:start', (d) => this._onStart(d)),
       net.on('error', (m) => { this.error = m.msg; this._changed(); }),
       net.on('close', () => { this.error = 'Sunucu bağlantısı koptu'; this._changed(); }),
@@ -41,16 +54,64 @@ export class Lobby {
 
   _changed() { if (this.onChange) this.onChange(); }
 
+  /** Surum bilgisi: ag protokolu, yayin kimligi, etap verisi ozeti. */
+  verInfo() { return { protocol: PROTOCOL, build: BUILD, data: DATA() }; }
+  compat(v) { return !!v && v.protocol === PROTOCOL && v.data === DATA(); }
+  get versionOk() { return net.isHost || !this.hostVer || this.compat(this.hostVer); }
+
+  /** Uye hazir olabilir mi: etap paketi inmis ve surum uyumlu. */
+  canReady() {
+    if (net.isHost) return true;
+    return this.versionOk && this.pack.state === 'ready' && this.pack.stage === this.cfg.stage;
+  }
+
+  /** Uye: kurucunun sectigi etabin dosyalarini indir/dogrula (kurucunun dosyalari kendinde). */
+  _ensurePack() {
+    if (net.isHost || !net.room) return;
+    const stage = this.cfg.stage;
+    // ayni etap: inmis, iniyor ya da hata verdi (hatada yeniden deneme yalniz "Tekrar dene" ile;
+    // kendiliginden denemek sunucuya istek dongusu kurardi)
+    if (this.pack.stage === stage && this.pack.state !== 'idle') return;
+    if (this._sync) this._sync.aborted = true;
+    const sig = (this._sync = { aborted: false });
+    this.pack = { stage, state: 'sync', done: 0, total: 0, bytes: 0, totalBytes: 0, downloaded: 0 };
+    if (this.ready) this.ready = false;
+    this.publish();
+    let lastSent = 0;
+    syncPack(stage, (p) => {
+      if (sig.aborted) return;
+      Object.assign(this.pack, p);
+      const now = performance.now();
+      if (now - this._renderT > 200) { this._renderT = now; if (this.onPack) this.onPack(); else this._changed(); }
+      if (now - lastSent > 1000) { lastSent = now; this.publish(); }
+    }, sig).then(() => {
+      if (sig.aborted) return;
+      this.pack.state = 'ready';
+      this.publish();
+    }).catch((e) => {
+      if (sig.aborted) return;
+      this.pack.state = 'error';
+      this.pack.error = e.message;
+      this.publish();
+    });
+  }
+
+  retryPack() { this.pack.stage = null; this._ensurePack(); }
+
   myInfo() {
-    const s = this.app.settings;
-    return { name: net.name, variant: s.get('vehicleVariant'), paint: s.get('vehicleColor'), prep: s.get('vehiclePrep'), ready: this.ready };
+    const s = this.app.settings, P = this.pack;
+    const prog = P.totalBytes ? Math.round((P.bytes / P.totalBytes) * 100) : 0;
+    return {
+      name: net.name, variant: s.get('vehicleVariant'), paint: s.get('vehicleColor'), prep: s.get('vehiclePrep'), ready: this.ready,
+      ver: this.verInfo(), pack: P.state === 'ready' ? P.stage : null, prog: P.state === 'sync' ? prog : P.state === 'error' ? -1 : null,
+    };
   }
 
   /** Kendi bilgimi yayinla (kurucuysam tum lobiyi). */
   publish() {
     if (!net.room) return;
     if (net.isHost) { this.players[net.id] = { ...this.myInfo(), ready: true }; this._broadcast(); }
-    else net.relay({ t: 'info', ...this.myInfo() }, 'host');
+    else { this._ensurePack(); net.relay({ t: 'info', ...this.myInfo() }, 'host'); }
     this._changed();
   }
 
@@ -58,9 +119,10 @@ export class Lobby {
     if (!net.isHost) return;
     const ids = new Set(net.members.map((m) => m.id));
     for (const id of Object.keys(this.players)) if (!ids.has(Number(id))) delete this.players[id];
-    for (const m of net.members) if (!this.players[m.id]) this.players[m.id] = { name: m.name, variant: 'kartal80', paint: 'beyaz', prep: 'ralli', ready: false };
+    // yeni uye: kendi bilgisi (surum, arac) gelene kadar yer tutucu
+    for (const m of net.members) if (!this.players[m.id]) this.players[m.id] = { name: m.name, variant: 'kartal80', paint: 'beyaz', prep: 'ralli', ready: false, pending: true };
     this.players[net.id] = { ...this.myInfo(), ready: true };
-    net.relay({ t: 'lobby', cfg: this.cfg, players: this.players });
+    net.relay({ t: 'lobby', cfg: this.cfg, players: this.players, ver: this.verInfo() });
     this._changed();
   }
 
@@ -71,7 +133,7 @@ export class Lobby {
 
   _onInfo(d, from) {
     if (!net.isHost) return;
-    this.players[from] = { name: d.name, variant: d.variant, paint: d.paint, prep: d.prep, ready: !!d.ready };
+    this.players[from] = { name: d.name, variant: d.variant, paint: d.paint, prep: d.prep, ready: !!d.ready, ver: d.ver, pack: d.pack, prog: d.prog };
     this._broadcast();
   }
 
@@ -81,7 +143,11 @@ export class Lobby {
     this._broadcast();
   }
 
-  toggleReady() { this.ready = !this.ready; this.publish(); }
+  toggleReady() {
+    if (!this.ready && !this.canReady()) return;
+    this.ready = !this.ready;
+    this.publish();
+  }
 
   /** Lobi satirlari: oyuncular (katilma sirasiyla) + bot yerleri. */
   rows() {
@@ -91,8 +157,13 @@ export class Lobby {
     return out;
   }
 
+  /** Kurucu baslatabilir mi: her uye hazir, etap paketi inmis, surumu uyumlu. */
   canStart() {
-    return net.isHost && net.members.every((m) => m.id === net.id || (this.players[m.id] && this.players[m.id].ready));
+    return net.isHost && net.members.every((m) => {
+      if (m.id === net.id) return true;
+      const p = this.players[m.id];
+      return p && p.ready && p.pack === this.cfg.stage && this.compat(p.ver);
+    });
   }
 
   /** Kurucu: giris listesi, izgara sirasi ve tohumla yarisi baslat. */

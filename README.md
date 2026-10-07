@@ -109,9 +109,29 @@ Oyunu `INTERNET_OYUNU.bat` ile başlat (`python server.py 5070 --tunnel`). Sunuc
 da hesap gerekmez. Bunun için `tools/cloudflared.exe` gerekir (Cloudflare'in resmî sürümü
 `cloudflared-windows-amd64.exe`, git dışı). Oda kurunca lobide **Davet dosyası (.html)** ile
 arkadaşına gönderirsin (WhatsApp, e-posta…); arkadaşın dosyayı açar, adını yazar, **Yarışa katıl**
-der: oyun senin bilgisayarından yüklenir ve doğrudan odana girer. **Bağlantıyı kopyala** aynı şeyi
-bağlantı olarak verir. İlk girişte arkadaşın bir etap için yaklaşık 50–70 MB indirir (lobi ~30 MB,
-yarış boyunca kalanı); tünel adresi her açılışta değiştiği için yeni oturumda yeniden iner.
+der ve doğrudan odana girer. **Bağlantıyı kopyala** aynı şeyi bağlantı olarak verir.
+
+Arkadaşın tarafında:
+
+- **Oyun kodu** GitHub Pages'teki kopyadan gelir (`https://mustafaferhatimamoglu.github.io/silkroad-convoy-wars/`;
+  yalnız `index.html`, `sw.js`, `src/`, `vendor/`). Kodu değiştirince yeniden yayınla:
+  `python tools/publish_pages.py publish` (önce `python tools/publish_pages.py serve` ile yerelde,
+  `http://localhost:5080/silkroad-convoy-wars/?host=http://localhost:5070` adresinde denenebilir).
+- **Silkroad dosyaları** (harita, modeller, müzik — Joymax'in telifli içeriği) hiçbir siteye
+  yüklenmez. Lobide, kurucunun seçtiği etabın paketi senin bilgisayarından **bir kez** iner ve
+  arkadaşın tarayıcısında saklanır (etap başına 40–70 MB). Sunucu yeniden başlasa, tünel adresi
+  değişse de tekrar inmez. Bir dosyayı değiştirirsen yalnız o dosya yeniden iner: sunucu paket
+  listesini her istekte güncel içerik özetleriyle verir.
+- Paket inmeden **Hazırım** açılmaz; herkes hazır olmadan kurucu **Yarışı başlat** diyemez. Lobide
+  her oyuncunun indirme yüzdesi görünür.
+- Sürüm kontrolü: ağ protokolü (`src/version.js` → `PROTOCOL`) ya da etap verisi kurucununkinden
+  farklıysa lobide “sürüm farklı” yazar ve hazır olunamaz; kurucu yeni sürümü yayınlar, arkadaş
+  sayfayı yeniler.
+
+Etap paketleri `python tools/packs.py all` ile kaydedilir (oyun ve test tarayıcısı açıkken): her
+etap otomatik pilotla baştan sona sürülür, istenen dosyalar `assets/packs/<etap>.json` listesine
+yazılır. Etap rotası değişirse o etabı yeniden kaydet: `python tools/packs.py record hotan`, sonra
+`python tools/packs.py write`.
 
 Sunucu yalnızca oyunun çalışması için gereken dosyaları verir (`index.html`, `src/`, `vendor/`,
 `assets/`); git geçmişi, araçlar, testler ve klasör listeleri dışarıya kapalıdır. Tünel adresi

@@ -1,3 +1,5 @@
+import { hostBase } from '../version.js';
+
 // Cok oyunculu baglanti: server.py'deki /ws oda sistemi (sunucu yalniz mesaj aktarir).
 // Oyun durumu istemcilerde: herkes kendi aracini simule eder ve durumunu yayinlar; botlari oda
 // kurucusu simule eder. Sunucu saatine (ping/pong) gore ortak zaman: yaris herkeste ayni anda
@@ -17,6 +19,9 @@ export class Net {
     this.rtt = 0;
     this.connected = false;
     this._bestRtt = Infinity;
+    // sayfadan ayrilirken baglantiyi kapat: tarayici sayfayi geri/ileri onbellegine alip soketi
+    // acik birakirsa oyuncu odada "hayalet" olarak kalmasin
+    addEventListener('pagehide', () => { if (this.ws) try { this.ws.close(); } catch { /* */ } });
   }
 
   /** Sunucuya baglan; donus: Net (hosgeldin mesajindan sonra). */
@@ -27,7 +32,8 @@ export class Net {
       const fail = (msg) => { if (!done) { done = true; reject(new Error(msg)); } };
       let ws;
       try {
-        ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
+        const host = hostBase();
+        ws = new WebSocket(host ? `${host.replace(/^http/, 'ws')}/ws` : `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
       } catch (e) { fail('Sunucuya bağlanılamadı'); return; }
       this.ws = ws;
       ws.onopen = () => this.send({ t: 'hello', name });

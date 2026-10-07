@@ -10,8 +10,14 @@ durumu her oyuncunun kendi tarayicisinda, botlar oda kurucusunda simule edilir).
 
 Internet: --tunnel ile Cloudflare'in ucretsiz hizli tuneli (cloudflared) acilir; sabit IP, modem
 ayari ya da hesap gerekmez. Rastgele https://....trycloudflare.com adresi lobide davet dosyasina
-yazilir; arkadas dosyayi acip oyuna (bu bilgisayardan yuklenerek) ve odaya baglanir. Sunucu
-kapaninca tunel de kapanir.
+yazilir; arkadas dosyayi acinca oyun kodu GitHub Pages kopyasindan gelir, odaya bu sunucu
+uzerinden baglanir; Silkroad dosyalari (assets/) bu bilgisayardan bir kez iner ve arkadasin
+tarayicisinda kalir (sw.js). Sunucu kapaninca tunel de kapanir.
+
+Etap paketleri (assets/packs/<etap>.json, tools/packs.py kaydeder): arkadasin tarayicisi yaris
+oncesi etabin dosyalarini indirir ve icerik ozetleriyle saklar. Sunucu listeyi her istekte guncel
+ozetlerle verir: bir dosya degisirse (boyut/degisme zamani) ozeti yeniden hesaplanir ve arkadasta
+yalniz o dosya yeniden iner.
 
 Guvenlik: yalniz oyunun calismasi icin gereken dosyalar sunulur (index.html, src/, vendor/,
 assets/); git gecmisi, araclar, testler ve klasor listeleri disariya kapalidir.
@@ -45,8 +51,11 @@ PORT = int(ARGS[0]) if ARGS else 5070
 LAN = "--lan" in sys.argv
 TUNNEL = "--tunnel" in sys.argv
 TUNNEL_URL = None
+WS_IDLE = 90               # sn: bu kadar sessiz kalan WebSocket kapatilir
 STATS = {"sent": 0}
 STATS_LOCK = threading.Lock()
+PACK_HASHES = {}            # yol -> (boyut, degisme zamani, ozet)
+PACK_LOCK = threading.Lock()
 
 # Disariya sunulan yollar (gerisi 404): oyun sayfasi, kod, kutuphaneler, varliklar, API, WebSocket
 ALLOWED_FILES = {"/", "/index.html"}
@@ -277,6 +286,48 @@ def ws_loop(c):
                 handle_message(c, msg)
 
 
+# ---------------------------------------------------------------- etap paketleri
+
+def file_digest(path):
+    h = hashlib.sha1()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()[:16]
+
+
+def pack_json(stage):
+    """Kayitli dosya listesi + guncel icerik ozetleri. Paket surumu ozetlerden turetilir."""
+    with open(os.path.join(ROOT, "assets", "packs", f"{stage}.json"), encoding="utf-8") as f:
+        rec = json.load(f)
+    files = []
+    with PACK_LOCK:
+        for path, _size, _digest in rec.get("files", []):
+            full = os.path.join(ROOT, path)
+            try:
+                st = os.stat(full)
+            except OSError:
+                continue
+            c = PACK_HASHES.get(path)
+            if not c or c[0] != st.st_size or c[1] != st.st_mtime_ns:
+                c = PACK_HASHES[path] = (st.st_size, st.st_mtime_ns, file_digest(full))
+            files.append([path, c[0], c[2]])
+    files.sort()
+    version = hashlib.sha1("".join(f[2] for f in files).encode()).hexdigest()[:12]
+    return {"stage": stage, "version": version, "total": sum(f[1] for f in files), "files": files}
+
+
+def warm_packs():
+    """Acilista paket ozetlerini hazirla (ilk arkadas istegi beklemesin)."""
+    d = os.path.join(ROOT, "assets", "packs")
+    for name in sorted(os.listdir(d)) if os.path.isdir(d) else []:
+        if name.endswith(".json"):
+            try:
+                pack_json(name[:-5])
+            except (OSError, ValueError):
+                pass
+
+
 # ---------------------------------------------------------------- HTTP
 
 class Handler(http.server.SimpleHTTPRequestHandler):
@@ -298,6 +349,21 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             # davet dosyasi (file://) baglanti kontrolu icin
             self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
+            self.wfile.write(body)
+            return
+        m = re.match(r"^/assets/packs/([a-z0-9_]+)\.json(\?.*)?$", self.path)
+        if m:
+            try:
+                body = json.dumps(pack_json(m.group(1)), separators=(",", ":")).encode("utf-8")
+            except (OSError, ValueError):
+                self.send_error(404, "Bulunamadi")
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            super().end_headers()
             self.wfile.write(body)
             return
         return super().do_GET()
@@ -336,7 +402,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.wfile.flush()
         sock = self.connection
         sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-        sock.settimeout(None)
+        # istemci 2 sn'de bir ping atar (arka plandaki sekmede dakikada bire inebilir): uzun sure
+        # hic veri gelmezse baglanti olu sayilir (kopan internet, uyuyan bilgisayar), oyuncu odadan duser
+        sock.settimeout(WS_IDLE)
         c = Conn(sock)
         try:
             ws_loop(c)
@@ -351,6 +419,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         # Oyun varliklari degismez: uzun onbellek. Kod her zaman taze yuklensin.
         if self.path.startswith("/assets/"):
             self.send_header("Cache-Control", "public, max-age=86400")
+            # oyunun GitHub Pages kopyasi Silkroad dosyalarini davet edenden ceker
+            self.send_header("Access-Control-Allow-Origin", "*")
         elif not self.path.startswith("/ws"):
             self.send_header("Cache-Control", "no-cache")
         super().end_headers()
@@ -430,6 +500,7 @@ def main():
     if TUNNEL:
         print("  Internet tuneli aciliyor (birkac saniye)...")
         start_tunnel()
+    threading.Thread(target=warm_packs, daemon=True).start()
     print("  Kapatmak icin Ctrl+C")
     print("=" * 60)
     if "--no-browser" not in sys.argv:
