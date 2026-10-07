@@ -293,15 +293,20 @@ export class RallyMode extends DriveMode {
     this.resultEl = el;
   }
 
-  /** R: araci duzelt; 4 sn icinde tekrar basilirsa rotaya (siradaki kapidan once, en yakin yol noktasina) don. */
+  /**
+   * R: devrildiyse ve yeri uygunsa yerinde dogrult; aksi halde (sikisti, rotadan cikti, ikinci
+   * basis) dogrudan rotaya: gecilen kapi ile siradaki kapi arasindaki en yakin yol noktasina.
+   */
   _recover() {
     const now = performance.now();
     const again = this._recT && now - this._recT < 4000;
     this._recT = now;
-    if (!again || this.state === 'done') {
-      const how = this.vehicle.recover();
-      this.camera.initialized = false;
-      this.hud.toast(how === 'safe' ? 'Son güvenli noktaya dönüldü' : 'Araç düzeltildi (tekrar R: rotaya dön)', 1.6);
+    this.camera.initialized = false;
+    if (this.state === 'done') { this.vehicle.recover(); this.hud.toast('Araç doğrultuldu', 1.4); return; }
+    const q = this.vehicle.sim.body.q;
+    const flipped = 1 - 2 * (q.x * q.x + q.z * q.z) < 0.6;
+    if (flipped && !again && this.vehicle.recover({ inPlaceOnly: true }) === 'upright') {
+      this.hud.toast('Araç doğrultuldu (tekrar R: rotaya dön)', 1.6);
       return;
     }
     this.toRoute();

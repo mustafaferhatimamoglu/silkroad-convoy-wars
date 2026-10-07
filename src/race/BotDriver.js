@@ -85,6 +85,8 @@ export class BotDriver {
   constructor(car, course, level = 'orta', persona = BOTS[0], rng = Math.random) {
     this.car = car;
     this.course = course;
+    // bot direksiyonu sikica tutar: kaster tekerleri cekmez (direksiyon modeli fizikle ayni kalir)
+    if (car.vehicle && car.vehicle.sim) car.vehicle.sim.firmGrip = true;
     this.rng = rng;
     const D = DIFFICULTY[level] || DIFFICULTY.orta;
     this.level = level;
@@ -355,7 +357,7 @@ export class BotDriver {
       // ayni yerde ust uste takla: yerinde duzeltmek ayni tuzaga koyar -> rotaya don
       const again = this._lastFlip && sim.time - this._lastFlip.t < 15 && Math.abs((st.idx || 0) - this._lastFlip.i) < 6;
       this._lastFlip = { t: sim.time, i: st.idx || 0 };
-      if (again) { race.toRoute(me); this._log('rotaya (takla)', st); } else { v.recover(); this._log('takla', st); }
+      if (again || v.recover({ inPlaceOnly: true }) !== 'upright') { race.toRoute(me); this._log('rotaya (takla)', st); } else this._log('takla', st);
       this.flipT = 0;
       return c;
     }
@@ -522,10 +524,18 @@ export class BotDriver {
     else if (dv < -1.0 && sp > 2.5) c.decel = Math.min(1, -dv * 0.35);
     else c.accel = 0.12;
     if (throttleMin && !c.decel) c.accel = Math.max(c.accel, throttleMin);
-    // surucu ayagi: patinajda gazi azalt (aractaki elektronik TCS degil)
+    // surucu ayagi (aractaki elektronik TCS degil): patinaj ya da arkanin yana kaymasi baslayinca
+    // gazi hizla kisar, tutununca yavasca geri verir
     let slip = 0;
     for (const w of sim.wheels) if (w.driven && w.contact) slip = Math.max(slip, w.slipRatio * Math.sign(sp || 1));
-    if (slip > 0.22 && c.accel > 0.3) c.accel *= clamp(1 - (slip - 0.22) * 2.5, 0.35, 1);
+    const rearSlide = sp > 8 ? Math.max(Math.abs(sim.wheels[2].slipAngle), Math.abs(sim.wheels[3].slipAngle)) : 0;
+    const over = slip > 0.2 || rearSlide > 0.22;
+    this.foot = clamp((this.foot ?? 1) + (over ? -5 : 1.6) * dt, 0.25, 1);
+    if (c.accel > 0.3) c.accel = Math.max(0.3, c.accel * this.foot);
+    // havada gaz kesilir (bosta donen tekerler inince arkayi savurmasin); inince kisa sure yumusak
+    const air = sim.wheels.filter((w) => !w.contact).length >= 3;
+    if (air) { this.landT = 0.45; c.accel = Math.min(c.accel, 0.1); }
+    else if (this.landT > 0) { this.landT -= dt; c.accel = Math.min(c.accel, 0.45); }
     void pr;
     return c;
   }

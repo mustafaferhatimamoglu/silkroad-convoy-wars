@@ -25,12 +25,13 @@ export const VARIANTS = {
   kartal90: { name: 'Kartal 90\'lar', desc: 'Dikdörtgen farlar, siyah plastik tampon' },
   hilux: { name: 'Toyota Hilux', desc: '2.8 dizel turbo, 4x4, çift kabin' },
   f150: { name: 'Ford F-150', desc: '5.0 V8, 10 ileri otomatik, 4x4 SuperCrew' },
-  rs6: { name: 'Audi RS 6 Avant', desc: '4.0 V8 çift turbo, 600 BG, quattro' },
+  rs6: { name: 'Audi RS 6 Avant', desc: '4.0 V8 çift turbo, ~840 BG, quattro' },
   tank: { name: 'Rezvani Tank', desc: '6.4 V8, 37 inç lastik, kilitli 4x4' },
 };
+// Bütün motorlar fabrika değerinin %40 üstünde (vehicle/presets.js POWER)
 export const PREPS = {
-  ralli: { name: 'Ralli hazırlığı', desc: '~130 BG, +6 cm yükseklik, uzun yollu süspansiyon, kilitli diferansiyel' },
-  stok: { name: 'Stok', desc: '1.6 karbüratörlü, 75 BG; fabrika süspansiyonu' },
+  ralli: { name: 'Ralli hazırlığı', desc: '~180 BG, +6 cm yükseklik, uzun yollu süspansiyon, kilitli diferansiyel' },
+  stok: { name: 'Stok', desc: '1.6 karbüratörlü, ~105 BG; fabrika süspansiyonu' },
 };
 
 export class Menu {
@@ -44,6 +45,7 @@ export class Menu {
 
   main() {
     this.clear();
+    this.game.garageCamera(false);
     const s = this.game.app.settings;
     const el = h(`<div id="menu" class="interactive"><div class="box">
       <h1>SILKROAD</h1>
@@ -57,7 +59,7 @@ export class Menu {
       <button class="btn secondary" data-a="explore">Dünya Gezgini<small>Serbest kamera ile haritayı gez</small></button>
       <button class="btn secondary" data-a="settings">Ayarlar</button>
       <div class="foot">Araç: <b>${VARIANTS[s.get('vehicleVariant')]?.name || ''}</b> · ${PAINTS[s.get('vehicleColor')]?.name || ''}<br>
-      Kumanda desteklenir. Esc: menü · F3: performans bilgisi</div>
+      Kumanda desteklenir. Esc: menü · F: tam ekran (fare ile bakış) · F3: performans bilgisi</div>
     </div></div>`);
     el.addEventListener('click', (e) => {
       const a = e.target.closest('[data-a]');
@@ -412,7 +414,7 @@ export class Menu {
     });
     this.root.appendChild(el);
     this.layer = el;
-    this.game.garageCamera(true);
+    this.game.garageCamera(true, el);
   }
 
   settings(onBack) {

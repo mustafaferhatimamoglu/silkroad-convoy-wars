@@ -86,8 +86,9 @@ const kmh = (car) => car.forwardSpeed * 3.6;
 const finite = (car) => [car.body.pos.x, car.body.pos.y, car.body.pos.z, car.body.vel.x, car.body.angVel.y].every(Number.isFinite);
 
 const CARS = { 'Kartal Ralli': KARTAL_RALLY, Hilux: HILUX, 'F-150': F150, 'RS 6': RS6, Tank: TANK };
-// [0-100 alt, ust], [son hiz alt, ust]
-const PERF = { 'Kartal Ralli': [[7, 11], [165, 200]], Hilux: [[8.5, 12], [160, 195]], 'F-150': [[5, 8], [160, 175]], 'RS 6': [[3, 4.6], [250, 285]], Tank: [[5, 8], [150, 175]] };
+// [0-100 alt, ust], [son hiz alt, ust]. Tork uretici verisinin %40 ustunde (presets.js POWER);
+// hiz sinirli araclar (F-150, RS 6, Tank) ayni son hizda kalir.
+const PERF = { 'Kartal Ralli': [[6.5, 10.5], [170, 205]], Hilux: [[5.5, 9], [190, 230]], 'F-150': [[3.5, 6], [160, 175]], 'RS 6': [[2.6, 4.2], [250, 285]], Tank: [[3.8, 6.5], [150, 175]] };
 
 for (const [name, P] of Object.entries(CARS)) {
   test(`${name}: duz zeminde oturur, tum tekerler yerde`, () => {

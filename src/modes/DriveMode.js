@@ -68,7 +68,8 @@ export class DriveMode {
     const ramp = (cur, target, up, down) => (target > cur ? Math.min(target, cur + up * dt) : Math.max(target, cur - down * dt));
     const kAccel = input.down('KeyW', 'ArrowUp') ? 1 : 0;
     const kDecel = input.down('KeyS', 'ArrowDown') ? 1 : 0;
-    c.accel = Math.max(ramp(c.accel, kAccel, 4.5, 8), gp ? gp.throttle : 0);
+    // gaz aninda tepki versin (0.08 sn'de tam gaz)
+    c.accel = Math.max(ramp(c.accel, kAccel, 12, 10), gp ? gp.throttle : 0);
     c.decel = Math.max(ramp(c.decel, kDecel, 6, 10), gp ? gp.brake : 0);
     let steer = (input.down('KeyD', 'ArrowRight') ? 1 : 0) - (input.down('KeyA', 'ArrowLeft') ? 1 : 0);
     if (gp && Math.abs(gp.steer) > 0.02) steer = Math.sign(gp.steer) * Math.pow(Math.abs(gp.steer), 1.5);
@@ -163,11 +164,11 @@ export class DriveMode {
     }
   }
 
-  /** R: araci duzelt; 4 sn icinde tekrar basilirsa son guvenli noktaya don. */
+  /** R: devrildiyse yerinde dogrult; sikistiysa biraz geriye (tekrar R: daha geriye). */
   _recover() {
     const how = this.vehicle.recover();
     this.camera.initialized = false;
-    this.hud.toast(how === 'safe' ? 'Son güvenli noktaya dönüldü' : 'Araç düzeltildi (tekrar R: son güvenli nokta)', 1.6);
+    this.hud.toast(how === 'safe' ? 'Biraz geriye alındı (tekrar R: daha geri)' : 'Araç doğrultuldu (tekrar R: geriye al)', 1.6);
   }
 
   dispose() {

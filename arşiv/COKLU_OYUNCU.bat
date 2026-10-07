@@ -1,7 +1,7 @@
 @echo off
 chcp 65001 >nul
 title SILKROAD: CONVOY WARS V4 - COK OYUNCULU (YEREL AG)
-cd /d "%~dp0"
+cd /d "%~dp0.."
 
 set PYTHON_EXE=C:\Users\Administrator\AppData\Local\Programs\Python\Python312\python.exe
 if not exist "%PYTHON_EXE%" set PYTHON_EXE=python

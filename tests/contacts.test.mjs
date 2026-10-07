@@ -65,6 +65,7 @@ test('PIT manevrasi: arka camurluga yandan dokunan arac hedefi dondurur', () => 
     collideCars(A, B);
   }
   const yawA = Math.abs(A.yaw) * 180 / Math.PI, yawB = Math.abs(B.yaw) * 180 / Math.PI;
+  console.log(`   PIT: hedef ${yawA.toFixed(0)}, saldiran ${yawB.toFixed(0)} derece`);
   assert.ok(yawA > 60, `hedef savrulmali: sapma ${yawA.toFixed(0)} derece`);
   assert.ok(yawB < 45, `saldiran yolunda kalmali: sapma ${yawB.toFixed(0)} derece`);
 });

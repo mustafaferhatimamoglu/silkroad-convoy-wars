@@ -125,8 +125,11 @@ export class VehicleSim {
 
   _beginShift(g) {
     if (g === this.gear) return;
+    // vites dusurme (devir eslemeli, ara gazli) yukseltmeden kisa surer
+    const down = g >= 1 && this.gear >= 1 && g < this.gear;
+    this.shiftDown = down;
     this.targetGear = g;
-    this.shiftTimer = this.p.gearbox.shiftTime;
+    this.shiftTimer = this.p.gearbox.shiftTime * (down ? 0.55 : 1);
     this.gear = 0; // gecis sirasinda bos
     this.locked = false;
   }
@@ -224,30 +227,52 @@ export class VehicleSim {
   }
 
   _steering(dt, steerIn, vF) {
-    const S = this.p.steering;
+    const S = this.p.steering, b = this.body;
     const v = Math.abs(vF);
-    // 1) giris rampasi: tus 0.25 sn'de tam aciya, birakinca daha hizli merkeze
+    // 1) giris rampasi: tus 0.25 sn'de tam aciya; birakinca ve ters yone (karsi direksiyon) hizli
+    // (botlar - firmGrip - eski hizlarla: direksiyon denetimleri bunlara gore ayarli)
     const si = this.steerIn || 0;
-    const back = Math.abs(steerIn) < Math.abs(si) || sign(steerIn) !== sign(si);
-    const inRate = back ? 6.5 : 4.0;
+    const flip = sign(steerIn) !== sign(si) && Math.abs(steerIn) > 0.01;
+    const back = Math.abs(steerIn) < Math.abs(si) || flip;
+    const inRate = this.firmGrip ? (back ? 6.5 : 4.0) : flip ? 10 : back ? 7.5 : 4.0;
     this.steerIn = si + clamp(steerIn - si, -inRate * dt, inRate * dt);
+    // drift: arka aks yana kayiyor (normal virajda arka aksin kayma acisi ~0). On aksin gidis
+    // yonu (+: govdeye gore sag) karsi direksiyonun hedefidir: on tekerleri oraya cevirmek.
+    b.localToWorld(_c.set(0, 0, this.p.axleRear), _p);
+    b.velocityAt(_p, _v);
+    const betaR = vF > 2 ? Math.atan2(_v.dot(_right), _v.dot(_fwd)) : 0;
+    b.localToWorld(_c.set(0, 0, this.p.axleFront), _p);
+    b.velocityAt(_p, _v);
+    const vFwdF = _v.dot(_fwd);
+    const slideA = vFwdF > 2 ? Math.atan2(_v.dot(_right), vFwdF) : 0;
+    const sliding = Math.abs(betaR) > 0.07 && Math.abs(slideA) > 0.03 && sign(slideA) === sign(betaR);
     // 2) hiza bagli aci siniri: yardimla lastik tutusuna gore (geometri + kayma payi)
     let maxA;
     if (this.assists.steer) {
       const grip = 6.6 * this.p.tire.mu / 0.9;
       maxA = Math.min(S.maxAngle, (this.p.dims.wheelbase * grip) / Math.max(v * v, 1) + 0.02 + 0.02 * clamp(1 - v / 20, 0, 1));
-      // karsi direksiyon: sadece arka, onden daha cok kayarken (savrulma) ek aci
-      const W = this.wheels;
-      const rear = W[2].contact ? Math.abs(W[2].slipAngle) : 0, front = W[0].contact ? Math.abs(W[0].slipAngle) : 0;
-      maxA = Math.min(S.maxAngle, maxA + Math.max(0, rear - front) * 1.4);
       // el freni cekiliyken (kasitli kaydirma) direksiyon serbest
       if (this.input.handbrake > 0) maxA = Math.max(maxA, S.maxAngle * 0.65);
     } else {
       maxA = S.maxAngle / (1 + v * 0.06);
     }
+    let caster = 0;
+    if (this.firmGrip) {
+      // direksiyonu sikica tutan surucu (bot): kaster tekerleri cekemez; karsi direksiyon payi
+      // arka onden cok kaydikca (botun kendi direksiyon modeliyle ayni kural)
+      const W = this.wheels;
+      const rear = W[2].contact ? Math.abs(W[2].slipAngle) : 0, front = W[0].contact ? Math.abs(W[0].slipAngle) : 0;
+      maxA = Math.min(S.maxAngle, maxA + Math.max(0, rear - front) * 1.4);
+    } else {
+      // karsi direksiyon hic kisitlanmaz: kayma acisi kadar (+ pay) cevrilebilir
+      if (sliding && sign(this.steerIn) === sign(slideA)) maxA = Math.max(maxA, Math.min(S.maxAngle, Math.abs(slideA) + 0.18));
+      // Direksiyon birakilinca kaster acisi tekerleri kendiliginden gidis yonune ceker (gercek aracta
+      // direksiyon elde kayar): drift sirasinda tus birakmak da yari karsi direksiyon demektir.
+      if (sliding) caster = clamp(slideA * 0.5, -S.maxAngle, S.maxAngle);
+    }
     // 3) teker acisi hedefe fiziksel bir hizla yaklasir
-    const target = this.steerIn * maxA;
-    const rate = S.rate * 1.6;
+    const target = this.steerIn * maxA + (1 - Math.abs(this.steerIn)) * caster;
+    const rate = S.rate * (sliding && !this.firmGrip ? 2.2 : 1.6);
     this.steer += clamp(target - this.steer, -rate * dt, rate * dt);
     // Ackermann: icteki teker daha fazla doner
     const L = this.p.dims.wheelbase, T = this.p.dims.trackF;
@@ -336,7 +361,15 @@ export class VehicleSim {
     // vites gecisi
     if (this.shiftTimer > 0) {
       this.shiftTimer -= dt;
-      if (this.shiftTimer <= 0) { this.gear = this.targetGear; this.shiftTimer = 0; }
+      if (this.shiftTimer <= 0) {
+        this.gear = this.targetGear; this.shiftTimer = 0;
+        // vites dusurmede devir eslenir (ara gaz): kavrarken araci geri cekmez, guc hemen gelir
+        if (this.shiftDown) {
+          const om = this._shaftOmega() * this.ratio();
+          if (om > this.engine.omega) this.engine.omega = Math.min(om, E.limiter / RPM);
+          this.clutchRamp = 0.6;
+        }
+      }
     }
     const W = this.wheels, RL = W[2], RR = W[3], FL = W[0], FR = W[1];
     const wd = this._shaftOmega();
@@ -361,8 +394,12 @@ export class VehicleSim {
         this._beginShift(this.gear + 1);
         this.shiftHold = 1.2;
       } else if (this.gear > 1 && shaftRpm < down && (this.shiftHold === 0 || shaftRpm < E.idle + 250)) {
-        const lowerRpm = wd * this.ratio(this.gear - 1) * RPM;
-        if (lowerRpm < E.redline - 400) this._beginShift(this.gear - 1);
+        // dogrudan uygun vitese (kickdown): devri yukseltme esiginin altinda kalan en kucuk vites.
+        // Tek tek inince her geciste guc kesiliyor, gaza basinca araç yarim saniye tepkisiz kaliyordu.
+        const ceil = Math.min(up, E.redline - 400) - 150;
+        let g = this.gear - 1;
+        for (let k = 1; k < this.gear; k++) if (wd * this.ratio(k) * RPM < ceil) { g = k; break; }
+        if (wd * this.ratio(g) * RPM < E.redline - 400) this._beginShift(g);
       }
     }
 
@@ -393,8 +430,12 @@ export class VehicleSim {
       engage = Math.max(eLaunch, eRoll);
       if (inp.brake > 0.1 && inp.throttle < 0.05 && shaftRpm < E.idle + 200) engage = 0;
       // vites sonrasi yumusak kavrama
-      this.clutchRamp = Math.min(1, (this.clutchRamp ?? 1) + dt / 0.16);
+      this.clutchRamp = Math.min(1, (this.clutchRamp ?? 1) + dt / 0.12);
+      // el freni: surucu debriyaja basar (arka tekerler motora karsi degil, rahatca kilitlenir);
+      // birakinca kavrama hizla geri gelir (debriyaj tekmesi gibi)
+      if (inp.handbrake > 0.5) this.clutchRamp = 0.35;
       engage = Math.min(engage, this.clutchRamp);
+      if (inp.handbrake > 0.5) engage = 0;
     }
     this.clutch = engage;
     const nDriven = this.awd ? 4 : 2;
@@ -430,8 +471,10 @@ export class VehicleSim {
     if (this.awd) {
       // merkez: on/arka dagilim + viskoz kavrama (hizli akstan yavasa); wheelTorque teker basinadir
       const total = wheelTorque * 4;
-      const fs = D.front ?? 0.5;
-      const center = (D.center || 0) * ((FL.omega + FR.omega) / 2 - (RL.omega + RR.omega) / 2);
+      // el freni cekiliyken merkez kavrama ayrilir (ralli hidrolik el freni): arka kilitlenir, on ceker
+      const hbOn = inp.handbrake > 0.3;
+      const fs = hbOn ? 1 : D.front ?? 0.5;
+      const center = hbOn ? 0 : (D.center || 0) * ((FL.omega + FR.omega) / 2 - (RL.omega + RR.omega) / 2);
       const Tf = total * fs - center, Tr = total * (1 - fs) + center;
       const lf = (D.lsdFront || 0) * (FL.omega - FR.omega), lr = (D.lsd || 0) * (RL.omega - RR.omega);
       FL.driveTorque = Tf / 2 - lf; FR.driveTorque = Tf / 2 + lf;
@@ -529,9 +572,11 @@ export class VehicleSim {
     }
     // statik surtunmeyi asarsa kayar (patinaj / kilitlenme): kinetik surtunme
     const slip0 = w1 * R - vLong;
+    let sliding = false;
     if (Math.abs(Jl) > maxJ) {
       const kappa = Math.abs(slip0) / Math.max(Math.abs(vLong), 1.0);
       Jl = sign(Jl) * maxJ * curve(Math.max(kappa, T.peakRatio), T.peakRatio, T.slideRatio);
+      sliding = true;
     }
 
     // ---- yanal: kayma acisina bagli kuvvet, yanal hizi asmayacak sekilde (dusuk hizda kararli)
@@ -543,6 +588,24 @@ export class VehicleSim {
     w.alphaEff = (w.alphaEff || 0) + (alphaRaw - (w.alphaEff || 0)) * relax;
     const muY = curve(Math.abs(w.alphaEff), T.peakSlip, T.slideRatio);
     let Jy = -sign(w.alphaEff) * muY * maxJ;
+    if (sliding) {
+      // Boyuna kayan lastik: surtunme kayma hizinin tersine yonelir, yana tutunma kaybolur (el
+      // freninde arka savrulur, gazla drift). Eskiden kilitli teker de tam yanal tutus uretiyordu.
+      //  - kayip kademeli: tepe kayma oraninin hemen ustunde yan tutusun cogu kalir
+      //  - patinajda dusuk hizda tutus korunur (kalkista tam gaz arkayi savurmaz), 15-50 km/s arasi tam etki
+      //  - yerden yavas donen teker yalniz fren/el freni tutuyorsa kilitlidir; motor freninde ya da
+      //    sicrama inisinde (havada yavaslamis teker) yan tutus korunur
+      const sl = Math.hypot(slip0, vLat);
+      const kappa = Math.abs(slip0) / Math.max(Math.abs(vLong), 1.0);
+      const braked = slip0 * vLong < 0 && (w.handbrakeTorque > 0 || w.brakeTorque > 0);
+      const drive = slip0 * vLong > 0;
+      const k = (braked ? 1 : drive ? smoothstep(4, 14, Math.abs(vLong)) : 0) * smoothstep(T.peakRatio, T.peakRatio * 4, kappa);
+      if (sl > 1e-3 && k > 0) {
+        const mag = Math.abs(Jl);
+        Jl += ((mag * slip0) / sl - Jl) * k;
+        Jy += ((-mag * vLat) / sl - Jy) * k;
+      }
+    }
     if (Jy * Jcancel < 0) Jy = 0;                         // gecikmeden dolayi ters itme olmasin
     else if (Math.abs(Jy) > Math.abs(Jcancel)) Jy = Jcancel;
 

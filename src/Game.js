@@ -4,6 +4,7 @@ import { cityById } from './data/cities.js';
 import { GarageMode } from './modes/GarageMode.js';
 import { DriveMode } from './modes/DriveMode.js';
 import { ExploreMode } from './modes/ExploreMode.js';
+import { MouseLock } from './core/MouseLock.js';
 
 // Oyun denetleyicisi: modlar arasi gecis, sehir yukleme ekranlari, menuler, ayarlar.
 
@@ -18,6 +19,16 @@ export class Game {
     app.game = this;
     this.menu = new Menu(app.ui, this);
     this.overlay = null;
+    // tam ekranda fare kilidi: yalniz surus suruyorken (menu, duraklatma, sonuc ekrani yokken)
+    this.mouseLock = app.mouseLock = new MouseLock(app, {
+      onLost: () => { const m = app.mode; if (m && m.vehicle && !m.paused && m.onPause) m.onPause(); },
+    });
+    app.onFrame(() => {
+      const m = app.mode;
+      const driving = !!(m && m.vehicle && m.camera && m.hud && !m.paused) && !this.menu.layer && !this.overlay
+        && !(m.resultEl && m.resultEl.isConnected);
+      this.mouseLock.setWant(driving);
+    });
   }
 
   // ------------------------------------------------------------ yukleme
@@ -161,7 +172,7 @@ export class Game {
     else m.rebuild(s.get('vehicleVariant'), s.get('vehicleColor'));
   }
 
-  garageCamera(on) { if (this.menuMode) this.menuMode.setGarageView(on); }
+  garageCamera(on, panel = null) { if (this.menuMode) this.menuMode.setGarageView(on, panel); }
 
   async startDrive(id, viaMenu = true) {
     const app = this.app;
@@ -328,6 +339,10 @@ export class Game {
   pauseDrive() {
     const mode = this.app.mode;
     if (!mode || !mode.vehicle) return;
+    // Esc hem fare kilidini acip (duraklatir) hem tus olarak gelebilir: ayni anda iki kez gecis olmasin
+    const now = performance.now();
+    if (this._pauseT && now - this._pauseT < 300) return;
+    this._pauseT = now;
     if (mode.paused) { this._resume(mode); return; }
     mode.paused = true;
     if (mode.hud) mode.hud.root.classList.add('hidden');
@@ -353,6 +368,7 @@ export class Game {
     this.menu.clear();
     mode.paused = false;
     if (mode.hud) mode.hud.root.classList.remove('hidden');
+    this.mouseLock.relock();   // "Devam" tiklamasi: tam ekrandaysa fare yeniden kilitlenir
   }
 
   pauseExplore() {

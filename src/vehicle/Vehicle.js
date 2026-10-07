@@ -94,32 +94,91 @@ export class Vehicle {
   }
 
   /**
-   * R: takla atmis/sikismis araci duzeltir. Suya ya da derin bir yere dusmusse veya
-   * 4 sn icinde ikinci kez basilirsa son guvenli noktaya (yolda, dik, su disi) geri dondurur.
-   * Donus: 'upright' | 'safe'
+   * R: araci kurtarir.
+   *  - Devrilmis/yan yatmissa ve bulundugu yer duz, su disi ve bossa: yerinde dogrultur (yon korunur).
+   *  - Dik ama sikismissa, suya ya da cukura dustuyse veya yerinde dogrultulamiyorsa: geride
+   *    (en az 1.5 sn once, 6 m geride) gecilen guvenli noktaya, o anki gidis yonuyle.
+   *  - 4 sn icinde tekrar basilirsa her basista bir onceki guvenli noktaya.
+   * Hedef, govde kureleriyle denetlenir: duvar, cati, agac ya da kaya icine konmaz.
+   * inPlaceOnly: yalniz yerinde dogrultmayi dene (ralli/yaris rotaya kendisi dondurur).
+   * Donus: 'upright' | 'safe' | 'none'
    */
-  recover() {
+  recover({ inPlaceOnly = false } = {}) {
     const b = this.sim.body, now = performance.now();
     const list = this._safe || (this._safe = []);
-    const groundY = b.pos.y - this.params.cgHeight;
+    const q = b.q;
+    const upY = 1 - 2 * (q.x * q.x + q.z * q.z);       // govde yukari ekseninin dikey bileseni
+    const again = !inPlaceOnly && this._lastRecover && now - this._lastRecover < 4000;
+    if (!inPlaceOnly) this._lastRecover = now;
+    const groundY = this.app.world ? (this.app.world.heightAt(b.pos.x, b.pos.z) ?? b.pos.y - 1) : b.pos.y - 1;
     const wl = this.app.world ? this.app.world.waterAt(b.pos.x, b.pos.z) : null;
-    const inWater = wl !== null && wl !== undefined && wl > groundY + 0.35;
-    const last = list[list.length - 1];
-    const fell = last && last.y - groundY > 4;
-    const again = this._lastRecover && now - this._lastRecover < 4000;
-    this._lastRecover = now;
-    if ((inWater || fell || again) && list.length) {
-      // en yeni kayit dusus kenarina cok yakin olabilir: bir oncekini sec, sonrakileri at
-      const i = Math.max(0, list.length - 2);
+    const inWater = wl !== null && wl !== undefined && wl > Math.min(groundY, b.pos.y - 0.3) + 0.35;
+    // 1) devrilmis: yerinde dogrult (yakin cevrede bos ve duz bir yer)
+    if (!again && !inWater && upY < 0.6) {
+      const yaw = this._headingYaw(list);
+      for (const [dx, dz] of [[0, 0], [1.6, 0], [-1.6, 0], [0, 1.6], [0, -1.6], [2.4, 2.4], [-2.4, -2.4], [2.4, -2.4], [-2.4, 2.4]]) {
+        const x = b.pos.x + dx, z = b.pos.z + dz;
+        // isin aracin hemen ustunden: ustteki cati/kemer/agac zemin sanilmasin
+        const h = this.app.world ? this.app.world.heightAt(x, z) : null;
+        const y = this._freeSpot(x, z, Math.max(b.pos.y + 0.6, h !== null && h !== undefined ? h + 0.6 : -Infinity), yaw);
+        if (y !== null) { this._place(x, y, z, yaw); return 'upright'; }
+      }
+    }
+    if (inPlaceOnly) return 'none';
+    // 2) guvenli nokta: tekrar basildiysa bir oncekine; degilse yeterince eski ve uzak olan en yenisine
+    const cut = again ? (this._recIdx ?? list.length) - 1 : list.length - 1;
+    for (let i = Math.min(cut, list.length - 1); i >= 0; i--) {
       const p = list[i];
-      list.length = i;   // tekrar basilirsa daha geriye gider
-      this.sim.reset(p.x, p.y + this.params.cgHeight + 0.06, p.z, p.yaw);
-      this.acc = 0;
-      this._sync(1);
+      if (!again && (now - p.t < 1500 || Math.hypot(p.x - b.pos.x, p.z - b.pos.z) < 6) && i > 0) continue;
+      const y = this._freeSpot(p.x, p.z, p.y + 1.0, p.yaw);
+      if (y === null) continue;
+      this._recIdx = i;
+      this._place(p.x, y, p.z, p.yaw);
       return 'safe';
     }
-    this.spawn(b.pos.x, b.pos.z, this.sim.yaw, b.pos.y, 2.5);
+    // 3) kayit yok: bulundugu yerde dogrult (en azindan dik ve zeminde)
+    this.spawn(b.pos.x, b.pos.z, this._headingYaw(list), b.pos.y, 1.2);
     return 'upright';
+  }
+
+  /** Aracin yatay yonu: burnun yatay izdusumu (burun dikine bakiyorsa son kaydin yonu). */
+  _headingYaw(list) {
+    const { x, y, z, w } = this.sim.body.q;
+    // govde ileri ekseni (0,0,-1) dunyada
+    const fx = -2 * (x * z + w * y), fz = -(1 - 2 * (x * x + y * y));
+    if (Math.hypot(fx, fz) < 0.3 && list.length) return list[list.length - 1].yaw;
+    return Math.atan2(-fx, -fz);
+  }
+
+  /**
+   * (x,z) noktasinda arac dik olarak bos bir yere sigar mi? Zemini fromY'den asagi isinla bulur;
+   * zemin dik (egim > ~35 derece), su altinda ya da govde kurelerinden biri bir seye giriyorsa null.
+   * Donus: zemin yuksekligi.
+   */
+  _freeSpot(x, z, fromY, yaw) {
+    if (!this.ground) return fromY - 1.0;
+    _p.set(x, fromY, z); _d.set(0, -1, 0);
+    const hit = this.ground.raycast(_p, _d, 8);
+    if (!hit || hit.normal.y < 0.82) return null;
+    const gy = hit.point.y;
+    const wl = this.app.world ? this.app.world.waterAt(x, z) : null;
+    if (wl !== null && wl !== undefined && wl > gy + 0.25) return null;
+    const cy = gy + this.params.cgHeight + 0.08, c = Math.cos(yaw), s = Math.sin(yaw);
+    for (const col of this.params.colliders) {
+      const [lx, ly, lz] = col.p;
+      // govde ekseni: -z ileri; yaw sola donus (VehicleSim.reset ile ayni)
+      _v.set(x + lx * c + lz * s, cy + ly, z - lx * s + lz * c);
+      const cs = this.ground.sphereContacts(_v, col.r * 0.92);
+      for (const ct of cs) if (ct.depth > 0.03) return null;
+    }
+    return gy;
+  }
+
+  _place(x, gy, z, yaw) {
+    this.sim.reset(x, gy + this.params.cgHeight + 0.06, z, yaw);
+    this.acc = 0;
+    this._sync(1);
+    this._recSpot = { x, z };   // buradan 6 m uzaklasana kadar yeni guvenli nokta kaydedilmez
   }
 
   /** Guvenli nokta gecmisi (yarim saniyede bir, en az 3 m arayla, ~40 sn). */
@@ -136,8 +195,17 @@ export class Vehicle {
     const list = this._safe || (this._safe = []);
     const last = list[list.length - 1];
     if (last && Math.hypot(last.x - b.pos.x, last.z - b.pos.z) < 3) return;
-    list.push({ x: b.pos.x, y: groundY, z: b.pos.z, yaw: s.yaw });
+    // kurtarma noktasinin hemen yaninda kayit yok: tekrar R zinciri (her basista daha geri) bozulmasin
+    if (this._recSpot) {
+      if (Math.hypot(this._recSpot.x - b.pos.x, this._recSpot.z - b.pos.z) < 6) return;
+      this._recSpot = null;
+    }
+    // gidis yonu: ileri gidiyorsa hiz yonu (geri vitesteyken govde yonu)
+    const v = b.vel, fwd = s.forwardSpeed;
+    const yaw = fwd > 2 ? Math.atan2(-v.x, -v.z) : s.yaw;
+    list.push({ x: b.pos.x, y: groundY, z: b.pos.z, yaw, t: performance.now() });
     if (list.length > 80) list.shift();
+    this._recIdx = undefined;   // yeni yol katedildi: tekrar basis zinciri sifirlanir
   }
 
   /** Aracin altindaki bolge (carpisma geometrisi) yuklu mu; degilse fizik beklemeli. */

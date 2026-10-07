@@ -29,7 +29,8 @@ from pk2 import PK2Archive  # noqa: E402
 import jmx  # noqa: E402
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-CLIENT = r"C:\Silkroad\SRO_Client"
+# orijinal istemci (PK2 dosyalari) arsivde; baska yerdeyse SRO_CLIENT ortam degiskeni
+CLIENT = os.environ.get("SRO_CLIENT", r"C:\Silkroad\_ARSIV\SRO_Client")
 OUT = os.path.join(ROOT, "assets", "chars")
 CACHE = os.path.join(os.path.dirname(__file__), ".cache")
 SCALE = 0.1

@@ -33,7 +33,7 @@ export class DriveHud {
     this.help = el('div', { id: 'controlsHelp' }, [
       '<kbd>W</kbd><kbd>S</kbd> gaz / fren-geri &nbsp; <kbd>A</kbd><kbd>D</kbd> direksiyon &nbsp; <kbd>Boşluk</kbd> el freni',
       '<kbd>C</kbd> kamera &nbsp; <kbd>L</kbd> farlar &nbsp; <kbd>R</kbd> aracı düzelt &nbsp; <kbd>T</kbd> şanzıman &nbsp; <kbd>Q</kbd><kbd>E</kbd> vites (manuel)',
-      '<kbd>N</kbd> motor sesi &nbsp; <kbd>M</kbd> müzik &nbsp; <kbd>H</kbd> korna &nbsp; <kbd>F1</kbd> yardımı gizle &nbsp; <kbd>Esc</kbd> menü',
+      '<kbd>N</kbd> motor sesi &nbsp; <kbd>M</kbd> müzik &nbsp; <kbd>H</kbd> korna &nbsp; <kbd>F</kbd> tam ekran (fareyle bakış) &nbsp; <kbd>F1</kbd> yardımı gizle &nbsp; <kbd>Esc</kbd> menü',
     ].join('<br>'));
     this.root.appendChild(this.help);
     this.toastEl = el('div', { id: 'toast', class: 'panel' });

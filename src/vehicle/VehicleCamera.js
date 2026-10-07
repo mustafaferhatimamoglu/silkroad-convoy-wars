@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import { makeHit } from '../world/Collision.js';
 
 // Arac kameralari. C ile sirayla: takip, uzak takip, kaput, kokpit, sinematik.
-// Sag fare tusu (veya kumanda sag cubugu) ile etrafa bakilir; birakinca geri doner.
+// Sag fare tusu (veya kumanda sag cubugu) ile etrafa bakilir; birakinca geri doner. Tam ekranda
+// fare kilitliyken (core/MouseLock.js) tusa basmadan fare hareketiyle bakilir.
 
 export const CAMERA_MODES = ['chase', 'far', 'hood', 'cockpit', 'cinematic'];
 export const CAMERA_NAMES = { chase: 'Takip', far: 'Uzak takip', hood: 'Kaput', cockpit: 'Kokpit', cinematic: 'Sinematik' };
@@ -41,7 +42,13 @@ export class VehicleCamera {
     const speed = v.velocity.length();
     // fare/kumanda ile bakis
     const gp = input.gamepad;
-    if (input.mouse.buttons & 2) {
+    // tam ekranda fare kilitliyse tusa basmadan fare hareketiyle bakilir; hareket durunca ~2 sn sonra geri doner
+    const locked = this.app.mouseLock && this.app.mouseLock.locked;
+    if (locked && (input.mouse.dx || input.mouse.dy)) {
+      this.lookYaw = Math.atan2(Math.sin(this.lookYaw - input.mouse.dx * 0.0032), Math.cos(this.lookYaw - input.mouse.dx * 0.0032));
+      this.lookPitch = THREE.MathUtils.clamp(this.lookPitch - input.mouse.dy * 0.0026, -0.6, 0.9);
+      this.lookTimer = 2.0;
+    } else if (input.mouse.buttons & 2) {
       this.lookYaw -= input.mouse.dx * 0.004;
       this.lookPitch = THREE.MathUtils.clamp(this.lookPitch - input.mouse.dy * 0.003, -0.6, 0.9);
       this.lookTimer = 1.2;

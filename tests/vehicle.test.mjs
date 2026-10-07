@@ -64,7 +64,8 @@ test('duz zeminde kendiliginden durur ve dogru yukseklikte oturur', () => {
   for (const w of car.wheels) assert.ok(w.contact, w.name + ' temas');
 });
 
-test('0-100 km/s suresi ve son hiz gercekci (Kartal 1.6)', () => {
+// Tork uretici verisinin %40 ustunde (presets.js POWER): 75 BG yerine ~105 BG
+test('0-100 km/s suresi ve son hiz (Kartal 1.6, +%40 guc)', () => {
   const g = planeGround();
   const car = makeCar(g);
   run(car, g, 1, {});
@@ -73,8 +74,8 @@ test('0-100 km/s suresi ve son hiz gercekci (Kartal 1.6)', () => {
   run(car, g, 75, { accel: 1 }, (t, c) => { gears.add(c.gearLabel); if (t100 === null && kmh(c) >= 100) t100 = t; });
   const vmax = kmh(car);
   console.log(`   0-100: ${t100 && t100.toFixed(1)} s, son hiz ${vmax.toFixed(1)} km/s, vitesler ${[...gears].join(',')}, devir ${car.rpm.toFixed(0)}`);
-  assert.ok(t100 !== null && t100 > 10 && t100 < 17, `0-100 ${t100}`);
-  assert.ok(vmax > 145 && vmax < 175, `son hiz ${vmax}`);
+  assert.ok(t100 !== null && t100 > 7.5 && t100 < 13, `0-100 ${t100}`);
+  assert.ok(vmax > 165 && vmax < 195, `son hiz ${vmax}`);
   assert.ok(gears.has('5'), '5. vitese cikmali');
   assert.ok(Math.abs(car.body.pos.x) < 2, `duz gitmeli, x=${car.body.pos.x.toFixed(2)}`);
 });

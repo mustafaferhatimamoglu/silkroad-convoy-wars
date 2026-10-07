@@ -357,6 +357,15 @@ export const TANK = {
   maxHealth: 320,
 };
 
+// Oyuncu istegi (2026-10-07): butun araclar %40 daha guclu. Yukaridaki egriler uretici verisidir;
+// tork burada carpilir. Motor freni ayni kalir (oran tam torka gore oldugu icin bolunur).
+// Botlar da ayni araclari kullanir: yaris dengesi degismez.
+export const POWER = 1.4;
+for (const P of [KARTAL, KARTAL_RALLY, HILUX, F150, RS6, TANK]) {
+  P.engine.torque = P.engine.torque.map(([rpm, t]) => [rpm, Math.round(t * POWER)]);
+  P.engine.brakeTorque /= POWER;
+}
+
 /** Surum (gorunum) + hazirliga gore fizik on ayari. */
 export function presetFor(variant, prep = 'ralli') {
   if (variant === 'hilux') return HILUX;

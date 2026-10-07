@@ -7,11 +7,13 @@ tarayıcıda çalışan 3B oyun. V4, önceki üç sürümün temiz baştan yazı
 ## Çalıştırma
 
 ```bat
-OYNA.bat
+INTERNET_OYUNU.bat
 ```
 
-ya da elle: `python server.py 5070` ve tarayıcıda <http://localhost:5070/>.
-Yerel ağda arkadaşlarla oynamak için `COKLU_OYUNCU.bat` (`python server.py 5070 --lan`); bkz.
+Oyunu açar (<http://localhost:5070/>) ve internetten arkadaş çağırmak için tüneli hazırlar (bkz.
+aşağıda **İnternetten**). Tek başına oynamak için de bu yeter.
+Elle: `python server.py 5070`. Eski başlatıcılar `arşiv/` altında: `OYNA.bat` (yalnız yerel
+sunucu) ve `COKLU_OYUNCU.bat` (yerel ağ, `python server.py 5070 --lan`); bkz.
 [Çok oyunculu](#çok-oyunculu).
 Oyun internetsiz çalışır; Three.js ve diğer kütüphaneler `vendor/` altındadır.
 
@@ -34,11 +36,12 @@ Hızlı test adresleri:
 |---|---|
 | W / S (oklar) | Gaz / fren; dururken S'ye basılı tutunca geri vites |
 | A / D | Direksiyon |
-| Boşluk | El freni |
+| Boşluk | El freni: arka kilitlenir, araç savrulur (debriyaja basılır; 4x4'te merkez kavrama ayrılır) |
 | C | Kamera: takip, uzak, kaput, kokpit, sinematik |
 | Sağ fare tuşu | Etrafa bakma |
+| F | Tam ekran: fare kilitlenir, tuşa basmadan fareyle etrafa bakılır (Esc: kilidi aç / menü) |
 | L | Farlar |
-| R | Aracı düzelt; iki kez basınca (ya da suya/çukura düşünce) son güvenli noktaya, ralli ve yarışta rotaya dön |
+| R | Devrildiysen yerinde doğrultur; sıkıştıysan, suya ya da çukura düştüysen biraz geriye (en az 6 m, sürdüğün yöne bakarak) alır, tekrar basınca daha geriye. Ralli ve yarışta devrilme dışında doğrudan rotaya döner. Araç duvar, çatı ya da ağaç içine konmaz |
 | V | Yarışta finişten sonra diğer araçları izle |
 | T | Otomatik / manuel şanzıman (manuelde Q / E vites) |
 | Esc | Menü |
@@ -60,8 +63,9 @@ Altı etap, her şehrin çevresinde (ana menüden **Ralli: Zamana Karşı**):
 
 Sıradaki kapı ışık sütunuyla, ondan sonraki sönük direklerle görünür; mini haritada rota
 çizilidir. Üst paneldeki **pilot notları** yaklaşan virajın yönünü ve şiddetini (1 en keskin … 6
-en hafif, firkete, *uzun*) ve tümsek / sıçrama / çukuru mesafesiyle söyler. R'ye iki kez basmak
-aracı rotaya (son geçilen ile sıradaki kapı arasındaki en yakın noktaya) geri koyar.
+en hafif, firkete, *uzun*) ve tümsek / sıçrama / çukuru mesafesiyle söyler. R aracı rotaya (son
+geçilen ile sıradaki kapı arasındaki en yakın noktaya) geri koyar; yalnız devrildiysen önce yerinde
+doğrultur.
 
 ## Yarış: Botlara Karşı
 
@@ -187,7 +191,7 @@ Sol üstte sıradaki adım ve hedef yazar; mini haritadaki noktalı çizgi yol b
 
 ```
 index.html            giriş (import map: three, three/addons, three-mesh-bvh)
-server.py, OYNA.bat   yerel sunucu (doğru MIME türleri, çok iş parçacıklı, WebSocket oda sistemi)
+server.py             yerel sunucu (doğru MIME türleri, çok iş parçacıklı, WebSocket oda sistemi)
 src/
   core/               uygulama, renderer, girişler, ayarlar
   world/              bölge akışı, zemin dokusu karışımı, objeler, su, gökyüzü, çarpışma
@@ -220,7 +224,19 @@ LRU ile tutulur.
 ışınlı süspansiyon (yay, ayrı sıkışma/açılma sönümü, viraj demiri), kayma açısı ve kayma
 oranına bağlı lastik modeli (sürtünme elipsi, yük duyarlılığı, zemin malzemesine göre tutuş),
 motor tork eğrisi + otomatik debriyaj + 5 ileri vites + hafif kilitli diferansiyel, ABS, TCS,
-gövde çarpışma küreleri ve hasar. Testler:
+gövde çarpışma küreleri ve hasar.
+
+- **Kayan lastik**: teker kilitlenince (el freni) ya da hızlıyken patinaj yapınca sürtünme kayma
+  hızının tersine döner, yana tutunma büyük ölçüde kaybolur: el freniyle arka savrulur, gazla
+  drift yapılır. Kalkışta (düşük hızda) patinaj yana savurmaz.
+- **Karşı direksiyon**: kayarken tekerler gidiş yönüne kadar serbestçe çevrilebilir; tuş bırakılınca
+  kaster etkisi tekerleri kendiliğinden kayma yönüne çeker (botlar direksiyonu sıkı tutar).
+- **El freni**: sürücü debriyaja basar; 4x4'te merkez kavrama ayrılır (ralli hidrolik el freni).
+- **Gaz tepkisi**: tam gazda şanzıman tek adımda uygun vitese iner (devir eşlemeli, kısa geçiş).
+- **Güç**: bütün motorlar fabrika torkunun %40 üstünde (`presets.js` → `POWER`); botlar aynı
+  araçları kullanır. Botların gaz ayağı patinaj/arka kayması ve havada kalma durumunda gazı keser.
+
+Testler (drift, karşı direksiyon, gaz tepkisi: `tests/drift.test.mjs`):
 
 ```bat
 node --test
@@ -245,7 +261,8 @@ isler; seviyeleri olcer, WAV ve spektrogram yazar.
 
 ## Varlıkları yeniden üretme
 
-Varlıklar `C:\Silkroad\SRO_Client\*.pk2` dosyalarından üretilir (bkz. `tools/`).
+Varlıklar orijinal istemcinin `*.pk2` dosyalarından üretilir (bkz. `tools/`). İstemci arşivde:
+`C:\Silkroad\_ARSIV\SRO_Client\` (başka yerdeyse `SRO_CLIENT` ortam değişkeniyle verilir).
 Kervan RPG için (sırayla):
 
 ```bat
