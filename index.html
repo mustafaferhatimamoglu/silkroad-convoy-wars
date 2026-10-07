@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Silkroad: Convoy Wars V4</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="src/ui/style.css">
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three/three.module.js",
+    "three/addons/": "./vendor/three/addons/",
+    "three-mesh-bvh": "./vendor/three-mesh-bvh/src/index.js"
+  }
+}
+</script>
+</head>
+<body>
+<div id="app">
+  <canvas id="view"></canvas>
+  <div id="ui"></div>
+</div>
+<noscript>Bu oyun JavaScript gerektirir.</noscript>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>
