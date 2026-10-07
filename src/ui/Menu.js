@@ -3,6 +3,7 @@ import { PAINTS } from '../vehicle/model/KartalModel.js';
 import { QUALITY } from '../core/Settings.js';
 import { RALLY_STAGES } from '../data/rally.js';
 import { DIFFICULTY } from '../race/BotDriver.js';
+import { downloadInvite, inviteLink } from '../net/invite.js';
 
 const LEVEL_DESC = {
   kolay: 'Temiz sürer, sık hata yapar; kirli numara yok',
@@ -219,9 +220,14 @@ export class Menu {
     const err = (t) => { el.querySelector('.err').textContent = t || ''; };
     const name = () => (el.querySelector('[data-k="name"]').value.trim() || 'Oyuncu').slice(0, 20);
     fetch('/api/info').then((r) => r.json()).then((info) => {
-      el.querySelector('.lan').innerHTML = info.lan && info.addresses.length
+      const lan = info.lan && info.addresses.length
         ? `Yerel ağdaki arkadaşların tarayıcıda şu adresi açsın: ${info.addresses.map((a) => `<b style="color:var(--gold)">http://${a}:${info.port}/</b>`).join(' ya da ')} — sonra “Çok Oyunculu”dan odana katılsın.`
-        : 'Sunucu şu an yalnızca bu bilgisayara açık. Arkadaşlarınla oynamak için oyunu <b>COKLU_OYUNCU.bat</b> ile (python server.py --lan) başlat; Windows güvenlik duvarı sorarsa izin ver.';
+        : '';
+      const web = info.tunnel
+        ? '<b style="color:#8fdc7a">İnternet daveti açık.</b> Oda kurunca lobideki “Davet dosyası” ile arkadaşına gönder; açınca doğrudan odana gelir.'
+        : info.tunnelWanted ? 'İnternet tüneli açılıyor…'
+          : 'İnternetten arkadaş çağırmak için oyunu <b>INTERNET_OYUNU.bat</b> ile başlat (sabit IP ya da modem ayarı gerekmez). Aynı ağdaysanız <b>COKLU_OYUNCU.bat</b> yeter.';
+      el.querySelector('.lan').innerHTML = [web, lan].filter(Boolean).join('<br>');
     }).catch(() => {});
     let net;
     try { net = await game.connectNet(name()); } catch (e) { el.querySelector('.rooms').textContent = ''; err(`${e.message}. Sunucu güncel mi? (server.py yeniden başlatılmalı)`); }
@@ -261,6 +267,20 @@ export class Menu {
     this.layer = el;
     const body = el.querySelector('.body');
     const sel = (k, items, val, dis) => `<select data-c="${k}" ${dis ? 'disabled' : ''}>${items.map(([v, l]) => `<option value="${esc(v)}" ${String(val) === String(v) ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
+    // internet daveti (sunucu tuneli aciksa): davet dosyasi / baglanti
+    let info = null, copied = false;
+    const loadInfo = () => fetch('/api/info').then((r) => r.json()).then((x) => { info = x; render(); if (x.tunnelWanted && !x.tunnel && el.isConnected) setTimeout(loadInfo, 3000); }).catch(() => {});
+    const inviteRow = () => {
+      if (!info) return '';
+      if (info.tunnel) {
+        return `<div class="row" style="margin-top:10px;align-items:center;gap:8px;padding:8px 10px;border:1px solid rgba(232,193,112,0.3);border-radius:6px">
+          <span style="flex:1;font-size:13px">İnternetten arkadaş çağır: dosyayı (WhatsApp, e-posta…) gönder, açınca odaya gelir.</span>
+          <button class="btn" data-a="invite" style="width:auto;padding:6px 12px">Davet dosyası (.html)</button>
+          <button class="btn secondary" data-a="copy" style="width:auto;padding:6px 12px">${copied ? 'Kopyalandı ✓' : 'Bağlantıyı kopyala'}</button></div>`;
+      }
+      if (info.tunnelWanted) return '<div style="margin-top:10px;font-size:13px;color:var(--muted)">İnternet tüneli açılıyor…</div>';
+      return '<div style="margin-top:10px;font-size:12px;color:var(--muted)">İnternetten arkadaş çağırmak için oyunu <b>INTERNET_OYUNU.bat</b> ile başlat.</div>';
+    };
     const render = () => {
       if (!el.isConnected) return;
       const host = net.isHost, cfg = lob.cfg, rows = lob.rows();
@@ -281,6 +301,7 @@ export class Menu {
           <div class="setting"><label>Bot araçları</label>${sel('botCars', [['same', 'Kurucunun aracı'], ['mixed', 'Karışık']], cfg.botCars, !host)}</div>
           <div class="setting"><label>Aracın</label>${sel('myVariant', Object.entries(VARIANTS).map(([id, v]) => [id, v.name]), s.get('vehicleVariant'), lob.ready && !host)} ${sel('myPaint', Object.entries(PAINTS).map(([id, p]) => [id, p.name]), s.get('vehicleColor'), lob.ready && !host)}</div>
         </div>
+        ${inviteRow()}
         <div class="err" style="color:#ff8a7a;margin-top:6px">${esc(lob.error || '')}</div>
         <div class="row" style="margin-top:14px;align-items:center">
           <button class="btn secondary" data-a="leave" style="width:auto">← Odadan çık</button><div style="flex:1"></div>
@@ -303,8 +324,16 @@ export class Menu {
       if (a.dataset.a === 'leave') { this.game.leaveNet(); this.multiplayer(); }
       if (a.dataset.a === 'ready') lob.toggleReady();
       if (a.dataset.a === 'start') lob.start();
+      if ((a.dataset.a === 'invite' || a.dataset.a === 'copy') && info && info.tunnel && net.room) {
+        const host = (lob.players[net.room.host] && lob.players[net.room.host].name) || net.name;
+        const st = RALLY_STAGES[lob.cfg.stage];
+        const opts = { url: info.tunnel, code: net.room.code, host, stage: lob.cfg.stage, stageName: st ? st.name : '' };
+        if (a.dataset.a === 'invite') downloadInvite(opts);
+        else navigator.clipboard.writeText(inviteLink(opts)).then(() => { copied = true; render(); setTimeout(() => { copied = false; render(); }, 2500); }).catch(() => {});
+      }
     });
     render();
+    loadInfo();
   }
 
   _start(kind, city) {

@@ -100,8 +100,22 @@ Her oyuncu kendi aracını kendi bilgisayarında simüle eder ve durumunu saniye
 botları oda kurucusu simüle eder. Uzak araçlar 110 ms geriden ara değerlenerek gösterilir; araçlar
 arası temas iki tarafta da kendi aracına uygulanır. Start, sunucu saatine göre herkeste aynı anda
 verilir; süreler karşılaştırılabilir. Sunucu oyun mantığı çalıştırmaz, yalnız oda ve mesaj aktarır
-(Python standart kütüphanesi, ek kurulum yok). İnternet üzerinden oynamak için kurucunun 5070
-portunu yönlendirmesi gerekir.
+(Python standart kütüphanesi, ek kurulum yok).
+
+### İnternetten (sabit IP gerekmez)
+
+Oyunu `INTERNET_OYUNU.bat` ile başlat (`python server.py 5070 --tunnel`). Sunucu Cloudflare'in
+ücretsiz hızlı tünelini açar: bilgisayarın dışarıya bağlandığı için sabit IP, modem/port ayarı ya
+da hesap gerekmez. Bunun için `tools/cloudflared.exe` gerekir (Cloudflare'in resmî sürümü
+`cloudflared-windows-amd64.exe`, git dışı). Oda kurunca lobide **Davet dosyası (.html)** ile
+arkadaşına gönderirsin (WhatsApp, e-posta…); arkadaşın dosyayı açar, adını yazar, **Yarışa katıl**
+der: oyun senin bilgisayarından yüklenir ve doğrudan odana girer. **Bağlantıyı kopyala** aynı şeyi
+bağlantı olarak verir. İlk girişte arkadaşın bir etap için yaklaşık 50–70 MB indirir (lobi ~30 MB,
+yarış boyunca kalanı); tünel adresi her açılışta değiştiği için yeni oturumda yeniden iner.
+
+Sunucu yalnızca oyunun çalışması için gereken dosyaları verir (`index.html`, `src/`, `vendor/`,
+`assets/`); git geçmişi, araçlar, testler ve klasör listeleri dışarıya kapalıdır. Tünel adresi
+rastgeledir; daveti yalnız arkadaşlarınla paylaş. Pencere kapanınca tünel de kapanır.
 
 ## Etap araçları
 

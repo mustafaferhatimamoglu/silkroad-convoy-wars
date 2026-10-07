@@ -67,13 +67,19 @@ async function main() {
   app.start();
   const city = params.get('city');
   if (city) app.settings.set('lastCity', city);
+  // internet daveti: ?join=ODA&name=AD&stage=ETAP (davet dosyasindan gelir)
+  const join = params.get('join');
+  if (join && params.get('stage')) app.settings.set('lastCity', params.get('stage'));
   // test kisayolu: &variant=hilux&paint=beyaz&prep=stok
   for (const [q, k] of [['variant', 'vehicleVariant'], ['paint', 'vehicleColor'], ['prep', 'vehiclePrep']]) if (params.get(q)) app.settings.set(k, params.get(q));
   await game.boot(loading);
   loading.set(1, 'Hazır');
   loading.done();
   const mode = params.get('mode');
-  if (mode === 'drive') game.startDrive(city || app.settings.get('lastCity'));
+  if (join) {
+    history.replaceState(null, '', location.pathname);   // yenilemede ayni odaya tekrar katilmasin
+    game.joinInvite(join, params.get('name'));
+  } else if (mode === 'drive') game.startDrive(city || app.settings.get('lastCity'));
   else if (mode === 'explore') game.startExplore(city || 'jangan');
   else if (mode === 'rally') game.startRally(params.get('stage') || 'hotan');
   else if (mode === 'race') {

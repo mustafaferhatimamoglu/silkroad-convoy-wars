@@ -265,6 +265,27 @@ export class Game {
     return net;
   }
 
+  /** Davet baglantisiyla gelen oyuncu: sunucuya baglan, odaya katil, lobiyi ac. */
+  async joinInvite(code, name) {
+    const s = this.app.settings;
+    if (name) s.set('mpName', name);
+    try {
+      const net = await this.connectNet(s.get('mpName') || 'Oyuncu');
+      await new Promise((resolve, reject) => {
+        const offs = [];
+        const end = (fn, v) => { offs.forEach((u) => u()); fn(v); };
+        offs.push(net.on('room', () => end(resolve)));
+        offs.push(net.on('error', (m) => end(reject, new Error(m.msg))));
+        setTimeout(() => end(reject, new Error('Odaya katılınamadı (zaman aşımı)')), 10000);
+        net.join(String(code).toUpperCase());
+      });
+      await this.showLobby();
+    } catch (e) {
+      this.menu.multiplayer();
+      setTimeout(() => { const er = document.querySelector('.err'); if (er) er.textContent = `Davet: ${e.message}`; }, 400);
+    }
+  }
+
   /** Oda lobisi (menu arka plani: garaj sahnesi). */
   async showLobby() {
     const { net } = await import('./net/Net.js');

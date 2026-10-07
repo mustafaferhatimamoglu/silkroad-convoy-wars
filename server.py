@@ -8,8 +8,17 @@ Cok oyunculu: /ws adresinde WebSocket (yalnizca standart kutuphane) ile oda sist
 Sunucu oyun mantigi calistirmaz; odadaki oyuncular arasinda mesaj aktarir (yaris
 durumu her oyuncunun kendi tarayicisinda, botlar oda kurucusunda simule edilir).
 
-Kullanim:  python server.py [port] [--lan] [--no-browser]
-  --lan   yerel agdaki diger bilgisayarlar baglanabilsin (0.0.0.0 dinlenir)
+Internet: --tunnel ile Cloudflare'in ucretsiz hizli tuneli (cloudflared) acilir; sabit IP, modem
+ayari ya da hesap gerekmez. Rastgele https://....trycloudflare.com adresi lobide davet dosyasina
+yazilir; arkadas dosyayi acip oyuna (bu bilgisayardan yuklenerek) ve odaya baglanir. Sunucu
+kapaninca tunel de kapanir.
+
+Guvenlik: yalniz oyunun calismasi icin gereken dosyalar sunulur (index.html, src/, vendor/,
+assets/); git gecmisi, araclar, testler ve klasor listeleri disariya kapalidir.
+
+Kullanim:  python server.py [port] [--lan] [--tunnel] [--no-browser]
+  --lan     yerel agdaki diger bilgisayarlar baglanabilsin (0.0.0.0 dinlenir)
+  --tunnel  internetten davet: tools/cloudflared.exe (ya da PATH'teki cloudflared) ile tunel
 """
 import base64
 import hashlib
@@ -18,10 +27,14 @@ import json
 import mimetypes
 import os
 import random
+import re
+import shutil
 import socket
 import socketserver
 import struct
+import subprocess
 import sys
+import atexit
 import threading
 import time
 import webbrowser
@@ -30,6 +43,14 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 ARGS = [a for a in sys.argv[1:] if not a.startswith("--")]
 PORT = int(ARGS[0]) if ARGS else 5070
 LAN = "--lan" in sys.argv
+TUNNEL = "--tunnel" in sys.argv
+TUNNEL_URL = None
+STATS = {"sent": 0}
+STATS_LOCK = threading.Lock()
+
+# Disariya sunulan yollar (gerisi 404): oyun sayfasi, kod, kutuphaneler, varliklar, API, WebSocket
+ALLOWED_FILES = {"/", "/index.html"}
+ALLOWED_PREFIXES = ("/src/", "/vendor/", "/assets/")
 
 MIME = {
     ".js": "text/javascript",
@@ -268,14 +289,41 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if self.path.startswith("/ws") and self.headers.get("Upgrade", "").lower() == "websocket":
             return self.websocket()
         if self.path.startswith("/api/info"):
-            body = json.dumps({"lan": LAN, "port": PORT, "addresses": lan_addresses() if LAN else []}).encode("utf-8")
+            info = {"lan": LAN, "port": PORT, "addresses": lan_addresses() if LAN else [],
+                    "tunnel": TUNNEL_URL, "tunnelWanted": TUNNEL, "sent": STATS["sent"]}
+            body = json.dumps(info).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
+            # davet dosyasi (file://) baglanti kontrolu icin
+            self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             self.wfile.write(body)
             return
         return super().do_GET()
+
+    def send_head(self):
+        path = self.path.split("?", 1)[0].split("#", 1)[0]
+        ok = path in ALLOWED_FILES or path.startswith(ALLOWED_PREFIXES)
+        if not ok or "/." in path or ".." in path:
+            self.send_error(404, "Bulunamadi")
+            return None
+        return super().send_head()
+
+    def list_directory(self, path):
+        self.send_error(404, "Bulunamadi")
+        return None
+
+    def copyfile(self, source, outputfile):
+        n = 0
+        while True:
+            buf = source.read(64 * 1024)
+            if not buf:
+                break
+            outputfile.write(buf)
+            n += len(buf)
+        with STATS_LOCK:
+            STATS["sent"] += n
 
     def websocket(self):
         key = self.headers.get("Sec-WebSocket-Key", "")
@@ -313,6 +361,41 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             super().log_message(fmt, *args)
 
 
+def find_cloudflared():
+    for name in ("cloudflared.exe", "cloudflared"):
+        p = os.path.join(ROOT, "tools", name)
+        if os.path.exists(p):
+            return p
+    return shutil.which("cloudflared")
+
+
+def start_tunnel():
+    """Cloudflare hizli tuneli: bu bilgisayardan disariya baglanir (sabit IP / port yonlendirme gerekmez)."""
+    exe = find_cloudflared()
+    if not exe:
+        print("  UYARI: cloudflared bulunamadi; internet daveti kapali.")
+        print("  tools/cloudflared.exe olarak koyun (Cloudflare'in resmi GitHub surumu: cloudflared-windows-amd64.exe).")
+        return None
+    # ayni konsolu paylasir: pencere kapaninca tunel de kapanir
+    proc = subprocess.Popen([exe, "tunnel", "--no-autoupdate", "--url", f"http://127.0.0.1:{PORT}"],
+                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace")
+
+    def reader():
+        global TUNNEL_URL
+        for line in proc.stdout:
+            m = re.search(r"https://[-a-z0-9]+\.trycloudflare\.com", line)
+            if m and not TUNNEL_URL:
+                TUNNEL_URL = m.group(0)
+                print(f"  Internet adresi hazir: {TUNNEL_URL}")
+                print("  Oyunda Cok Oyunculu -> Oda kur -> 'Davet dosyasi' ile arkadasina gonder.")
+        if not TUNNEL_URL:
+            print("  UYARI: internet tuneli acilamadi (cloudflared kapandi).")
+
+    threading.Thread(target=reader, daemon=True).start()
+    atexit.register(lambda: proc.poll() is None and proc.terminate())
+    return proc
+
+
 class Server(socketserver.ThreadingMixIn, http.server.HTTPServer):
     daemon_threads = True
     allow_reuse_address = True
@@ -344,6 +427,9 @@ def main():
         for ip in lan_addresses():
             print(f"  Yerel ag: http://{ip}:{PORT}/   (arkadaslarin bu adrese girsin)")
         print("  Windows guvenlik duvari sorarsa 'Ozel aglar' icin izin verin.")
+    if TUNNEL:
+        print("  Internet tuneli aciliyor (birkac saniye)...")
+        start_tunnel()
     print("  Kapatmak icin Ctrl+C")
     print("=" * 60)
     if "--no-browser" not in sys.argv:
