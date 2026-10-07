@@ -164,7 +164,11 @@ export class RaceMode extends RallyMode {
       net.on('r:st', (d) => this._onState(d)),
       net.on('r:bs', (d) => { for (const m of d.list) this._onState(m); }),
       net.on('r:dmg', (d) => this._onDamage(d)),
-      net.on('r:loaded', (d, from) => { this.loaded.add(from); }),
+      net.on('r:loaded', (d, from) => {
+        this.loaded.add(from);
+        // gec yukleyen oyuncu ilk "basla" mesajini yarisi kurulmadan kacirdi: start zamanini ona yeniden gonder
+        if (net.isHost && this.startAt !== null) net.relay({ t: 'go', startAt: this.startAt }, from);
+      }),
       net.on('r:go', (d) => { this.startAt = d.startAt; }),
       net.on('left', (m) => this._onLeft(m.id)),
       net.on('close', () => this.hud.toast('Sunucu bağlantısı koptu', 4)),
@@ -245,13 +249,18 @@ export class RaceMode extends RallyMode {
     this._refreshGates();
     if (this.beamMat) this.beamMat.uniforms.uTime.value += dt;
     if (net && net.isHost && this.startAt === null) {
-      // herkes yukleyince (ya da 25 sn sonra) ortak start zamani
+      // herkes yukleyince (ya da 45 sn sonra; gec kalan yuklenince start zamanini alir) ortak start
       this._waitT += dt;
       const humans = this.cars.filter((c) => c.human && !c.gone);
-      if (humans.every((c) => this.loaded.has(c.id)) || this._waitT > 25) {
+      if (humans.every((c) => this.loaded.has(c.id)) || this._waitT > 45) {
         this.startAt = net.serverNow() + 4500;
         net.relay({ t: 'go', startAt: this.startAt });
       }
+    }
+    if (net && !net.isHost && this.startAt === null) {
+      // uye: start zamani gelene kadar "yuklendi"yi tekrarla (kaybolan mesaja karsi)
+      this._loadedT = (this._loadedT || 0) + dt;
+      if (this._loadedT > 3) { this._loadedT = 0; net.relay({ t: 'loaded' }, 'host'); }
     }
     if (this.raceState === 'countdown') {
       if (net) this.countdown = this.startAt === null ? 99 : (this.startAt - net.serverNow()) / 1000;
