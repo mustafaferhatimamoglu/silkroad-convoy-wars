@@ -5,7 +5,7 @@
 //           birlikte yukseltir (5.1.0 -> 5.2.0).
 //  RELEASES guncel istemcinin indirilecegi yer (surum uyusmazsa oyuncuya gosterilir).
 
-export const VERSION = '5.1.0';
+export const VERSION = '5.2.0';
 export const RELEASES = 'https://github.com/mustafaferhatimamoglu/silkroad-convoy-wars/releases';
 
 /**

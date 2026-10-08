@@ -41,7 +41,7 @@ import threading
 import time
 import webbrowser
 
-VERSION = "5.1.0"
+VERSION = "5.2.0"
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ARGV = sys.argv[1:]

@@ -136,8 +136,10 @@ python tools/rally/rally.py drive jangan kartal80 ralli   :: otomatik pilotla de
 
 Etap tanımı `tools/rally/stages/<id>.json` (koordinatlar kesirli bölge: bölge = 192 m, rx doğu,
 rz kuzey). Tarama dünyayı bitki örtüsü olmadan kurar (`?noveg=1`); planlanan parkur boyunca ağaç ve
-kayalar oyunda temizlenir (`src/world/gen/tracks.js`). Her etap 8 botla baştan sona yarıştırılarak
-denendi. Yerel harita (tasarım için): `node tools/gen/localmap.mjs çıktı.rgb rx0 rx1 rz0 rz1`.
+kayalar oyunda temizlenir (`src/world/gen/tracks.js`). İsteğe bağlı `avoid`
+(`[rx, rz, yarıçap m, not]`) rotanın ve hızlı çizginin girmeyeceği alanları işaretler (yarış denemesinde
+takla çıkan kaya eteği, yan eğim gibi). Pilot notları kısa ve sert basamakları `vmax` güvenli hızıyla
+işaretler; botlar oraya o hızla varır. Her etap 8 botla baştan sona yarıştırılarak denendi. Yerel harita (tasarım için): `node tools/gen/localmap.mjs çıktı.rgb rx0 rx1 rz0 rz1`.
 
 ## Yapı
 
