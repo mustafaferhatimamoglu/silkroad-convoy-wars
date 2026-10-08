@@ -1,6 +1,7 @@
 import { WorldPlan, WORLD, REGION_M } from './plan.js';
 import { Simplex, hash2, smoothstep } from './noise.js';
 import { placeRegionObjects } from './place.js';
+import { cityLayout } from './city.js';
 
 // V5 dunya verisi: motorun bekledigi bolge verilerini (yukseklik, zemin dokusu, su, renk haritasi,
 // objeler) dunya planindan aninda uretir. Eski WorldData (Silkroad dosyalari) ile ayni arayuz.
@@ -142,14 +143,17 @@ export class GenWorldData {
         if (heights[k] < wl[k] - 2) w = h < 1 ? W.sand : W.mud;
         else if (roads[k] > 0.45 - jit * 0.08) w = kinds[k] === 1 ? (city ? W.paving : W.cobble) : W.road;
         else if (city) {
-          const d = Math.hypot(x - city.x, z - city.z) / city.r;
-          w = d < 0.3 ? W.paving : d < 0.92 ? (jit > 0.15 ? W.cobble : W.dirt) : W.dirt;
+          // meydan tas doseme, caddeler kaldirim, gerisi sikismis toprak (col sehirlerinde kum)
+          const g = cityLayout(plan, city).ground(x, z);
+          const sandy = city.culture === 'desert' || city.culture === 'egypt';
+          w = g === 'plaza' ? W.paving : g === 'street' ? (sandy ? W.paving : W.cobble) : (sandy && jit > 0.25 ? W.sand : W.dirt);
         } else {
           const bio = plan.biome(x, z);
           const snowline = 330 + n.noise(x / 300, z / 300) * 45;
           if (h > snowline && slope < 0.9) w = W.snow;
-          else if (slope > 0.85 - jit * 0.1) w = bio.mesa > 0.25 || bio.sand > 0.5 ? W.redrock : W.rock;
+          else if (slope > 0.62 - jit * 0.1) w = bio.mesa > 0.25 || bio.sand > 0.5 ? W.redrock : W.rock;
           else if (h > 250 + jit * 30) w = slope > 0.4 ? W.rock : W.gravel;
+          else if (slope > 0.38 - jit * 0.08) w = h > 90 || bio.sand < 0.5 ? (jit > 0 ? W.gravel : W.dirt) : W.sand;
           else if (h < 3.2 && plan.seaDepth(x, z) > -120) w = W.sand;   // plaj
           else if (wl[k] > -1e8 && heights[k] < wl[k] + 15) w = W.mud;    // su kiyisi
           else {

@@ -60,7 +60,11 @@ const RANGES = [
   { pts: [[6700, 120], [10000, 260], [15400, 150]], h: 190, w: 420 },
 ];
 const PEAKS = [{ x: 6450, z: 6250, h: 520, r: 700 }];   // Roc Dagi
-const SADDLES = [{ x: 6420, z: 3700, r: 520, k: 0.72 }, { x: 6400, z: 3330, r: 380, k: 0.35 }];
+// gecit vadileri: dag yuksekligi bu cizgiler boyunca azalir (yol dogal bir vadiden kivrilarak tirmanir)
+const VALLEYS = [
+  { pts: [[7500, 3540], [7060, 3570], [6820, 3430], [6660, 3520], [6760, 3720], [6420, 3700], [6200, 3780], [5700, 3820]], k: 0.84, r0: 90, r1: 560 },
+  { pts: [[7900, 4100], [7400, 4950], [7050, 5550], [6900, 5800]], k: 0.7, r0: 60, r1: 420 },
+];
 
 // deniz: bati okyanusu + guney-bati ic deniz + bogaz
 const BASIN = { x: 3100, z: 1700, rx: 3300, rz: 690 };
@@ -179,7 +183,7 @@ export class WorldPlan {
     // yollar: dogal yukseklik boyunca, %9 egim sinirli ve yumusatilmis profil (yarma / dolgu)
     this.roads = ROADS.map((r) => {
       const dense = catmull(r.pts, 4);
-      const line = new Polyline(dense, r.width * 0.5 + 18);
+      const line = new Polyline(dense, r.width * 0.5 + 112);
       let h = Float32Array.from(dense, (p) => this._preRoad(p[0], p[1]));
       // tunel araligi: uclar arasinda dogrusal (dagin icinden)
       let ta = -1, tb = -1;
@@ -248,7 +252,10 @@ export class WorldPlan {
     if (bio.mesa > 0.05) {
       const m = this.n3.fbm(x / 900, z / 900, 4) + this.n.noise(x / 160, z / 160) * 0.03;
       const step = smoothstep(0.30, 0.36, m) * 38 + smoothstep(0.48, 0.52, m) * 24;
-      h += step * smoothstep(0.1, 0.5, bio.mesa);
+      // yollarin cevresinde mesa yok (yol kayayi yarmasin)
+      let nearRoad = Infinity;
+      for (const r of ROADS) nearRoad = Math.min(nearRoad, distPolyline(x, z, r.pts));
+      h += step * smoothstep(0.1, 0.5, bio.mesa) * smoothstep(120, 380, nearRoad);
     }
     // sira daglar
     for (const R of RANGES) {
@@ -256,7 +263,7 @@ export class WorldPlan {
       if (d > R.w) continue;
       const prof = Math.pow(1 - smoothstep(0, R.w, d), 1.5);
       let k = 1;
-      for (const s of SADDLES) k = Math.min(k, 1 - s.k * (1 - smoothstep(0, s.r, Math.hypot(x - s.x, z - s.z))));
+      for (const v of VALLEYS) k = Math.min(k, 1 - v.k * (1 - smoothstep(v.r0, v.r1, distPolyline(x, z, v.pts))));
       h += R.h * prof * (0.45 + 0.75 * this.n.ridged(x / 520, z / 520, 5)) * k;
     }
     for (const P of PEAKS) {
@@ -315,7 +322,8 @@ export class WorldPlan {
         if (q.d < half + 4 && h < rh + 2) out.tunnel = true;
         continue;
       }
-      const w = 1 - smoothstep(half, half + 16, q.d);
+      // sev genisligi yukseklik farkiyla buyur (yarma/dolgu ~35 derece): yol kenari dik kanyon olmaz
+      const w = 1 - smoothstep(half, half + Math.min(14 + Math.abs(h - rh) * 1.5, 110), q.d);
       if (w <= 0) continue;
       h = lerp(h, rh, w);
       const core = 1 - smoothstep(half - 1.5, half + 1.5, q.d);

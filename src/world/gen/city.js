@@ -84,7 +84,12 @@ export function cityLayout(plan, c) {
     houses.push({ x, z, rad });
     items.push({ m: `house:${c.culture}:${Math.floor(rnd() * 4)}:${w}:${dd}:${floors}`, x, z, yaw });
   }
-  const out = { items, gates, streets, ringR };
+  const ground = (x, z) => {
+    const d = Math.hypot(x - c.x, z - c.z);
+    if (d < plaza) return 'plaza';
+    return onStreet(x, z, 0) ? 'street' : 'ground';
+  };
+  const out = { items, gates, streets, ringR, ground };
   CACHE.set(c.id, out);
   return out;
 }
