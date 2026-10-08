@@ -619,7 +619,18 @@ export class RaceMode extends RallyMode {
     }
   }
 
-  /** Oyuncunun ya da botun aracini rotaya geri koy (R iki kez / bot takilmasi). */
+  /** Geri sarmadan sonra: kapi gecisi yanlis algilanmasin, rota konumu genis aramayla bulunsun. */
+  _afterTeleport() {
+    const st = this.me.state, C = this.course;
+    const lo = st.gate > 0 ? C.gates[st.gate - 1].i : 0;
+    const hi = st.gate < C.gates.length ? C.gates[st.gate].i : C.pts.length - 1;
+    st.idx = C.route.nearestGlobal(this.me.sim.body.pos, lo, hi);
+    st.prev = null;
+    this.routeIdx = st.idx;
+    if (this.me.autopilot) this.me.autopilot.resetWatch();
+  }
+
+  /** Oyuncunun ya da botun aracini rotaya geri koy (R 3 sn basili / bot takilmasi). */
   toRoute(car = this.me) {
     const C = this.course, st = car.state, v = car.vehicle, pts = C.pts, w = this.app.world;
     const p = car.sim.body.pos;

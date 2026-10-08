@@ -655,8 +655,13 @@ export class VehicleSim {
         const vn = _v.dot(_t);
         if (vn >= 0) continue;
         const kN = b.invMassAt(_d, _t);
-        const e = -vn > 2.5 ? 0.18 : 0.0;
-        const jn = (-(1 + e) * vn) / kN;
+        // zemine (yukari bakan yuzey) carpan govde: sekmez ve darbe tek adimda en fazla ~6 g; geri
+        // kalani sonraki adimlara yayilir (sac ezilir). Sert sicrama inisinde tek kosenin
+        // (kapi/tampon kuresi) araci aninda takla attirmasini onler. Duvarlar sert kalir.
+        const floor = _t.y > 0.7;
+        const e = floor ? 0 : -vn > 2.5 ? 0.18 : 0.0;
+        let jn = (-(1 + e) * vn) / kN;
+        if (floor) jn = Math.min(jn, 6 * b.mass * 9.81 * dt);
         _J.copy(_t).scale(jn);
         b.applyImpulse(_J, _d);
         // surtunme (metal surtme)

@@ -100,7 +100,7 @@ export class DriveMode {
       this.hud.toast(`Kamera: ${CAMERA_NAMES[m]}`, 1.2);
     }
     if (input.pressed('KeyL')) { v.headlights = !v.headlights; this.hud.toast(v.headlights ? 'Farlar açık' : 'Farlar kapalı', 1.2); }
-    if (input.pressed('KeyR') || (input.gamepad && input.gamepad.pressed(2))) this._recover();
+    this._rewindKey(input);
     if (input.pressed('KeyT')) {
       v.sim.autoShift = !v.sim.autoShift;
       settings.set('transmission', v.sim.autoShift ? 'auto' : 'manual');
@@ -164,12 +164,44 @@ export class DriveMode {
     }
   }
 
-  /** R: devrildiyse yerinde dogrult; sikistiysa biraz geriye (tekrar R: daha geriye). */
-  _recover() {
-    const how = this.vehicle.recover();
-    this.camera.initialized = false;
-    this.hud.toast(how === 'safe' ? 'Biraz geriye alındı (tekrar R: daha geri)' : 'Araç doğrultuldu (tekrar R: geriye al)', 1.6);
+  /**
+   * R (kumandada X) basili tutma kademeleri, basildigi andan itibaren:
+   *   bas: 1 sn geriye | 1 sn tut: 5 sn geriye | 2 sn tut: 10 sn geriye | 3 sn tut: rotaya (ralli/yaris)
+   * Her kademe basis anina gore geri sarar (birikmez). Gecmis yoksa eski kurtarma (dogrult/guvenli nokta).
+   */
+  _rewindKey(input) {
+    const gp = input.gamepad;
+    const down = input.down('KeyR') || !!(gp && gp.buttons[2] > 0.5);
+    const now = performance.now() / 1000;
+    if (!down) { this._rw = null; return; }
+    if (!this._rw) {
+      this._rw = { t0: now, simT0: this.vehicle.sim.time, stage: 0 };
+      this._rewindTo(1);
+      return;
+    }
+    const held = now - this._rw.t0;
+    const tiers = this._routeTier ? [[1, 5], [2, 10], [3, 'route']] : [[1, 5], [2, 10]];
+    for (let k = 0; k < tiers.length; k++) {
+      if (this._rw.stage <= k && held >= tiers[k][0]) {
+        this._rw.stage = k + 1;
+        if (tiers[k][1] === 'route') this._routeTier();
+        else this._rewindTo(tiers[k][1]);
+      }
+    }
   }
+
+  _rewindTo(sec) {
+    const v = this.vehicle;
+    const ok = v.rewind(sec, this._rw.simT0);
+    if (!ok) v.recover();
+    this.camera.initialized = false;
+    this._afterTeleport();
+    const next = sec === 1 ? 'basılı tut: 5 sn' : sec === 5 ? 'basılı tut: 10 sn' : this._routeTier ? 'basılı tut: rotaya dön' : '';
+    this.hud.toast(`${ok ? `${sec} sn geri` : 'Araç doğrultuldu'}${next ? ` (${next})` : ''}`, 1.4);
+  }
+
+  /** Isinlanmadan sonra (geri sarma/rota): yaris/ralli ilerleme takibi sifirlanir. */
+  _afterTeleport() {}
 
   dispose() {
     this.sound.dispose();

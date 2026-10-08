@@ -97,3 +97,20 @@ test('gaz tepkisi: seyirden tam gaza 0.2 sn icinde guclu ivme (vitesler tek tek 
     assert.ok(t03 !== null && t03 < 0.2, `${name} ${speed}: ${t03}`);
   }
 });
+
+test('sert tek teker inisi (yan yatik, 8-10 m/s dusus) takla attirmaz', () => {
+  for (const [name, P] of [['Kartal Ralli', KARTAL_RALLY], ['RS 6', RS6], ['Hilux', HILUX]]) {
+    for (const [roll, pitch, vy] of [[0.25, 0.1, -8], [0.35, -0.15, -9], [0.3, 0, -10]]) {
+      const g = flat(), c = car(P);
+      c.reset(0, P.cgHeight + 3, 0, 0);
+      const q = c.body.q, cr = Math.cos(roll / 2), sr = Math.sin(roll / 2), cp = Math.cos(pitch / 2), sp = Math.sin(pitch / 2);
+      q.x = sp * cr; q.y = 0; q.z = cp * sr; q.w = cp * cr;
+      const n = Math.hypot(q.x, q.y, q.z, q.w); q.x /= n; q.z /= n; q.w /= n;
+      c.body.vel.set(0, vy, -18);
+      for (const w of c.wheels) w.omega = 18 / w.radius;
+      let minUp = 1;
+      run(c, g, 3, { accel: 0.5 }, (t, s) => { const qq = s.body.q; minUp = Math.min(minUp, 1 - 2 * (qq.x * qq.x + qq.z * qq.z)); });
+      assert.ok(minUp > 0.5, `${name} yatis ${roll} dusus ${vy}: devrildi (dikey ${minUp.toFixed(2)})`);
+    }
+  }
+});

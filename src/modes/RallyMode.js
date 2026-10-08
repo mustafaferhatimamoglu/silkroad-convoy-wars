@@ -293,24 +293,24 @@ export class RallyMode extends DriveMode {
     this.resultEl = el;
   }
 
-  /**
-   * R: devrildiyse ve yeri uygunsa yerinde dogrult; aksi halde (sikisti, rotadan cikti, ikinci
-   * basis) dogrudan rotaya: gecilen kapi ile siradaki kapi arasindaki en yakin yol noktasina.
-   */
-  _recover() {
-    const now = performance.now();
-    const again = this._recT && now - this._recT < 4000;
-    this._recT = now;
-    this.camera.initialized = false;
-    if (this.state === 'done') { this.vehicle.recover(); this.hud.toast('Araç doğrultuldu', 1.4); return; }
-    const q = this.vehicle.sim.body.q;
-    const flipped = 1 - 2 * (q.x * q.x + q.z * q.z) < 0.6;
-    if (flipped && !again && this.vehicle.recover({ inPlaceOnly: true }) === 'upright') {
-      this.hud.toast('Araç doğrultuldu (tekrar R: rotaya dön)', 1.6);
-      return;
-    }
+  /** R'yi 3 sn basili tutma: rotaya (gecilen kapi ile siradaki kapi arasindaki en yakin yol noktasi). */
+  _routeTier() {
+    if (this.state === 'done') return;
     this.toRoute();
     this.hud.toast('Rotaya dönüldü', 1.6);
+  }
+
+  /** Geri sarmadan sonra: kapi gecisi yanlis algilanmasin, rota konumu genis aramayla bulunsun. */
+  _afterTeleport() {
+    this._prevPos = null;
+    const p = this.vehicle.position, pts = this.pts;
+    const lo = this.cpIndex > 0 ? this.cps[this.cpIndex - 1].i : 0;
+    const hi = this.cpIndex < this.cps.length ? this.cps[this.cpIndex].i : pts.length - 1;
+    let best = Infinity;
+    for (let i = lo; i <= hi; i++) {
+      const d = (pts[i].x - p.x) ** 2 + (pts[i].z - p.z) ** 2;
+      if (d < best) { best = d; this.routeIdx = i; }
+    }
   }
 
   /** Araci rota cizgisine koyar: gecilen son kapi ile siradaki kapi arasindaki en yakin nokta. */

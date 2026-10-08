@@ -41,7 +41,7 @@ Hızlı test adresleri:
 | Sağ fare tuşu | Etrafa bakma |
 | F | Tam ekran: fare kilitlenir, tuşa basmadan fareyle etrafa bakılır (Esc: kilidi aç / menü) |
 | L | Farlar |
-| R | Devrildiysen yerinde doğrultur; sıkıştıysan, suya ya da çukura düştüysen biraz geriye (en az 6 m, sürdüğün yöne bakarak) alır, tekrar basınca daha geriye. Ralli ve yarışta devrilme dışında doğrudan rotaya döner. Araç duvar, çatı ya da ağaç içine konmaz |
+| R | Zamanda geri sarar: basınca 1 sn geriye; 1 sn basılı tutunca 5 sn, 2 sn tutunca 10 sn geriye (basıldığı ana göre). Ralli ve yarışta 3 sn basılı tutmak rotaya döndürür. Araç dik, durağan ve duvar/çatı/su dışında bir yere konur |
 | V | Yarışta finişten sonra diğer araçları izle |
 | T | Otomatik / manuel şanzıman (manuelde Q / E vites) |
 | Esc | Menü |
@@ -63,9 +63,8 @@ Altı etap, her şehrin çevresinde (ana menüden **Ralli: Zamana Karşı**):
 
 Sıradaki kapı ışık sütunuyla, ondan sonraki sönük direklerle görünür; mini haritada rota
 çizilidir. Üst paneldeki **pilot notları** yaklaşan virajın yönünü ve şiddetini (1 en keskin … 6
-en hafif, firkete, *uzun*) ve tümsek / sıçrama / çukuru mesafesiyle söyler. R aracı rotaya (son
-geçilen ile sıradaki kapı arasındaki en yakın noktaya) geri koyar; yalnız devrildiysen önce yerinde
-doğrultur.
+en hafif, firkete, *uzun*) ve tümsek / sıçrama / çukuru mesafesiyle söyler. R'yi 3 sn basılı tutmak
+aracı rotaya (son geçilen ile sıradaki kapı arasındaki en yakın noktaya) geri koyar.
 
 ## Yarış: Botlara Karşı
 

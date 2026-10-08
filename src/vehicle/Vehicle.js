@@ -208,6 +208,38 @@ export class Vehicle {
     this._recIdx = undefined;   // yeni yol katedildi: tekrar basis zinciri sifirlanir
   }
 
+  /** Konum gecmisi (geri sarma icin): 0.1 sn'de bir, son ~16 sn (fizik saati). */
+  _trackHistory() {
+    const s = this.sim, b = s.body, h = this._hist || (this._hist = []);
+    const last = h[h.length - 1];
+    if (last && s.time - last.t < 0.1) return;
+    const v = b.vel;
+    const yaw = s.forwardSpeed > 2 ? Math.atan2(-v.x, -v.z) : this._headingYaw(this._safe || []);
+    h.push({ t: s.time, x: b.pos.x, y: b.pos.y - this.params.cgHeight, z: b.pos.z, yaw });
+    if (h.length > 160) h.shift();
+  }
+
+  /**
+   * Zamanda geri sar: fizik saatine gore `from` aninin `seconds` oncesindeki konuma, o anki gidis
+   * yonuyle, dik ve duragan koy. Hedef bossa (duvar/cati/su degil) oraya, degilse daha eskisine.
+   * Sonraki gecmis silinir (yeni zaman cizgisi). Donus: true ya da (gecmis yoksa) false.
+   */
+  rewind(seconds, from = this.sim.time) {
+    const h = this._hist || [];
+    const t = from - seconds;
+    let i = h.length - 1;
+    while (i > 0 && h[i].t > t) i--;
+    for (; i >= 0; i--) {
+      const p = h[i];
+      const y = this._freeSpot(p.x, p.z, p.y + 1.2, p.yaw);
+      if (y === null) continue;
+      h.length = i;   // bu noktadan sonrasi silinir; tekrar geri sarma daha eskiye gider
+      this._place(p.x, y, p.z, p.yaw);
+      return true;
+    }
+    return false;
+  }
+
   /** Aracin altindaki bolge (carpisma geometrisi) yuklu mu; degilse fizik beklemeli. */
   groundReady() {
     if (!this.ground) return true;
@@ -237,7 +269,7 @@ export class Vehicle {
 
   /** Adimlardan sonra: guvenli nokta kaydi, gorsel senkron (alpha: ara degerleme), hasar, yansima. */
   postStep(dt, alpha) {
-    if (this.ground) this._trackSafe(dt);
+    if (this.ground) { this._trackSafe(dt); this._trackHistory(); }
     this._sync(alpha);
     this.damage.update(dt);
     if (this.reflections) {
