@@ -5,6 +5,7 @@ import { GarageMode } from './modes/GarageMode.js';
 import { DriveMode } from './modes/DriveMode.js';
 import { ExploreMode } from './modes/ExploreMode.js';
 import { MouseLock } from './core/MouseLock.js';
+import { BigMap } from './ui/BigMap.js';
 
 // Oyun denetleyicisi: modlar arasi gecis, sehir yukleme ekranlari, menuler, ayarlar.
 
@@ -19,6 +20,7 @@ export class Game {
     app.game = this;
     this.menu = new Menu(app.ui, this);
     this.overlay = null;
+    this.bigMap = new BigMap(app);
     // tam ekranda fare kilidi: yalniz surus suruyorken (menu, duraklatma, sonuc ekrani yokken)
     this.mouseLock = app.mouseLock = new MouseLock(app, {
       onLost: () => { const m = app.mode; if (m && m.vehicle && !m.paused && m.onPause) m.onPause(); },
@@ -26,7 +28,7 @@ export class Game {
     app.onFrame(() => {
       const m = app.mode;
       const driving = !!(m && m.vehicle && m.camera && m.hud && !m.paused) && !this.menu.layer && !this.overlay
-        && !(m.resultEl && m.resultEl.isConnected);
+        && !(m.resultEl && m.resultEl.isConnected) && !this.bigMap.open && !(m.transport && m.transport.panelOpen);
       this.mouseLock.setWant(driving);
     });
   }
@@ -381,15 +383,18 @@ export class Game {
     });
   }
 
-  async teleport(id) {
+  /** Sehre isinlan. at: { x, z, heading } (Three.js; ornegin hedef kapinin cikisi) verilirse oraya. */
+  async teleport(id, at = null) {
     const mode = this.app.mode;
     const { city, pos } = this.cityPos(id);
+    if (at) pos.set(at.x, pos.y, at.z);
     mode.paused = true;
     const keep = mode.focus.clone();
     mode.focus.copy(pos);
     await this.loadArea(pos, `${city.name} yükleniyor…`);
-    const sp = this.findSpawn(pos, city.heading);
+    const sp = at ? { x: at.x, z: at.z, heading: at.heading, y: this.groundTop(at.x, at.z) } : this.findSpawn(pos, city.heading);
     mode.vehicle.spawn(sp.x, sp.z, sp.heading, sp.y);
+    if (mode.vehicle._hist) mode.vehicle._hist.length = 0;
     mode.focus.copy(mode.vehicle.position);
     mode.camera.initialized = false;
     mode.paused = false;

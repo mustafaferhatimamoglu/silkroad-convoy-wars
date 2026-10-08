@@ -188,6 +188,8 @@ export class WorldPlan {
     this.n3 = new Simplex(seed + 2);
     this.cities = CITIES.map((c) => ({ ...c }));
     for (const c of this.cities) c.h = Math.max(8, this._natural(c.x, c.z, false));
+    // isinlanma kapilari: meydanin dogu kenari, gecis dogu-bati (dogu caddesi hizasinda)
+    this.portals = this.cities.map((c) => ({ city: c.id, name: c.name, culture: c.culture, x: c.x + c.r * 0.24, z: c.z, yaw: 0 }));
     // nehirler: yatak boyunca su seviyesi agiza dogru hic yukselmez
     this.rivers = RIVERS.map((r) => {
       const dense = catmull(r.pts, 6);

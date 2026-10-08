@@ -43,6 +43,13 @@ export function placeRegionObjects(data, rx, rz, d) {
     }
   }
 
+  // ---- isinlanma kapilari
+  for (const g of plan.portals) {
+    const lx = g.x - x0, lz = g.z - z0;
+    if (lx < 0 || lx >= REGION_M || lz < 0 || lz >= REGION_M) continue;
+    push(`portal:${g.culture}`, lx, lz, g.yaw, 1, 0.3);
+  }
+
   // ---- feribot iskeleleri (kiyidan iskele ucuna, guverte su seviyesinin 1.2 m ustunde)
   for (const f of plan.ferries) {
     for (const dk of [f.a, f.b]) {

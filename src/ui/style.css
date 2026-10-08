@@ -226,3 +226,10 @@ select { background: #141a26; color: var(--text); border: 1px solid rgba(255, 25
 .results-panel th { text-align: left; font-weight: 600; color: var(--muted); font-size: 12px; padding: 4px 6px; border-bottom: 1px solid rgba(255,255,255,0.12); }
 .results-panel td { padding: 4px 6px; color: var(--text); }
 .results-panel tr.me td { color: #fff; font-weight: 700; background: rgba(255, 211, 107, 0.08); }
+
+/* buyuk dunya haritasi (M) */
+#bigmap { position: absolute; inset: 3vh 3vw; background: rgba(8, 10, 12, 0.92); border: 1px solid rgba(232, 193, 112, 0.45); border-radius: 10px; overflow: hidden; z-index: 30; pointer-events: auto; }
+#bigmap canvas { width: 100%; height: 100%; display: block; cursor: grab; }
+#bigmap .bm-title { position: absolute; top: 10px; left: 16px; color: var(--gold); font: 600 18px Georgia, serif; text-shadow: 0 1px 3px #000; }
+#bigmap .bm-title span { margin-left: 12px; font: 12px sans-serif; color: var(--muted); }
+#bigmap .bm-wait { position: absolute; top: 40px; left: 16px; color: var(--muted); font-size: 13px; }

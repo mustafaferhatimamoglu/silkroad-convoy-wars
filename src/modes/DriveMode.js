@@ -85,12 +85,14 @@ export class DriveMode {
 
   update(dt) {
     const { input } = this.app;
-    if (input.pressed('Escape') && this.onPause) { this.onPause(); }
+    if (input.pressed('Escape') && this.onPause && !(this.transport && this.transport.panelOpen)) { this.onPause(); }
     if (this.paused) { this.camera.update(0, input); return; }
     const c = this._readControls(dt);
     this._keys();
     // gemideyken arac fizigi durur, araci gemi tasir
     if (!(this.transport && this.transport.update(dt, this))) this._stepVehicles(dt, c);
+    // isinlanma basladiysa (yukleme) odak hedefte kalsin
+    if (this.paused) return;
     this._afterVehicle(dt);
   }
 
@@ -116,7 +118,8 @@ export class DriveMode {
       settings.set('engineSound', on); this.sound.setEngine(on);
       this.hud.toast(on ? 'Motor sesi açık' : 'Motor sesi kapalı', 1.2);
     }
-    if (input.pressed('KeyM')) {
+    if (input.pressed('KeyM') && this.app.game) this.app.game.bigMap.toggle();
+    if (input.pressed('KeyK')) {
       this.app.audio.setMusicMuted(!this.app.audio.musicMuted);
       this.hud.toast(this.app.audio.musicMuted ? 'Müzik kapalı' : 'Müzik açık', 1.2);
     }
@@ -158,6 +161,7 @@ export class DriveMode {
     this.sound.update(dt);
     this.effects.update(dt);
     this.hud.update(dt, v, this.camera.mode);
+    if (this.app.game && this.app.game.bigMap.open) this.app.game.bigMap.draw(v.position, v.sim.yaw, this._mapOthers ? this._mapOthers() : []);
     this.focus.copy(v.position);
     // bolge muzigi
     this._musicT -= dt;

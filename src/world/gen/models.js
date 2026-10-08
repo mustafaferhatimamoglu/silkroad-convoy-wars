@@ -409,6 +409,17 @@ function ferryBoat() {
   ];
 }
 
+/** Isinlanma kapisi: gecis yerel X boyunca, 10 m serbest genislik, 9 m yukseklik. */
+function portal(culture) {
+  const C = CULTURE[culture];
+  const g = [box(2.2, 9, 2.2, 0, 0, -6.1), box(2.2, 9, 2.2, 0, 0, 6.1), box(3, 1.8, 15, 0, 9, 0)];
+  const base = [box(4, 0.3, 16, 0, -0.1, 0)];
+  const parts = [part(mergeGeos(g), culture === 'china' ? C.trim : C.wall, { uvScale: 2 }), part(mergeGeos(base), 'build/marble', { uvScale: 2, collide: false })];
+  if (culture === 'china') { const rf = hipRoof(4, 16, 2, 1.0, 0.4); rf.translate(0, 10.8, 0); parts.push(part(rf, C.roof, { uvScale: 2 })); }
+  else if (culture === 'persian') { const dm = dome(1.6, 1.6); dm.translate(0, 10.8, 0); parts.push(part(dm, 'build/mosaic_turquoise', { uvScale: 1.5 })); }
+  return parts;
+}
+
 // ------------------------------------------------------------------ katalog
 
 /**
@@ -432,6 +443,7 @@ export function model(key) {
   else if (kind === 'landmark') m = landmark(a[1], rnd);
   else if (kind === 'pier') m = pier(Number(a[1]));
   else if (kind === 'ferry') m = ferryBoat();
+  else if (kind === 'portal') m = portal(a[1]);
   else m = [];
   CACHE.set(key, m);
   return m;

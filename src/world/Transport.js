@@ -36,6 +36,17 @@ export class Transport {
     }
     this._meshReady = this._buildMeshes();
     this._promptT = 0;
+    // isinlanma kapilari: donen isikli halka + hedef secim paneli
+    this.portals = plan.portals.map((g) => {
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(4.6, 0.35, 10, 48), new THREE.MeshBasicMaterial({ color: 0x9fd8ff, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false }));
+      const disc = new THREE.Mesh(new THREE.CircleGeometry(4.4, 48), new THREE.MeshBasicMaterial({ color: 0x4aa8ff, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+      const grp = new THREE.Group();
+      grp.add(ring, disc);
+      grp.rotation.y = g.yaw + Math.PI / 2;    // halka gecis yonune dik
+      this.group.add(grp);
+      return { ...g, grp, ring, disc, placed: false };
+    });
+    this.panel = null;
   }
 
   async _buildMeshes() {
@@ -78,7 +89,9 @@ export class Transport {
       }
     }
     this._colliders();
+    this._portalFx(t);
     if (this.riding) return true;
+    if (this._portal(mode)) return false;
     // binis: iskele ucunda ya da iskeledeki geminin guvertesinde, yavas
     const v = mode.vehicle, p = v.position;
     const X = p.x, Z = -p.z;
@@ -207,7 +220,65 @@ export class Transport {
     ride.mode.hud.toast('Karşı kıyıya varıldı', 2);
   }
 
+  /** Kapi halkalari: zemin yuksekligi yuklenince yerine oturur; doner ve parlar. */
+  _portalFx(t) {
+    const w = this.app.world;
+    for (const g of this.portals) {
+      if (!g.placed) {
+        const h = w.heightAt(g.x, -g.z);
+        if (h === null) { g.grp.visible = false; continue; }
+        g.grp.position.set(g.x, h + 4.9, -g.z); g.grp.visible = true; g.placed = true;
+      }
+      g.ring.rotation.z = t * 0.6;
+      g.disc.material.opacity = 0.16 + Math.sin(t * 2.2) * 0.06;
+    }
+  }
+
+  /** Kapinin icinde yavasken: G ile hedef paneli; secince isinlanir. Donus: panel acik mi. */
+  _portal(mode) {
+    const v = mode.vehicle, p = v.position, X = p.x, Z = -p.z;
+    const input = this.app.input, gp = input.gamepad;
+    const here = this.portals.find((g) => Math.abs(X - g.x) < 5 && Math.abs(Z - g.z) < 5.5);
+    if (this.panel) {
+      if (!here || input.pressed('Escape') || input.pressed('KeyG')) { this._closePanel(); return false; }
+      for (let k = 0; k < this.panel.list.length; k++) if (input.pressed(`Digit${k + 1}`)) { this._go(this.panel.list[k], mode); return true; }
+      return true;
+    }
+    if (!here) return false;
+    this._promptT -= 1 / 60;
+    if (this._promptT <= 0) { this._promptT = 0.5; mode.hud.toast(`G: Işınlanma kapısı (${here.name})`, 0.7); }
+    if ((input.pressed('KeyG') || (gp && gp.pressed(1))) && v.sim.speed < 4) this._openPanel(here, mode);
+    return false;
+  }
+
+  _openPanel(here, mode) {
+    const list = this.portals.filter((g) => g !== here);
+    const el = document.createElement('div');
+    el.className = 'panel dialog interactive';
+    el.style.width = '380px';
+    el.innerHTML = `<h2>Işınlanma kapısı</h2><div style="color:var(--muted);font-size:13px;margin-bottom:8px">${here.name} kapısından nereye?</div>
+      ${list.map((g, k) => `<button class="btn" data-k="${k}" style="margin:4px 0">${k + 1}. ${g.name}</button>`).join('')}
+      <div style="color:var(--muted);font-size:12px;margin-top:8px">1–${list.length} ya da tıkla · G/Esc: vazgeç</div>`;
+    el.addEventListener('click', (e) => { const b = e.target.closest('[data-k]'); if (b) this._go(list[Number(b.dataset.k)], mode); });
+    this.app.ui.appendChild(el);
+    this.panel = { el, list };
+    if (this.app.mouseLock && this.app.mouseLock.locked) document.exitPointerLock();
+  }
+
+  _closePanel() { if (this.panel) { this.panel.el.remove(); this.panel = null; } }
+
+  _go(g, mode) {
+    this._closePanel();
+    // hedef kapinin dogu cikisi, doguya bakarak
+    const at = { x: g.x + 10, z: -g.z, heading: -Math.PI / 2 };
+    if (this.app.game) this.app.game.teleport(g.city, at);
+    void mode;
+  }
+
+  get panelOpen() { return !!this.panel; }
+
   dispose() {
+    this._closePanel();
     this.app.collision.boxes.length = 0;
     this.app.scene.remove(this.group);
   }
