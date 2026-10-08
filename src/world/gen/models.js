@@ -360,6 +360,55 @@ function landmark(culture, rnd) {
   return parts;
 }
 
+// ------------------------------------------------------------------ ulasim
+
+/** Iskele: yerel +X boyunca L m (0..L), 10 m genis, ust yuzey y = 0; kazik ve korkuluk. */
+function pier(L) {
+  const deck = box(L, 0.6, 10, L / 2, -0.6, 0);
+  const piles = [];
+  for (let x = 2; x < L; x += 5) for (const z of [-4.4, 4.4]) { const p = new THREE.CylinderGeometry(0.28, 0.32, 9, 8); p.translate(x, -4.8, z); piles.push(p); }
+  const rails = [box(L, 0.9, 0.18, L / 2, 0, -4.9), box(L, 0.9, 0.18, L / 2, 0, 4.9)];
+  const posts = [];
+  for (let x = 1; x < L; x += 3) for (const z of [-4.9, 4.9]) posts.push(box(0.2, 1.0, 0.2, x, 0, z));
+  return [
+    part(deck, 'build/wood_planks', { uvScale: 2 }),
+    part(mergeGeos(piles), 'build/bark', { uvScale: 2 }),
+    part(mergeGeos([...rails, ...posts]), 'build/wood_planks', { uvScale: 2, collide: true }),
+  ];
+}
+
+/** Feribot (arac gemisi): yerel +X burun, guverte ustu y = 0, 26 x 10 m. */
+function ferryBoat() {
+  const L = 26, W = 10;
+  const hull = new THREE.BoxGeometry(L, 2.6, W);
+  const p = hull.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    // alt kenarlari daralt, burun ve kici yukari kivir
+    const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+    const bottom = y < 0;
+    const endK = Math.abs(x) / (L / 2);
+    p.setXYZ(i, x * (bottom ? 0.86 : 1), y + (bottom ? endK * endK * 1.0 : 0), z * (bottom ? 0.7 : 1));
+  }
+  hull.computeVertexNormals();
+  hull.translate(0, -1.6, 0);
+  const deck = box(L - 1, 0.3, W - 1, 0, -0.3, 0);
+  const rails = [];
+  // cift uclu arac gemisi: guverte iki uctan da acik, kabin yan tarafta
+  const cabin = box(7, 3.2, 1.6, 0, 0, -W / 2 + 1.1);
+  const roof = box(7.6, 0.3, 2.2, 0, 3.2, -W / 2 + 1.1);
+  const mast = new THREE.CylinderGeometry(0.15, 0.2, 7, 6); mast.translate(0, 6.5, -W / 2 + 1.1);
+  const ramp = box(0.3, 0.3, W - 2, L / 2 - 0.2, -0.1, 0);
+  rails.length = 0;
+  rails.push(box(L - 10, 1.0, 0.25, 0, 0, W / 2 - 0.3));
+  return [
+    part(hull, 'build/wood_lacquer', { uvScale: 2.5, collide: false }),
+    part(mergeGeos([deck, ramp]), 'build/wood_planks', { uvScale: 2, collide: false }),
+    part(mergeGeos([...rails, roof]), 'build/wood_planks', { uvScale: 2, collide: false }),
+    part(cabin, 'build/plaster_white', { uvScale: 2, collide: false }),
+    part(mast, 'build/bark', { uvScale: 2, collide: false }),
+  ];
+}
+
 // ------------------------------------------------------------------ katalog
 
 /**
@@ -381,6 +430,8 @@ export function model(key) {
   else if (kind === 'tower') m = tower(a[1]);
   else if (kind === 'gate') m = gate(a[1]);
   else if (kind === 'landmark') m = landmark(a[1], rnd);
+  else if (kind === 'pier') m = pier(Number(a[1]));
+  else if (kind === 'ferry') m = ferryBoat();
   else m = [];
   CACHE.set(key, m);
   return m;

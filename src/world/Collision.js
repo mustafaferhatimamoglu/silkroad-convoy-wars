@@ -14,6 +14,8 @@ const _regions = [];
 export class Collision {
   constructor(world) {
     this.world = world;
+    // hareketli kutular (iskeledeki gemi guvertesi, bariyerler): { x, y, z (merkez, Three), hx, hy, hz, yaw }
+    this.boxes = [];
   }
 
   /**
@@ -49,6 +51,15 @@ export class Collision {
           if (out.normal.dot(dir) > 0) out.normal.negate();
           out.object = true;
         }
+      }
+    }
+    for (const b of this.boxes) {
+      const t = rayBox(origin, dir, b, best, _n);
+      if (t !== null && t < best) {
+        best = t; hit = true;
+        out.point.copy(origin).addScaledVector(dir, t);
+        out.normal.copy(_n);
+        out.object = true;
       }
     }
     if (hit) {
@@ -106,6 +117,12 @@ export class Collision {
         c.depth = depth; c.object = false;
       }
     }
+    // hareketli kutular
+    for (const b of this.boxes) {
+      if (count >= max) break;
+      const c = sphereBox(center, radius, b, contacts[count]);
+      if (c) count++;
+    }
     // objeler
     w.bvhsNear(center.x, center.z, radius + 0.5, _regions);
     for (const r of _regions) {
@@ -144,6 +161,49 @@ export class Collision {
     }
     return count;
   }
+}
+
+/** Yonlu kutu (y ekseni etrafinda yaw) ile isin: mesafe ya da null; nOut yuzey normali. */
+function rayBox(o, d, b, far, nOut) {
+  const c = Math.cos(b.yaw), s = Math.sin(b.yaw);
+  // dunyadan kutu yereline (Three Y donusu tersi)
+  const px = o.x - b.x, py = o.y - b.y, pz = o.z - b.z;
+  const lx = c * px - s * pz, lz = s * px + c * pz;
+  const dx = c * d.x - s * d.z, dz = s * d.x + c * d.z;
+  const O = [lx, py, lz], D = [dx, d.y, dz], H = [b.hx, b.hy, b.hz];
+  let t0 = 0, t1 = far, axis = -1, sgn = 1;
+  for (let k = 0; k < 3; k++) {
+    if (Math.abs(D[k]) < 1e-9) { if (Math.abs(O[k]) > H[k]) return null; continue; }
+    let a = (-H[k] - O[k]) / D[k], bb = (H[k] - O[k]) / D[k];
+    let sg = -1;
+    if (a > bb) { const tt = a; a = bb; bb = tt; sg = 1; }
+    if (a > t0) { t0 = a; axis = k; sgn = sg; }
+    if (bb < t1) t1 = bb;
+    if (t0 > t1) return null;
+  }
+  if (axis < 0) return null;
+  const n = [0, 0, 0]; n[axis] = sgn;
+  // yerel normal -> dunya
+  nOut.set(c * n[0] + s * n[2], n[1], -s * n[0] + c * n[2]);
+  return t0;
+}
+
+/** Kure - yonlu kutu temasi; temas varsa ct doldurulur. */
+function sphereBox(p, r, b, ct) {
+  const c = Math.cos(b.yaw), s = Math.sin(b.yaw);
+  const px = p.x - b.x, py = p.y - b.y, pz = p.z - b.z;
+  const lx = c * px - s * pz, lz = s * px + c * pz;
+  const qx = Math.max(-b.hx, Math.min(b.hx, lx)), qy = Math.max(-b.hy, Math.min(b.hy, py)), qz = Math.max(-b.hz, Math.min(b.hz, lz));
+  const ex = lx - qx, ey = py - qy, ez = lz - qz;
+  const d2 = ex * ex + ey * ey + ez * ez;
+  if (d2 >= r * r) return false;
+  let nx, ny, nz, depth;
+  if (d2 > 1e-10) { const d = Math.sqrt(d2); nx = ex / d; ny = ey / d; nz = ez / d; depth = r - d; }
+  else { nx = 0; ny = 1; nz = 0; depth = r + b.hy - py; }
+  ct.normal.set(c * nx + s * nz, ny, -s * nx + c * nz);
+  ct.point.set(b.x + c * qx + s * qz, b.y + qy, b.z - s * qx + c * qz);
+  ct.depth = depth; ct.object = true;
+  return true;
 }
 
 export function makeContacts(n = 8) {

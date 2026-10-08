@@ -47,7 +47,7 @@ export class RallyMode extends DriveMode {
   constructor(app, opts = {}) {
     const st = RallyMode.stage(opts.stage);
     const p = RallyMode.startPosition(app.world, opts.stage);
-    super(app, { ...opts, x: p.x, z: p.z, yaw: p.yaw, city: 'hotan' });
+    super(app, { ...opts, x: p.x, z: p.z, yaw: p.yaw, city: 'hotan', transport: false });
     this.st = st;
     this.stageId = opts.stage || 'hotan';
     this.onFinish = opts.onFinish;

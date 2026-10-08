@@ -35,6 +35,16 @@ export const ROADS = [
   { id: 'alex-port', kind: 'paved', width: 9, pts: [[2700, 1120], [2650, 980], [2600, 870]] },
   { id: 'roc', kind: 'dirt', width: 7, pts: [[8000, 3740], [7850, 4300], [7400, 4950], [7050, 5550], [6900, 5800]] },
   { id: 'strait-west', kind: 'dirt', width: 7, pts: [[1120, 4700], [900, 5200], [700, 5900], [800, 6600]] },
+  { id: 'strait-east', kind: 'paved', width: 9, pts: [[1640, 4620], [1560, 4670], [1480, 4700]] },
+];
+
+// feribotlar: iki kiyidaki iskele (yolun bittigi yer -> suya dogru), sure (sn). Iskele ucunda durup
+// G ile binilir; arac guverteyle karsiya gecer.
+// a/b: karadaki yaklasik baslangic (yol ucu); kiyi ve iskele ucu plan kurulurken bulunur.
+export const FERRIES = [
+  { id: 'huang', name: 'Büyük Nehir Feribotu', a: { x: 12160, z: 3950 }, b: { x: 11980, z: 3950 }, time: 26 },
+  { id: 'strait', name: 'Boğaz Feribotu', a: { x: 1480, z: 4700 }, b: { x: 1120, z: 4700 }, time: 32 },
+  { id: 'sea', name: 'İskenderiye Gemisi', a: { x: 2300, z: 2560 }, b: { x: 2700, z: 1120 }, time: 55 },
 ];
 
 // nehirler: kaynaktan agiza. width: yatak genisligi, depth: kiyiya gore su derinligi
@@ -155,6 +165,15 @@ class Polyline {
     }
     if (!best || best.d > this.reach) return null;
     best.s = this.cum[best.i] + (this.cum[best.i + 1] - this.cum[best.i]) * best.t;
+    // cizginin ucunu gecen mesafe (yolun etkisi ucta soner)
+    best.past = 0;
+    const last = this.p.length - 2;
+    if ((best.i === 0 && best.t === 0) || (best.i === last && best.t === 1)) {
+      const k = best.i === 0 && best.t === 0 ? 0 : last + 1;
+      const o = k === 0 ? 1 : last;
+      const ax = this.p[k][0] - this.p[o][0], az = this.p[k][1] - this.p[o][1], L = Math.hypot(ax, az) || 1;
+      best.past = Math.max(0, ((x - this.p[k][0]) * ax + (z - this.p[k][1]) * az) / L);
+    }
     return best;
   }
 }
@@ -180,8 +199,18 @@ export class WorldPlan {
       return { ...r, dense, line, lvl };
     });
     for (const l of LAKES) l.level = this._natural(l.x, l.z, true) - 2.5;
+    // feribot iskeleleri: karadan karsi kiyiya dogru ilerle; ilk derin su noktasi iskele ucu, ondan
+    // onceki kuru nokta kiyi (yol oraya kadar uzanir)
+    this.ferries = FERRIES.map((f) => ({ ...f, a: this._dock(f.a, f.b), b: this._dock(f.b, f.a) }));
+    const roadDefs = ROADS.map((r) => {
+      const pts = r.pts.map((p) => p.slice());
+      for (const f of this.ferries) for (const d of [f.a, f.b]) {
+        for (const k of [0, pts.length - 1]) if (Math.hypot(pts[k][0] - d.x0, pts[k][1] - d.z0) < 2) pts[k] = [d.sx, d.sz];
+      }
+      return { ...r, pts };
+    });
     // yollar: dogal yukseklik boyunca, %9 egim sinirli ve yumusatilmis profil (yarma / dolgu)
-    this.roads = ROADS.map((r) => {
+    this.roads = roadDefs.map((r) => {
       const dense = catmull(r.pts, 4);
       const line = new Polyline(dense, r.width * 0.5 + 112);
       let h = Float32Array.from(dense, (p) => this._preRoad(p[0], p[1]));
@@ -193,14 +222,43 @@ export class WorldPlan {
         for (let i = ta; i <= tb; i++) h[i] = lerp(h[ta], h[tb], (i - ta) / (tb - ta));
       }
       h = smooth(h, 8);
+      // feribot iskelesine varan uc: su seviyesinin 1.2 m ustu (yaklasim rampasi egim sinirindan gelir)
+      const pins = [];
+      for (const f of this.ferries) for (const d of [f.a, f.b]) {
+        for (const k of [0, dense.length - 1]) if (Math.hypot(dense[k][0] - d.sx, dense[k][1] - d.sz) < 2) { pins.push([k, d.wl + 1.2]); d.road = r.id; }
+      }
+      const pin = () => { for (const [k, v] of pins) h[k] = v; };
       const g = 0.09 * 4;
-      for (let pass = 0; pass < 2; pass++) {
+      for (let pass = 0; pass < 3; pass++) {
+        pin();
         for (let i = 1; i < h.length; i++) h[i] = clamp(h[i], h[i - 1] - g, h[i - 1] + g);
+        pin();
         for (let i = h.length - 2; i >= 0; i--) h[i] = clamp(h[i], h[i + 1] - g, h[i + 1] + g);
       }
       h = smooth(h, 3);
+      pin();
+      for (let i = h.length - 2; i >= 0; i--) h[i] = clamp(h[i], h[i + 1] - g, h[i + 1] + g);
+      for (let i = 1; i < h.length; i++) h[i] = clamp(h[i], h[i - 1] - g, h[i - 1] + g);
+      pin();
       return { ...r, dense, line, h, ta, tb };
     });
+  }
+
+  /** Iskele: p (kara) -> q yonunde kiyi (sx,sz,sh) ve iskele ucu (ex,ez); su seviyesi wl. */
+  _dock(p, q) {
+    const dx = q.x - p.x, dz = q.z - p.z, L = Math.hypot(dx, dz), ux = dx / L, uz = dz / L;
+    let dry = 0;
+    for (let t = 0; t < L; t += 2) {
+      const x = p.x + ux * t, z = p.z + uz * t;
+      const wl = this.waterLevel(x, z);
+      const h = this._riverCarve(x, z, this._natural(x, z, true));   // kirpilmamis (deniz tabani dahil)
+      if (wl !== null && h < wl - 1.2) {
+        const sx = p.x + ux * Math.max(0, dry - 6), sz = p.z + uz * Math.max(0, dry - 6);
+        return { x0: p.x, z0: p.z, sx, sz, sh: Math.max(this._preRoad(sx, sz), wl + 0.6), ex: x + ux * 10, ez: z + uz * 10, wl, ux, uz };
+      }
+      dry = t;
+    }
+    return { x0: p.x, z0: p.z, sx: p.x, sz: p.z, sh: this._preRoad(p.x, p.z), ex: p.x + ux * 20, ez: p.z + uz * 20, wl: 0, ux, uz };
   }
 
   // ---------------------------------------------------------------- dogal arazi
@@ -323,7 +381,7 @@ export class WorldPlan {
         continue;
       }
       // sev genisligi yukseklik farkiyla buyur (yarma/dolgu ~35 derece): yol kenari dik kanyon olmaz
-      const w = 1 - smoothstep(half, half + Math.min(14 + Math.abs(h - rh) * 1.5, 110), q.d);
+      const w = (1 - smoothstep(half, half + Math.min(14 + Math.abs(h - rh) * 1.5, 110), q.d)) * (1 - smoothstep(0, 10, q.past));
       if (w <= 0) continue;
       h = lerp(h, rh, w);
       const core = 1 - smoothstep(half - 1.5, half + 1.5, q.d);

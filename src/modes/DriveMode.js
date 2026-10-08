@@ -6,6 +6,7 @@ import { cityById } from '../data/cities.js';
 import { VehicleEffects } from '../vehicle/effects/VehicleEffects.js';
 import { VehicleAudio } from '../vehicle/VehicleAudio.js';
 import { musicForRegion } from '../core/AudioSystem.js';
+import { Transport } from '../world/Transport.js';
 
 // Serbest surus modu: Silkroad dunyasinda Tofas Kartal.
 
@@ -28,6 +29,8 @@ export class DriveMode {
     const p = app.world.toThree(city.rx, city.rz, city.lx, 0, city.lz, new THREE.Vector3());
     this.vehicle.spawn(this.opts.x ?? p.x, this.opts.z ?? p.z, this.opts.yaw ?? city.heading, this.opts.y ?? null);
     this.camera = new VehicleCamera(app, this.vehicle, s.get('camera'));
+    // feribotlar vb. (yalniz serbest surus; ralli/yaris kendi dunyasinda kalir)
+    this.transport = this.opts.transport === false ? null : new Transport(app);
     this.hud = new DriveHud(app, app.ui);
     this.hud.toast(`${city.name} — iyi yolculuklar!`, 3);
     this.vehicle.headlights = app.sky.night > 0.5;
@@ -86,7 +89,8 @@ export class DriveMode {
     if (this.paused) { this.camera.update(0, input); return; }
     const c = this._readControls(dt);
     this._keys();
-    this._stepVehicles(dt, c);
+    // gemideyken arac fizigi durur, araci gemi tasir
+    if (!(this.transport && this.transport.update(dt, this))) this._stepVehicles(dt, c);
     this._afterVehicle(dt);
   }
 
@@ -204,6 +208,7 @@ export class DriveMode {
   _afterTeleport() {}
 
   dispose() {
+    if (this.transport) this.transport.dispose();
     this.sound.dispose();
     this.effects.dispose();
     this.vehicle.dispose();

@@ -43,6 +43,16 @@ export function placeRegionObjects(data, rx, rz, d) {
     }
   }
 
+  // ---- feribot iskeleleri (kiyidan iskele ucuna, guverte su seviyesinin 1.2 m ustunde)
+  for (const f of plan.ferries) {
+    for (const dk of [f.a, f.b]) {
+      const lx = dk.sx - x0, lz = dk.sz - z0;
+      if (lx < 0 || lx >= REGION_M || lz < 0 || lz >= REGION_M) continue;
+      const L = Math.round(Math.hypot(dk.ex - dk.sx, dk.ez - dk.sz) + 2);
+      out.push({ m: `pier:${L}`, x: lx, y: dk.wl + 1.2, z: -lz, yaw: Math.atan2(dk.ez - dk.sz, dk.ex - dk.sx), s: 1 });
+    }
+  }
+
   // ---- bitki ortusu ve kayalar
   const n = REGION_M / CELL;
   for (let ci = 0; ci < n; ci++) {
