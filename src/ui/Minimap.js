@@ -1,4 +1,4 @@
-// Donen mini harita: oyunun kendi mini harita karolari (assets/minimap/world), oyuncu
+// Donen mini harita: uretilen dunyanin bolge renk haritalarindan, oyuncu
 // yukari bakar. Isaretler (NPC, dusman, kervan) nokta; harita disindaki hedef kenarda ok.
 
 const el = (tag, attrs = {}, html = '') => { const e = document.createElement(tag); Object.assign(e, attrs); e.innerHTML = html; return e; };
@@ -16,9 +16,7 @@ export class Minimap {
   _tile(key) {
     let t = this.tiles.get(key);
     if (!t) {
-      t = new Image();
-      t.src = this.app.world.data.minimapUrl(key);
-      t.onerror = () => { t.failed = true; };
+      t = this.app.world.data.minimapTile(key);
       this.tiles.set(key, t);
       if (this.tiles.size > 64) { const k0 = this.tiles.keys().next().value; this.tiles.delete(k0); }
     }

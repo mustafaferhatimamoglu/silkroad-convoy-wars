@@ -1,0 +1,158 @@
+[
+ {
+  "id": 0,
+  "name": "sand",
+  "file": "terrain/sand.jpg",
+  "surface": 1,
+  "scale": 1,
+  "color": [
+   205,
+   179,
+   132
+  ]
+ },
+ {
+  "id": 1,
+  "name": "dirt",
+  "file": "terrain/dirt.jpg",
+  "surface": 0,
+  "scale": 0,
+  "color": [
+   124,
+   98,
+   69
+  ]
+ },
+ {
+  "id": 2,
+  "name": "gravel",
+  "file": "terrain/gravel.jpg",
+  "surface": 0,
+  "scale": 0,
+  "color": [
+   128,
+   119,
+   106
+  ]
+ },
+ {
+  "id": 3,
+  "name": "grass",
+  "file": "terrain/grass.jpg",
+  "surface": 10,
+  "scale": 0,
+  "color": [
+   80,
+   109,
+   43
+  ]
+ },
+ {
+  "id": 4,
+  "name": "steppe",
+  "file": "terrain/steppe.jpg",
+  "surface": 10,
+  "scale": 1,
+  "color": [
+   148,
+   135,
+   77
+  ]
+ },
+ {
+  "id": 5,
+  "name": "rock",
+  "file": "terrain/rock.jpg",
+  "surface": 3,
+  "scale": 1,
+  "color": [
+   120,
+   116,
+   107
+  ]
+ },
+ {
+  "id": 6,
+  "name": "redrock",
+  "file": "terrain/redrock.jpg",
+  "surface": 3,
+  "scale": 1,
+  "color": [
+   161,
+   88,
+   53
+  ]
+ },
+ {
+  "id": 7,
+  "name": "snow",
+  "file": "terrain/snow.jpg",
+  "surface": 9,
+  "scale": 1,
+  "color": [
+   218,
+   222,
+   226
+  ]
+ },
+ {
+  "id": 8,
+  "name": "mud",
+  "file": "terrain/mud.jpg",
+  "surface": 6,
+  "scale": 0,
+  "color": [
+   74,
+   57,
+   40
+  ]
+ },
+ {
+  "id": 9,
+  "name": "cobble",
+  "file": "terrain/cobble.jpg",
+  "surface": 100,
+  "scale": 0,
+  "color": [
+   124,
+   116,
+   105
+  ]
+ },
+ {
+  "id": 10,
+  "name": "paving",
+  "file": "terrain/paving.jpg",
+  "surface": 100,
+  "scale": 0,
+  "color": [
+   172,
+   161,
+   140
+  ]
+ },
+ {
+  "id": 11,
+  "name": "farmland",
+  "file": "terrain/farmland.jpg",
+  "surface": 0,
+  "scale": 1,
+  "color": [
+   97,
+   100,
+   50
+  ]
+ },
+ {
+  "id": 12,
+  "name": "road",
+  "file": "terrain/road.jpg",
+  "surface": 0,
+  "scale": 0,
+  "color": [
+   137,
+   118,
+   91
+  ]
+ }
+]

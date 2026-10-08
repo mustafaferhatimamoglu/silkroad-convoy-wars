@@ -59,7 +59,7 @@ PACK_LOCK = threading.Lock()
 
 # Disariya sunulan yollar (gerisi 404): oyun sayfasi, kod, kutuphaneler, varliklar, API, WebSocket
 ALLOWED_FILES = {"/", "/index.html"}
-ALLOWED_PREFIXES = ("/src/", "/vendor/", "/assets/")
+ALLOWED_PREFIXES = ("/src/", "/vendor/", "/assets/", "/content/")
 
 MIME = {
     ".js": "text/javascript",

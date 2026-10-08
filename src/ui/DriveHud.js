@@ -79,9 +79,7 @@ export class DriveHud {
   _tile(key) {
     let t = this.tiles.get(key);
     if (!t) {
-      t = new Image();
-      t.src = this.app.world.data.minimapUrl(key);
-      t.onerror = () => { t.failed = true; };
+      t = this.app.world.data.minimapTile(key);
       this.tiles.set(key, t);
       if (this.tiles.size > 64) { const k0 = this.tiles.keys().next().value; this.tiles.delete(k0); }
     }

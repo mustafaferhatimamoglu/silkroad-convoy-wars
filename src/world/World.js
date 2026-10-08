@@ -1,12 +1,15 @@
 import * as THREE from 'three';
 import { MeshBVH } from 'three-mesh-bvh';
-import { WorldData, SCALE, VERTS, CELLS, REGION_M, CELL_M } from './WorldData.js';
+import { SCALE, VERTS, CELLS, CELL_M } from './WorldData.js';
+import { GenWorldData } from './gen/GenData.js';
+import { buildGenObjects } from './gen/build.js';
 import { TextureArrayPool } from './TextureArrayPool.js';
 import { TerrainMaterials, buildTerrainGeometry, refreshEdgeNormals, buildIndexTexture, sampleHeight } from './Terrain.js';
-import { ObjectLibrary, ObjectMaterials, buildRegionObjects } from './Objects.js';
+import { ObjectMaterials } from './Objects.js';
 import { WaterSystem } from './Water.js';
 
-// Dunya akis yoneticisi.
+// Dunya akis yoneticisi (V5: bolgeler gen/ altindaki dunya planindan aninda uretilir; Silkroad
+// dosyasi yok).
 //  - Yakin halka (nearRadius): tam cozunurluklu arazi + orijinal doku karisimi + objeler + su + carpisma.
 //  - Uzak halka (farRadius): 25x25 kafesli dusuk detay arazi, sadece renk haritasi (ufuk/daglar).
 // Tum meshler bolge-yerel koordinatlarda kurulur ve bolge kosesine konumlanir; boylece
@@ -23,7 +26,7 @@ export class World {
       tileSize: 512, tileCapacity: 120, objTexSize: 256, objTexCapacity: 640,
       shadows: true, buildBudgetMs: 10,
     }, opts);
-    this.data = new WorldData('assets/');
+    this.data = new GenWorldData('content/');
     this.regions = new Map();
     this.bvhRegions = [];   // obje carpisma agaci hazir bolgeler
     this.group = new THREE.Group(); this.group.name = 'World';
@@ -53,7 +56,6 @@ export class World {
         this.terrainMats.setLayerLuminance(slot, 0.2126 * r + 0.7152 * g + 0.0722 * b);
       }
     };
-    this.objectLib = new ObjectLibrary(this.data, this.objPool);
     this.objectMats = new ObjectMaterials(this.objPool);
     this.water = new WaterSystem();
     return this;
@@ -168,35 +170,28 @@ export class World {
   }
 
   async _bin(key) {
-    let p = this.binCache.get(key);
-    if (!p) {
-      p = fetch(this.data.regionUrl(key)).then((res) => res.arrayBuffer()).then((buf) => this.data.parseRegion(buf));
-      this.binCache.set(key, p);
-      if (this.binCache.size > 400) {
-        // eski kayitlari at (aktif bolgeler tekrar yukler)
-        for (const k of this.binCache.keys()) { if (!this.regions.has(k)) { this.binCache.delete(k); if (this.binCache.size <= 300) break; } }
-      }
-    }
-    return p;
+    // bolge verisi uretilir (onbellek GenWorldData icinde); bir sonraki kareye birak ki ayni karede
+    // birden fazla bolge uretilip takilma yapmasin
+    await new Promise((r) => setTimeout(r, 0));
+    return this.data.region(key);
   }
 
   async _colormap(key) {
     let p = this.colormapCache.get(key);
     if (!p) {
-      p = fetch(this.data.colormapUrl(key))
-        .then((res) => res.blob())
-        .then((b) => createImageBitmap(b, { resizeWidth: 128, resizeHeight: 128, imageOrientation: 'flipY', colorSpaceConversion: 'none' }))
-        .then((bmp) => {
-          const t = new THREE.Texture(bmp);
-          t.colorSpace = THREE.SRGBColorSpace;
-          t.flipY = false;
-          t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
-          t.anisotropy = 4;
-          t.needsUpdate = true;
-          return t;
-        })
-        .catch(() => null);
+      const t = new THREE.DataTexture(this.data.region(key).colormap, 128, 128, THREE.RGBAFormat);
+      t.colorSpace = THREE.SRGBColorSpace;
+      t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
+      t.magFilter = THREE.LinearFilter;
+      t.minFilter = THREE.LinearMipmapLinearFilter;
+      t.generateMipmaps = true;
+      t.anisotropy = 4;
+      t.needsUpdate = true;
+      p = Promise.resolve(t);
       this.colormapCache.set(key, p);
+      if (this.colormapCache.size > 200) {
+        for (const [k, v] of this.colormapCache) { if (!this.regions.has(k)) { v.then((tx) => tx.dispose()); this.colormapCache.delete(k); if (this.colormapCache.size <= 150) break; } }
+      }
     }
     return p;
   }
@@ -284,9 +279,9 @@ export class World {
     const gen = r.gen;
     const cancelled = () => gen !== r.gen || r.target !== 'near' || r.near !== near;
     try {
-      const res = await fetch(this.data.objectsUrl(r.key) + '');
-      const json = res.ok ? await res.json() : { objects: [] };
-      const built = await buildRegionObjects(this.objectLib, json.objects || [], cancelled);
+      await new Promise((res) => setTimeout(res, 0));
+      if (cancelled()) return;
+      const built = await buildGenObjects(this.objPool, this.data.objects(r.key), cancelled);
       if (!built || cancelled()) {
         if (built) for (const tk of built.textures) this.objPool.release(tk);
         return;
