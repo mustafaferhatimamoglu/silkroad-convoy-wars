@@ -27,6 +27,19 @@ function gridIndex(n) {
   return attr;
 }
 
+/** Delikli bolge (tunel agzi) icin index: delik kosesine degen ucgenler atlanir. */
+export function holeIndex(holes) {
+  const n = VERTS, out = [];
+  for (let i = 0; i < n - 1; i++) {
+    for (let j = 0; j < n - 1; j++) {
+      const a = i * n + j, b = a + 1, c = a + n, d = c + 1;
+      if (!holes[a] && !holes[b] && !holes[c]) out.push(a, b, c);
+      if (!holes[b] && !holes[d] && !holes[c]) out.push(b, d, c);
+    }
+  }
+  return new THREE.BufferAttribute(new Uint32Array(out), 1);
+}
+
 /**
  * Bolge yerel koordinatlarinda zemin geometrisi kurar.
  * step: 1 = tam cozunurluk (97x97), 4 = uzak LOD (25x25).

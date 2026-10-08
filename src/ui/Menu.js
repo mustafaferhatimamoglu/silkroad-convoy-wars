@@ -3,8 +3,7 @@ import { PAINTS } from '../vehicle/model/KartalModel.js';
 import { QUALITY } from '../core/Settings.js';
 import { RALLY_STAGES } from '../data/rally.js';
 import { DIFFICULTY } from '../race/BotDriver.js';
-import { downloadInvite, inviteLink } from '../net/invite.js';
-import { hostBase } from '../version.js';
+import { VERSION, RELEASES, serverUrls } from '../version.js';
 
 const LEVEL_DESC = {
   kolay: 'Temiz sürer, sık hata yapar; kirli numara yok',
@@ -49,17 +48,16 @@ export class Menu {
     const s = this.game.app.settings;
     const el = h(`<div id="menu" class="interactive"><div class="box">
       <h1>SILKROAD</h1>
-      <div class="ver">CONVOY WARS · V4</div>
-      <button class="btn" data-a="drive">Serbest Sürüş<small>Silkroad dünyasında Tofaş Kartal ile dolaş</small></button>
+      <div class="ver">CONVOY WARS · ${VERSION}</div>
+      <button class="btn" data-a="drive">Serbest Sürüş<small>İpek Yolu dünyasında dolaş: şehirler, feribotlar, ışınlanma kapıları</small></button>
+      <button class="btn" data-a="mp">Çok Oyunculu<small>Arkadaşlarınla serbest gezinti, yarış ya da takım olup botlara karşı</small></button>
       <button class="btn" data-a="race">Yarış: Botlara Karşı<small>8 araç · PIT manevrası, blok, kestirme; 4 zorluk seviyesi</small></button>
-      <button class="btn" data-a="mp">Çok Oyunculu<small>Arkadaşlarınla yarış ya da takım olup botlara karşı (co-op)</small></button>
       <button class="btn" data-a="rally">Ralli: Zamana Karşı<small>${Object.keys(RALLY_STAGES).length} etap · pilot notlarıyla kontrol noktalı etap</small></button>
       <button class="btn" data-a="garage">Garaj<small>Sürüm ve renk seçimi</small></button>
-      <button class="btn" data-a="kervan">Kervan RPG<small>Tüccar ol: mal al, kervanla şehirden şehre taşı, haydutlara karşı koy</small></button>
       <button class="btn secondary" data-a="explore">Dünya Gezgini<small>Serbest kamera ile haritayı gez</small></button>
       <button class="btn secondary" data-a="settings">Ayarlar</button>
       <div class="foot">Araç: <b>${VARIANTS[s.get('vehicleVariant')]?.name || ''}</b> · ${PAINTS[s.get('vehicleColor')]?.name || ''}<br>
-      Kumanda desteklenir. Esc: menü · F: tam ekran (fare ile bakış) · F3: performans bilgisi</div>
+      Kumanda desteklenir. Esc: menü · F: tam ekran (fare ile bakış) · M: harita · F3: performans bilgisi</div>
     </div></div>`);
     el.addEventListener('click', (e) => {
       const a = e.target.closest('[data-a]');
@@ -70,7 +68,6 @@ export class Menu {
       else if (act === 'rally') this.stagePicker();
       else if (act === 'race') this.raceSetup();
       else if (act === 'mp') this.multiplayer();
-      else if (act === 'kervan') this.kervanMenu();
       else if (act === 'garage') this.garage();
       else if (act === 'settings') this.settings(() => this.main());
     });
@@ -82,7 +79,7 @@ export class Menu {
     this.clear();
     const last = this.game.app.settings.get('lastCity') || 'hotan';
     const el = h(`<div class="panel dialog interactive">
-      <h2>${kind === 'explore' ? 'Nereyi gezelim?' : kind === 'kervan' ? 'Ticarete nereden başlayalım?' : 'Nereden başlayalım?'}</h2>
+      <h2>${kind === 'explore' ? 'Nereyi gezelim?' : 'Nereden başlayalım?'}</h2>
       <div class="grid3">${CITIES.map((c) => `<div class="card ${c.id === last ? 'sel' : ''}" data-c="${c.id}"><b>${c.name}</b><span>${c.desc}</span></div>`).join('')}</div>
       <div class="row" style="margin-top:16px"><button class="btn secondary" data-a="back" style="width:auto">← Geri</button><div style="flex:1"></div>
       <button class="btn" data-a="go" style="width:auto">Başla →</button></div>
@@ -99,38 +96,6 @@ export class Menu {
     el.addEventListener('dblclick', (e) => {
       const c = e.target.closest('[data-c]');
       if (c) { this.game.app.settings.set('lastCity', c.dataset.c); this.clear(); this._start(kind, c.dataset.c); }
-    });
-    this.root.appendChild(el);
-    this.layer = el;
-  }
-
-  /** Kervan RPG: kayitli oyuna devam ya da yeni kervan (gorunum secimi). */
-  kervanMenu() {
-    this.clear();
-    const s = this.game.app.settings;
-    let save = null;
-    try { save = JSON.parse(localStorage.getItem('sro-v4-kervan') || 'null'); } catch { /* */ }
-    const looks = [['player_ch_m', 'Çinli tüccar', 'Jangan doğumlu'], ['player_ch_w', 'Çinli tüccar kadın', 'Jangan doğumlu'],
-      ['player_eu_m', 'Avrupalı tüccar', 'Konstantiniyye kökenli'], ['player_eu_w', 'Avrupalı tüccar kadın', 'Konstantiniyye kökenli']];
-    let look = s.get('kervanLook') || 'player_ch_m';
-    const cityName = (id) => (CITIES.find((c) => c.id === id) || CITIES[0]).name;
-    const el = h(`<div class="panel dialog interactive">
-      <h2>Kervan RPG</h2>
-      ${save ? `<button class="btn" data-a="continue">Devam et<small>${cityName(save.city)} · ${Math.round(save.gold).toLocaleString('tr-TR')} altın · seviye ${save.level} · ${save.stats ? save.stats.trips : 0} sefer</small></button>` : ''}
-      <div style="color:var(--muted);font-size:13px;margin:${save ? 14 : 0}px 0 6px">${save ? 'ya da yeni bir kervan kur:' : 'Görünümünü seç:'}</div>
-      <div class="grid2">${looks.map(([k, n, d]) => `<div class="card ${k === look ? 'sel' : ''}" data-l="${k}"><b>${n}</b><span>${d}</span></div>`).join('')}</div>
-      <div class="row" style="margin-top:14px"><button class="btn secondary" data-a="back" style="width:auto">← Geri</button><div style="flex:1"></div>
-      <button class="btn" data-a="new" style="width:auto">Yeni kervan · Jangan →</button></div>
-      ${save ? '<div class="note" style="font-size:12px;color:var(--muted);margin-top:8px">Yeni kervan kurmak kayıtlı ilerlemeni siler.</div>' : ''}
-    </div>`);
-    el.addEventListener('click', (e) => {
-      const l = e.target.closest('[data-l]');
-      if (l) { look = l.dataset.l; el.querySelectorAll('[data-l]').forEach((x) => x.classList.toggle('sel', x === l)); return; }
-      const a = e.target.closest('[data-a]');
-      if (!a) return;
-      if (a.dataset.a === 'back') this.main();
-      if (a.dataset.a === 'continue') { this.clear(); this.game.startKervan(save.city || 'jangan', { look: save.look || look }); }
-      if (a.dataset.a === 'new') { s.set('kervanLook', look); this.clear(); this.game.startKervan('jangan', { fresh: true, look }); }
     });
     this.root.appendChild(el);
     this.layer = el;
@@ -202,59 +167,90 @@ export class Menu {
     this.layer = el;
   }
 
-  /** Cok oyunculu: isim, oda kur / katil, acik odalar, yerel ag bilgisi. */
+  /** Cok oyunculu: isim, sunucu adresi, oda kur / katil, acik odalar. */
   async multiplayer() {
     this.clear();
     const game = this.game, s = game.app.settings;
-    const el = h(`<div class="panel dialog interactive" style="width:min(640px,94vw)">
-      <h2>Çok Oyunculu Yarış</h2>
-      <div class="setting"><label>Adın</label><input data-k="name" maxlength="20" value="${esc(s.get('mpName') || 'Oyuncu')}"></div>
+    const el = h(`<div class="panel dialog interactive" style="width:min(660px,94vw)">
+      <h2>Çok Oyunculu</h2>
+      <div class="grid2" style="gap:6px 14px">
+        <div class="setting"><label>Adın</label><input data-k="name" maxlength="20" value="${esc(s.get('mpName') || 'Oyuncu')}"></div>
+        <div class="setting"><label>Sunucu adresi</label><div class="row" style="gap:6px"><input data-k="server" placeholder="örn. abc-def.trycloudflare.com" value="${esc(s.get('mpServer') || '')}" style="flex:1">
+          <button class="btn secondary" data-a="connect" style="width:auto;padding:6px 12px">Bağlan</button></div></div>
+      </div>
+      <div class="srv note" style="font-size:12px;color:var(--muted);margin:2px 0 10px;line-height:1.5"></div>
       <div class="row" style="gap:8px;align-items:center"><button class="btn" data-a="create" style="width:auto">Oda kur</button>
         <div style="flex:1"></div><input data-k="code" placeholder="ODA KODU" maxlength="4" style="width:120px;text-transform:uppercase;text-align:center">
         <button class="btn secondary" data-a="join" style="width:auto">Odaya katıl</button></div>
       <div style="color:var(--muted);font-size:13px;margin:14px 0 6px">Açık odalar</div>
       <div class="rooms" style="min-height:40px;font-size:14px">Bağlanıyor…</div>
-      <div class="lan note" style="font-size:12px;color:var(--muted);margin-top:12px;line-height:1.5"></div>
       <div class="err" style="color:#ff8a7a;margin-top:6px"></div>
-      <div class="row" style="margin-top:14px"><button class="btn secondary" data-a="back" style="width:auto">← Geri</button></div>
+      <div class="row" style="margin-top:14px"><button class="btn secondary" data-a="back" style="width:auto">← Geri</button><div style="flex:1"></div>
+        <span style="color:var(--muted);font-size:12px;align-self:center">Oyun sürümü ${VERSION}</span></div>
     </div>`);
     this.root.appendChild(el);
     this.layer = el;
-    const err = (t) => { el.querySelector('.err').textContent = t || ''; };
+    const err = (t, html = false) => { const e = el.querySelector('.err'); if (html) e.innerHTML = t || ''; else e.textContent = t || ''; };
     const name = () => (el.querySelector('[data-k="name"]').value.trim() || 'Oyuncu').slice(0, 20);
-    fetch(`${hostBase()}/api/info`).then((r) => r.json()).then((info) => {
-      const lan = info.lan && info.addresses.length
-        ? `Yerel ağdaki arkadaşların tarayıcıda şu adresi açsın: ${info.addresses.map((a) => `<b style="color:var(--gold)">http://${a}:${info.port}/</b>`).join(' ya da ')} — sonra “Çok Oyunculu”dan odana katılsın.`
-        : '';
-      const web = info.tunnel
-        ? '<b style="color:#8fdc7a">İnternet daveti açık.</b> Oda kurunca lobideki “Davet dosyası” ile arkadaşına gönder; açınca doğrudan odana gelir.'
-        : info.tunnelWanted ? 'İnternet tüneli açılıyor…'
-          : 'İnternetten arkadaş çağırmak için oyunu <b>INTERNET_OYUNU.bat</b> ile başlat (sabit IP ya da modem ayarı gerekmez). Aynı ağdaysanız <b>COKLU_OYUNCU.bat</b> yeter.';
-      el.querySelector('.lan').innerHTML = [web, lan].filter(Boolean).join('<br>');
-    }).catch(() => {});
-    let net;
-    try { net = await game.connectNet(name()); } catch (e) { el.querySelector('.rooms').textContent = ''; err(`${e.message}. Sunucu güncel mi? (server.py yeniden başlatılmalı)`); }
+    const addr = () => el.querySelector('[data-k="server"]').value.trim();
     const off = [];
-    const go = () => { off.forEach((u) => u()); clearInterval(timer); game.showLobby(); };
-    if (net) {
+    let net = null;
+    const showErr = (e) => {
+      if (e.code === 'version') err(`${esc(e.message)} Güncel oyunu indir: <a href="${RELEASES}" target="_blank" style="color:var(--gold)">GitHub sürümleri</a>`, true);
+      else err(`${e.message}${addr() ? ' — adres doğru mu, sunucu açık mı?' : ''}`);
+    };
+    // sunucu bilgisi: surum, oyuncu sayisi, internet / yerel ag adresi (kurucu arkadasina verir)
+    const srvInfo = () => {
+      const box = el.querySelector('.srv');
+      fetch(`${serverUrls(addr()).http}/api/info`, { cache: 'no-store' }).then((r) => r.json()).then((info) => {
+        if (!el.isConnected) return;
+        const parts = [`Sunucu sürümü <b style="color:${info.version === VERSION ? '#8fdc7a' : '#ff8a7a'}">${esc(info.version || '?')}</b> · ${info.players || 0} oyuncu`];
+        if (info.tunnel) parts.push(`İnternet adresi: <b style="color:var(--gold)">${esc(info.tunnel)}</b> — arkadaşların “Sunucu adresi”ne bunu yazsın`);
+        else if (info.tunnelWanted) parts.push('İnternet tüneli açılıyor…');
+        if (info.lan && info.addresses.length) parts.push(`Yerel ağ: ${info.addresses.map((x) => `<b>${esc(x)}:${info.port}</b>`).join(' ya da ')}`);
+        box.innerHTML = parts.join('<br>');
+        if (info.tunnelWanted && !info.tunnel) setTimeout(srvInfo, 3000);
+      }).catch(() => {
+        if (!el.isConnected) return;
+        box.innerHTML = addr() ? '' : 'Sunucuyu açan arkadaşının verdiği adresi yaz ve “Bağlan”a bas. Sunucuyu sen açacaksan: <b>SilkroadV5-Sunucu</b> paketindeki <b>INTERNET_SUNUCU.bat</b> (oyun klasöründe: <b>INTERNET_OYUNU.bat</b>).';
+      });
+    };
+    const attach = () => {
+      off.forEach((u) => u()); off.length = 0;
       off.push(net.on('rooms', (m) => {
         const box = el.querySelector('.rooms');
         if (!box) return;
+        const state = (r) => (r.started ? (r.mode === 'free' ? ' · gezintide' : ' · yarışta') : '');
         box.innerHTML = m.list.length ? m.list.map((r) => `<div class="row" style="align-items:center;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.08)">
-          <b style="width:70px;letter-spacing:2px">${esc(r.code)}</b><span style="flex:1">${esc(r.host)}</span><span style="width:90px;color:var(--muted)">${r.n}/8${r.started ? ' · yarışta' : ''}</span>
-          <button class="btn secondary" data-join="${esc(r.code)}" style="width:auto;padding:4px 12px" ${r.started || r.n >= 8 ? 'disabled' : ''}>Katıl</button></div>`).join('') : '<span style="color:var(--muted)">Açık oda yok — bir oda kur.</span>';
+          <b style="width:70px;letter-spacing:2px">${esc(r.code)}</b><span style="flex:1">${esc(r.host)}</span><span style="width:120px;color:var(--muted)">${r.n}/8${state(r)}</span>
+          <button class="btn secondary" data-join="${esc(r.code)}" style="width:auto;padding:4px 12px" ${(r.started && !r.open) || r.n >= 8 ? 'disabled' : ''}>Katıl</button></div>`).join('') : '<span style="color:var(--muted)">Açık oda yok — bir oda kur.</span>';
       }));
       off.push(net.on('room', () => go()));
       off.push(net.on('error', (m) => err(m.msg)));
+      off.push(net.on('close', () => { err('Sunucu bağlantısı koptu'); const box = el.querySelector('.rooms'); if (box) box.textContent = ''; }));
       net.rooms();
-    }
-    const timer = setInterval(() => { if (!el.isConnected) { clearInterval(timer); off.forEach((u) => u()); return; } if (net) net.rooms(); }, 2000);
+    };
+    const connect = async (fresh = false) => {
+      err('');
+      s.set('mpName', name()); s.set('mpServer', addr());
+      el.querySelector('.rooms').textContent = 'Bağlanıyor…';
+      srvInfo();
+      try { net = await game.connectNet(name(), addr(), fresh); attach(); return net; }
+      catch (e) { net = null; el.querySelector('.rooms').textContent = ''; showErr(e); return null; }
+    };
+    const go = () => { off.forEach((u) => u()); clearInterval(timer); game.showLobby(); };
+    const timer = setInterval(() => { if (!el.isConnected) { clearInterval(timer); off.forEach((u) => u()); return; } if (net && net.connected) net.rooms(); }, 2000);
+    connect();
+    el.querySelector('[data-k="server"]').addEventListener('keydown', (e) => { if (e.key === 'Enter') connect(true); });
     el.addEventListener('click', async (e) => {
       const a = e.target.closest('[data-a],[data-join]');
       if (!a) return;
       if (a.dataset.a === 'back') { clearInterval(timer); off.forEach((u) => u()); this.main(); return; }
+      if (a.dataset.a === 'connect') { connect(true); return; }
+      if (!net || !net.connected) { if (!(await connect())) return; }
+      // yazilan isim sunucuya da gecsin (baglantidan sonra degistirildiyse)
       s.set('mpName', name());
-      try { net = await game.connectNet(name()); } catch (x) { err(x.message); return; }
+      try { net = await game.connectNet(name(), addr()); } catch (x) { showErr(x); return; }
       if (a.dataset.a === 'create') net.create();
       else if (a.dataset.a === 'join') { const code = el.querySelector('[data-k="code"]').value.trim().toUpperCase(); if (code.length === 4) net.join(code); else err('Oda kodu 4 harf'); }
       else if (a.dataset.join) net.join(a.dataset.join);
@@ -270,50 +266,35 @@ export class Menu {
     this.layer = el;
     const body = el.querySelector('.body');
     const sel = (k, items, val, dis) => `<select data-c="${k}" ${dis ? 'disabled' : ''}>${items.map(([v, l]) => `<option value="${esc(v)}" ${String(val) === String(v) ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
-    const mb = (b) => `${(b / 1048576).toFixed(b < 10485760 ? 1 : 0)} MB`;
-    // oyuncu durumu: surum, etap dosyalari, hazirlik
+    // oyuncu durumu: surum, hazirlik
     const status = (r) => {
       if (r.host) return 'kurucu';
       if (r.pending) return '<span style="color:var(--muted)">bağlanıyor…</span>';
       if (!lob.compat(r.ver)) return '<span style="color:#ff8a7a">sürüm farklı</span>';
-      if (r.pack !== lob.cfg.stage) return r.prog === -1 ? '<span style="color:#ff8a7a">indirme hatası</span>' : `<span style="color:var(--muted)">dosyalar iniyor${r.prog !== null && r.prog !== undefined ? ` %${r.prog}` : ''}</span>`;
+      if (lob.cfg.mode === 'free') return '<b style="color:#8fdc7a">Hazır</b>';
       return r.ready ? '<b style="color:#8fdc7a">Hazır</b>' : '<span style="color:var(--muted)">bekliyor</span>';
     };
-    // uye: etap paketi ilerlemesi (kurucunun dosyalari kendinde)
-    const packRow = () => {
-      if (net.isHost) {
-        const old = lob.rows().some((r) => !r.bot && !r.host && !r.pending && !lob.compat(r.ver));
-        return old ? `<div style="margin-top:10px;font-size:13px;color:#ff8a7a">Bir oyuncunun oyun sürümü seninkinden farklı. Değişikliklerini yayınla
-          (<code>python tools/publish_pages.py publish</code>), sonra arkadaşın sayfayı yenilesin.</div>` : '';
-      }
-      const P = lob.pack;
-      if (!lob.versionOk) {
-        const hv = lob.hostVer || {};
-        return `<div style="margin-top:10px;font-size:13px;color:#ff8a7a">Oyun sürümün kurucununkinden farklı (kurucu: ${esc(hv.build || '?')}, sen: ${esc(lob.verInfo().build)}). Kurucu yeni sürümü yayınlamalı; sonra bu sayfayı yenile.</div>`;
-      }
-      if (P.state === 'error') return `<div style="margin-top:10px;font-size:13px;color:#ff8a7a">${esc(P.error || 'İndirme hatası')} <button class="btn secondary" data-a="retry" style="width:auto;padding:4px 10px">Tekrar dene</button></div>`;
-      if (P.state === 'ready') return `<div style="margin-top:10px;font-size:13px;color:#8fdc7a">Etap dosyaları hazır ✓ <span style="color:var(--muted)">(${mb(P.totalBytes)} · ${P.downloaded ? `${mb(P.downloaded)} indirildi` : 'hepsi bu bilgisayarda kayıtlıydı'})</span></div>`;
-      const pct = P.totalBytes ? Math.round((P.bytes / P.totalBytes) * 100) : 0;
-      return `<div style="margin-top:10px;font-size:13px">Etap dosyaları indiriliyor: ${mb(P.bytes)} / ${P.totalBytes ? mb(P.totalBytes) : '…'} (%${pct}) — bitince “Hazırım” açılır
-        <div style="height:6px;background:rgba(255,255,255,0.1);border-radius:3px;margin-top:4px;overflow:hidden"><div style="height:100%;width:${pct}%;background:linear-gradient(90deg,var(--gold-2),var(--gold))"></div></div></div>`;
+    const verRow = () => {
+      if (net.isHost || lob.versionOk) return '';
+      const hv = lob.hostVer || {};
+      return `<div style="margin-top:10px;font-size:13px;color:#ff8a7a">Oyun verin kurucununkinden farklı (kurucu: ${esc(hv.version || '?')}, sen: ${esc(VERSION)}). Aynı sürümü kullanın.</div>`;
     };
-    // internet daveti (sunucu tuneli aciksa): davet dosyasi / baglanti
+    // arkadas cagirma: sunucunun internet / yerel ag adresi + oda kodu
     let info = null, copied = false;
-    const loadInfo = () => fetch(`${hostBase()}/api/info`).then((r) => r.json()).then((x) => { info = x; render(); if (x.tunnelWanted && !x.tunnel && el.isConnected) setTimeout(loadInfo, 3000); }).catch(() => {});
-    const inviteRow = () => {
-      if (!info) return '';
-      if (info.tunnel) {
-        return `<div class="row" style="margin-top:10px;align-items:center;gap:8px;padding:8px 10px;border:1px solid rgba(232,193,112,0.3);border-radius:6px">
-          <span style="flex:1;font-size:13px">İnternetten arkadaş çağır: dosyayı (WhatsApp, e-posta…) gönder, açınca odaya gelir.</span>
-          <button class="btn" data-a="invite" style="width:auto;padding:6px 12px">Davet dosyası (.html)</button>
-          <button class="btn secondary" data-a="copy" style="width:auto;padding:6px 12px">${copied ? 'Kopyalandı ✓' : 'Bağlantıyı kopyala'}</button></div>`;
-      }
-      if (!net.isHost) return '';   // sunucu ayari yalniz kurucuyu ilgilendirir
-      if (info.tunnelWanted) return '<div style="margin-top:10px;font-size:13px;color:var(--muted)">İnternet tüneli açılıyor…</div>';
-      return '<div style="margin-top:10px;font-size:12px;color:var(--muted)">İnternetten arkadaş çağırmak için oyunu <b>INTERNET_OYUNU.bat</b> ile başlat.</div>';
+    const loadInfo = () => fetch(`${serverUrls(net.addr).http}/api/info`, { cache: 'no-store' }).then((r) => r.json()).then((x) => { info = x; render(); if (x.tunnelWanted && !x.tunnel && el.isConnected) setTimeout(loadInfo, 3000); }).catch(() => {});
+    const shareText = () => {
+      const adr = info && info.tunnel ? info.tunnel : net.addr || (info && info.lan && info.addresses.length ? `${info.addresses[0]}:${info.port}` : '');
+      return adr ? `Silkroad V5 (${VERSION}) — Sunucu: ${adr} · Oda: ${net.room ? net.room.code : ''}` : '';
     };
-    // lobi sik guncellenir (indirme ilerlemesi): yalniz degisen bolum yeniden yazilir, boylece
-    // acik bir secim kutusu ya da tiklanan dugme kaybolmaz
+    const inviteRow = () => {
+      const t = shareText();
+      if (!t) return info && info.tunnelWanted ? '<div style="margin-top:10px;font-size:13px;color:var(--muted)">İnternet tüneli açılıyor…</div>' : '';
+      return `<div class="row" style="margin-top:10px;align-items:center;gap:8px;padding:8px 10px;border:1px solid rgba(232,193,112,0.3);border-radius:6px">
+          <span style="flex:1;font-size:13px">Arkadaşını çağır: <b style="color:var(--gold)">${esc(t)}</b></span>
+          <button class="btn secondary" data-a="copy" style="width:auto;padding:6px 12px">${copied ? 'Kopyalandı ✓' : 'Kopyala'}</button></div>`;
+    };
+    // lobi sik guncellenir: yalniz degisen bolum yeniden yazilir, boylece acik bir secim kutusu
+    // ya da tiklanan dugme kaybolmaz
     body.innerHTML = `<h2 data-s="title"></h2><div data-s="table"></div><div data-s="settings"></div><div data-s="pack"></div>
       <div data-s="invite"></div><div data-s="err" class="err" style="color:#ff8a7a;margin-top:6px"></div><div data-s="actions"></div>`;
     const last = {};
@@ -330,31 +311,40 @@ export class Menu {
           <td>${r.bot ? `<span style="color:var(--muted)">${cfg.botCars === 'mixed' ? 'karışık' : 'kurucunun aracı'}</span>` : `${dot(r.paint)}${esc(carName(r.variant))}`}</td>
           <td>${r.bot ? `<span style="color:var(--muted)">${esc((DIFFICULTY[cfg.level] || {}).label || '')}</span>` : status(r)}</td></tr>`).join('')}
         </table>`);
-      put('settings', `<div class="grid2" style="gap:6px 14px">
+      const free = cfg.mode === 'free';
+      const modeSel = `<div class="setting"><label>Mod</label>${sel('mode', [['free', 'Serbest gezinti (açık dünya)'], ['ffa', 'Yarış: herkes kendi için'], ['team', 'Yarış: takım, botlara karşı (co-op)']], cfg.mode, !host)}</div>`;
+      const mine = `<div class="setting"><label>Aracın</label>${sel('myVariant', Object.entries(VARIANTS).map(([id, v]) => [id, v.name]), s.get('vehicleVariant'), lob.ready && !host && !free)} ${sel('myPaint', Object.entries(PAINTS).map(([id, p]) => [id, p.name]), s.get('vehicleColor'), lob.ready && !host && !free)}</div>`;
+      if (free) {
+        put('settings', `<div class="grid2" style="gap:6px 14px">${modeSel}
+          <div class="setting"><label>Başlangıç şehri</label>${sel('city', CITIES.map((c) => [c.id, c.name]), cfg.city, !host)}</div>
+          ${mine}</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:4px">Herkes aynı dünyada: feribotlar, ışınlanma kapıları, harita (M). Sonradan gelen arkadaşın doğrudan dünyaya katılır.</div>`);
+      } else put('settings', `<div class="grid2" style="gap:6px 14px">
           <div class="setting"><label>Etap</label>${sel('stage', Object.entries(RALLY_STAGES).map(([id, st]) => [id, `${st.name} (${(st.length / 1000).toFixed(1)} km)`]), cfg.stage, !host)}</div>
-          <div class="setting"><label>Mod</label>${sel('mode', [['ffa', 'Herkes kendi için'], ['team', 'Takım: oyuncular botlara karşı (co-op)']], cfg.mode, !host)}</div>
+          ${modeSel}
           <div class="setting"><label>Bot sayısı</label>${sel('bots', [...Array(8 - humans + 1).keys()].map((n) => [n, `${n} bot`]), Math.min(cfg.bots, 8 - humans), !host)}</div>
           <div class="setting"><label>Bot zorluğu</label>${sel('level', Object.entries(DIFFICULTY).map(([id, d]) => [id, d.label]), cfg.level, !host)}</div>
           <div class="setting"><label>Bot araçları</label>${sel('botCars', [['same', 'Kurucunun aracı'], ['mixed', 'Karışık']], cfg.botCars, !host)}</div>
-          <div class="setting"><label>Aracın</label>${sel('myVariant', Object.entries(VARIANTS).map(([id, v]) => [id, v.name]), s.get('vehicleVariant'), lob.ready && !host)} ${sel('myPaint', Object.entries(PAINTS).map(([id, p]) => [id, p.name]), s.get('vehicleColor'), lob.ready && !host)}</div>
+          ${mine}
         </div>`);
-      put('pack', packRow());
+      put('pack', verRow());
       put('invite', inviteRow());
       put('err', esc(lob.error || ''));
       put('actions', `<div class="row" style="margin-top:14px;align-items:center">
           <button class="btn secondary" data-a="leave" style="width:auto">← Odadan çık</button><div style="flex:1"></div>
-          ${host ? `<span style="color:var(--muted);font-size:12px;margin-right:10px">${lob.canStart() ? '' : 'Herkesin dosyaları inip “Hazır” olunca başlatabilirsin'}</span><button class="btn" data-a="start" style="width:auto" ${lob.canStart() ? '' : 'disabled'}>Yarışı başlat →</button>`
-            : `<button class="btn" data-a="ready" style="width:auto" ${lob.ready || lob.canReady() ? '' : 'disabled'}>${lob.ready ? 'Hazır değilim' : !lob.versionOk ? 'Sürüm farklı' : lob.pack.state === 'ready' ? 'Hazırım' : lob.pack.state === 'error' ? 'Dosyalar eksik' : 'Dosyalar iniyor…'}</button>`}
+          ${host ? `<span style="color:var(--muted);font-size:12px;margin-right:10px">${lob.canStart() ? '' : 'Herkes “Hazır” olunca başlatabilirsin'}</span><button class="btn" data-a="start" style="width:auto" ${lob.canStart() ? '' : 'disabled'}>${free ? 'Dünyaya çık →' : 'Yarışı başlat →'}</button>`
+            : free ? `<span style="color:var(--muted);font-size:13px">${lob.catchUp() ? 'Dünyaya katılınıyor…' : 'Kurucu dünyaya çıkınca sen de gelirsin'}</span>`
+              : `<button class="btn" data-a="ready" style="width:auto" ${lob.ready || lob.canReady() ? '' : 'disabled'}>${lob.ready ? 'Hazır değilim' : !lob.versionOk ? 'Sürüm farklı' : 'Hazırım'}</button>`}
         </div>`);
     };
     lob.onChange = render;
-    lob.onPack = () => { if (el.isConnected) put('pack', packRow()); };
     el.addEventListener('change', (e) => {
       const k = e.target.dataset.c;
       if (!k) return;
       const v = e.target.value;
       if (k === 'myVariant') { s.set('vehicleVariant', v); this.game.previewCar(); lob.publish(); return; }
       if (k === 'myPaint') { s.set('vehicleColor', v); this.game.previewCar(true); lob.publish(); return; }
+      if (k === 'mode') s.set('mpMode', v);
       lob.setCfg(k, k === 'bots' ? Number(v) : v);
     });
     el.addEventListener('click', (e) => {
@@ -362,14 +352,9 @@ export class Menu {
       if (!a) return;
       if (a.dataset.a === 'leave') { this.game.leaveNet(); this.multiplayer(); }
       if (a.dataset.a === 'ready') lob.toggleReady();
-      if (a.dataset.a === 'retry') lob.retryPack();
       if (a.dataset.a === 'start') lob.start();
-      if ((a.dataset.a === 'invite' || a.dataset.a === 'copy') && info && info.tunnel && net.room) {
-        const host = (lob.players[net.room.host] && lob.players[net.room.host].name) || net.name;
-        const st = RALLY_STAGES[lob.cfg.stage];
-        const opts = { url: info.tunnel, code: net.room.code, host, stage: lob.cfg.stage, stageName: st ? st.name : '' };
-        if (a.dataset.a === 'invite') downloadInvite(opts);
-        else navigator.clipboard.writeText(inviteLink(opts)).then(() => { copied = true; render(); setTimeout(() => { copied = false; render(); }, 2500); }).catch(() => {});
+      if (a.dataset.a === 'copy' && shareText()) {
+        navigator.clipboard.writeText(shareText()).then(() => { copied = true; render(); setTimeout(() => { copied = false; render(); }, 2500); }).catch(() => {});
       }
     });
     render();
@@ -378,7 +363,6 @@ export class Menu {
 
   _start(kind, city) {
     if (kind === 'drive') this.game.startDrive(city);
-    else if (kind === 'kervan') this.game.startKervan(city);
     else this.game.startExplore(city);
   }
 

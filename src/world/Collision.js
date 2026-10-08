@@ -72,8 +72,9 @@ export class Collision {
   _terrainRay(o, d, far) {
     const w = this.world;
     const f = (t) => {
-      const h = w.heightAt(o.x + d.x * t, o.z + d.z * t);
-      return h === null ? null : o.y + d.y * t - h;
+      const y = o.y + d.y * t;
+      const h = w.heightAt(o.x + d.x * t, o.z + d.z * t, y);
+      return h === null ? null : y - h;
     };
     let f0 = f(0);
     if (f0 === null) return null;
@@ -105,9 +106,9 @@ export class Collision {
     let count = 0;
     const w = this.world;
     // arazi
-    const h = w.heightAt(center.x, center.z);
+    const h = w.heightAt(center.x, center.z, center.y);
     if (h !== null) {
-      w.normalAt(center.x, center.z, _n);
+      w.normalAt(center.x, center.z, _n, center.y);
       const dist = (center.y - h) * _n.y;
       const depth = radius - dist;
       if (depth > 0) {

@@ -6,6 +6,7 @@ import { DriveMode } from './modes/DriveMode.js';
 import { ExploreMode } from './modes/ExploreMode.js';
 import { MouseLock } from './core/MouseLock.js';
 import { BigMap } from './ui/BigMap.js';
+import { VERSION } from './version.js';
 
 // Oyun denetleyicisi: modlar arasi gecis, sehir yukleme ekranlari, menuler, ayarlar.
 
@@ -38,7 +39,7 @@ export class Game {
     if (!this.overlay) {
       const el = document.createElement('div');
       el.id = 'loading';
-      el.innerHTML = '<h1>SILKROAD</h1><div class="sub">CONVOY WARS · V4</div><div class="bar"><div></div></div><div class="msg"></div>';
+      el.innerHTML = `<h1>SILKROAD</h1><div class="sub">CONVOY WARS · ${VERSION}</div><div class="bar"><div></div></div><div class="msg"></div>`;
       this.app.ui.appendChild(el);
       this.overlay = el;
     }
@@ -271,32 +272,13 @@ export class Game {
   }
 
   // ------------------------------------------------------------ cok oyunculu
-  async connectNet(name) {
+  /** Sunucuya baglan (addr: sunucu adresi, bos = oyunun acildigi sunucu). Adres degisirse ya da fresh ise yeniden baglanir. */
+  async connectNet(name, addr = this.app.settings.get('mpServer') || '', fresh = false) {
     const { net } = await import('./net/Net.js');
-    if (!net.connected) await net.connect(name);
-    else if (name && name !== net.name) { net.name = name; net.send({ t: 'hello', name }); }
+    if (net.connected && (fresh || (net.addr || '') !== addr)) { if (this.lobby) this.leaveNet(); net.close(); }
+    if (!net.connected) await net.connect(name, addr);
+    else if (name && name !== net.name) { net.name = name; net.send({ t: 'hello', name, v: VERSION }); }
     return net;
-  }
-
-  /** Davet baglantisiyla gelen oyuncu: sunucuya baglan, odaya katil, lobiyi ac. */
-  async joinInvite(code, name) {
-    const s = this.app.settings;
-    if (name) s.set('mpName', name);
-    try {
-      const net = await this.connectNet(s.get('mpName') || 'Oyuncu');
-      await new Promise((resolve, reject) => {
-        const offs = [];
-        const end = (fn, v) => { offs.forEach((u) => u()); fn(v); };
-        offs.push(net.on('room', () => end(resolve)));
-        offs.push(net.on('error', (m) => end(reject, new Error(m.msg))));
-        setTimeout(() => end(reject, new Error('Odaya katılınamadı (zaman aşımı)')), 10000);
-        net.join(String(code).toUpperCase());
-      });
-      await this.showLobby();
-    } catch (e) {
-      this.menu.multiplayer();
-      setTimeout(() => { const er = document.querySelector('.err'); if (er) er.textContent = `Davet: ${e.message}`; }, 400);
-    }
   }
 
   /** Oda lobisi (menu arka plani: garaj sahnesi). */
@@ -307,10 +289,12 @@ export class Game {
     if (this.app.mode !== this.menuMode || !this.menuMode) this.showMainMenu(undefined, false);
     if (!this.lobby) this.lobby = new Lobby(this);
     this.lobby.ready = false;
+    // serbest gezintide odaya donus (pause menusunden degil): dunyada kalanlar devam eder
     this.lobby.started = null;
     if (net.isHost) net.markStarted(false);
     this.menu.lobby(this.lobby, net);
     this.lobby.publish();
+    this.lobby.catchUp();
   }
 
   leaveNet() {
@@ -328,6 +312,24 @@ export class Game {
     await this.loadArea(start, 'Çok oyunculu yarış yükleniyor…');
     const mode = new RaceMode(app, { stage: d.cfg.stage, level: d.cfg.level, seed: d.seed, net, entries: d.entries, teams: d.cfg.mode === 'team',
       onPause: () => this.pauseDrive(), onFinish: (r) => this.raceFinished(r) });
+    app.setMode(mode);
+    this.drive = mode;
+    this._hideOverlay();
+  }
+
+  /** Ag serbest gezintisi: herkes acik dunyada, birbirini gorur (sonradan gelen dogrudan katilir). */
+  async startNetFree(d) {
+    const { net } = await import('./net/Net.js');
+    const app = this.app;
+    this.menu.clear();
+    const id = d.cfg.city || 'hotan';
+    app.settings.set('lastCity', id);
+    const { city, pos } = this.cityPos(id);
+    await this.loadArea(pos, `${city.name} yükleniyor…`);
+    // oyuncular ayni noktaya dogmasin: kimlige gore yana kaydir
+    const k = (net.id % 8) - 3.5;
+    const sp = this.findSpawn(pos.clone().add(new THREE.Vector3(Math.cos(city.heading) * k * 7, 0, -Math.sin(city.heading) * k * 7)), city.heading);
+    const mode = new DriveMode(app, { city: id, x: sp.x, y: sp.y, z: sp.z, yaw: sp.heading, net, onPause: () => this.pauseDrive() });
     app.setMode(mode);
     this.drive = mode;
     this._hideOverlay();
@@ -351,7 +353,7 @@ export class Game {
     this.menu.pause({
       onResume: () => this._resume(mode),
       onTeleport: mode.teleportable === false ? null : (id) => { this._resume(mode); this.teleport(id); },
-      onGarage: mode.net ? null : () => this.menu.garage(() => { this._applyVehicleLook(mode); this.pauseDrive2(mode); }),
+      onGarage: mode.net && !mode.presence ? null : () => this.menu.garage(() => { this._applyVehicleLook(mode); this.pauseDrive2(mode); }),
       onRepair: mode.repairable === false ? null : () => { mode.vehicle.repair(); this._resume(mode); if (mode.hud) mode.hud.toast('Araç onarıldı ve yıkandı', 1.8); },
       onSettings: () => this.menu.settings(() => this.pauseDrive2(mode)),
       onMain: () => { this.menu.clear(); if (mode.net) this.leaveNet(); this.showMainMenu(); },
@@ -363,7 +365,9 @@ export class Game {
   _applyVehicleLook(mode) {
     const s = this.app.settings;
     mode.vehicle.model.setPaint(s.get('vehicleColor'));
+    mode.vehicle.paint = s.get('vehicleColor');
     if (mode.vehicle.variant !== s.get('vehicleVariant') || mode.vehicle.prep !== s.get('vehiclePrep')) mode.rebuildVehicle(s.get('vehicleVariant'), s.get('vehicleColor'));
+    if (mode.presence) mode.presence.announce();
   }
 
   _resume(mode) {

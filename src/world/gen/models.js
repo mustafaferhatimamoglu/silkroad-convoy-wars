@@ -409,6 +409,93 @@ function ferryBoat() {
   ];
 }
 
+/**
+ * Hava gemisi iskelesi: yerel +X boyunca rampa (0 -> R, -H'den 0'a) + duz kisim (R -> R + F, y = 0),
+ * kazik ayaklar, korkuluklar. Ust yuzey y = 0'da biter (gemi guvertesiyle ayni seviye).
+ */
+function airPier(R, F, H) {
+  const ang = Math.atan2(H, R), len = Math.hypot(R, H);
+  const ramp = new THREE.BoxGeometry(len, 0.5, 10);
+  ramp.translate(len / 2, -0.25, 0);
+  ramp.rotateZ(ang);
+  ramp.translate(0, -H, 0);
+  const deck = box(F, 0.6, 10, R + F / 2, -0.6, 0);
+  const legs = [];
+  for (let x = 3; x < R + F; x += 4) {
+    const top = x < R ? -H + (x / R) * H - 0.4 : -0.6;
+    const hgt = top + H + 1.5;
+    if (hgt < 0.4) continue;
+    for (const z of [-4.4, 4.4]) { const p = new THREE.CylinderGeometry(0.3, 0.35, hgt, 8); p.translate(x, top - hgt / 2, z); legs.push(p); }
+  }
+  const rails = [box(F, 1.0, 0.18, R + F / 2, 0, -4.9), box(F, 1.0, 0.18, R + F / 2, 0, 4.9)];
+  for (const z of [-4.9, 4.9]) {
+    const r = new THREE.BoxGeometry(len, 0.18, 0.18);
+    r.translate(len / 2, 0, 0); r.rotateZ(ang); r.translate(0, -H + 1.0, z);
+    rails.push(r);
+  }
+  // istasyon direkleri ve bayraklar
+  const poles = [box(0.4, 9, 0.4, R + F - 0.5, 0, -5.4), box(0.4, 9, 0.4, R + F - 0.5, 0, 5.4)];
+  const flags = [box(0.05, 1.4, 2.2, R + F - 0.5, 7.2, -6.6), box(0.05, 1.4, 2.2, R + F - 0.5, 7.2, 6.6)];
+  return [
+    part(mergeGeos([ramp, deck]), 'build/wood_planks', { uvScale: 2 }),
+    part(mergeGeos(legs), 'build/bark', { uvScale: 2 }),
+    part(mergeGeos([...rails, ...poles]), 'build/wood_lacquer', { uvScale: 2 }),
+    part(mergeGeos(flags), 'build/canvas_red', { uvScale: 2, collide: false }),
+  ];
+}
+
+/**
+ * Roc hava gemisi govdesi: yerel +X burun, guverte ustu y = 0, 26 x 10 m guverte. Govde sigdir
+ * (havada); iki direkli kosum cercevesi ve kuslara giden halatlar. Kuslar (kanat cirpar) ayri.
+ */
+export const ROC_SLOTS = [[3, 17, -6.5], [3, 17, 6.5]];   // kus govdelerinin yeri (gemi yerel)
+function airship() {
+  const L = 26, W = 10;
+  const hull = new THREE.BoxGeometry(L, 1.8, W, 8, 1, 1);
+  const p = hull.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+    const bottom = y < 0, endK = Math.abs(x) / (L / 2);
+    // sivri burun/kic, alt kenarlar dar, uclar yukari kivrik
+    p.setXYZ(i, x, y + (bottom ? endK * endK * 0.9 : endK * endK * 0.6), z * (bottom ? 0.55 : 1) * (1 - endK * endK * 0.45));
+  }
+  hull.computeVertexNormals();
+  hull.translate(0, -1.0, 0);
+  const deck = box(L - 2, 0.25, W - 1.4, 0, -0.25, 0);
+  const prow = new THREE.ConeGeometry(0.5, 4, 6); prow.rotateZ(-Math.PI / 2.6); prow.translate(L / 2 + 0.6, 1.2, 0);
+  const stern = box(0.6, 3.2, 0.6, -L / 2 + 0.6, 0, 0);
+  const rails = [box(L - 8, 1.0, 0.22, 0, 0, W / 2 - 0.3), box(L - 8, 1.0, 0.22, 0, 0, -W / 2 + 0.3)];
+  // kosum cercevesi: iki yan direk + ust kiris
+  const frame = [box(0.5, 9, 0.5, 3, 0, -W / 2 + 0.2), box(0.5, 9, 0.5, 3, 0, W / 2 - 0.2), box(0.6, 0.6, W + 1, 3, 9, 0)];
+  // halatlar: guverte koselerinden ve cerceveden kuslara
+  const ropes = [];
+  const rope = (a, b) => {
+    const dx = b[0] - a[0], dy = b[1] - a[1], dz = b[2] - a[2], len = Math.hypot(dx, dy, dz);
+    const g = new THREE.CylinderGeometry(0.07, 0.07, len, 4);
+    g.translate(0, len / 2, 0);
+    const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(dx / len, dy / len, dz / len));
+    g.applyQuaternion(q);
+    g.translate(a[0], a[1], a[2]);
+    ropes.push(g);
+  };
+  for (const [bx, by, bz] of ROC_SLOTS) {
+    const s = Math.sign(bz);
+    rope([-10, 0.5, s * (W / 2 - 0.4)], [bx - 1, by - 1.6, bz]);
+    rope([10, 0.5, s * (W / 2 - 0.4)], [bx + 1, by - 1.6, bz]);
+    rope([3, 9.3, s * (W / 2)], [bx, by - 1.6, bz]);
+  }
+  const sail = box(0.1, 4, W - 3, -8, 3.5, 0);
+  const mast = new THREE.CylinderGeometry(0.18, 0.24, 8, 6); mast.translate(-8, 4, 0);
+  return [
+    part(hull, 'build/wood_lacquer', { uvScale: 2.5, collide: false }),
+    part(deck, 'build/wood_planks', { uvScale: 2, collide: false }),
+    part(mergeGeos([...rails, ...frame, stern]), 'build/wood_planks', { uvScale: 2, collide: false }),
+    part(mergeGeos([prow, mast]), 'build/bark', { uvScale: 2, collide: false }),
+    part(mergeGeos(ropes), 'build/canvas', { uvScale: 1, collide: false }),
+    part(sail, 'build/canvas_red', { uvScale: 2, collide: false }),
+  ];
+}
+
 /** Isinlanma kapisi: gecis yerel X boyunca, 10 m serbest genislik, 9 m yukseklik. */
 function portal(culture) {
   const C = CULTURE[culture];
@@ -443,6 +530,8 @@ export function model(key) {
   else if (kind === 'landmark') m = landmark(a[1], rnd);
   else if (kind === 'pier') m = pier(Number(a[1]));
   else if (kind === 'ferry') m = ferryBoat();
+  else if (kind === 'airship') m = airship();
+  else if (kind === 'airpier') m = airPier(Number(a[1]), Number(a[2]), Number(a[3]));
   else if (kind === 'portal') m = portal(a[1]);
   else m = [];
   CACHE.set(key, m);

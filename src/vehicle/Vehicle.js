@@ -24,6 +24,7 @@ export class Vehicle {
     this.prep = prep || (app.settings ? app.settings.get('vehiclePrep') : 'ralli') || 'ralli';
     this.params = params || presetFor(variant, this.prep);
     this.variant = variant;
+    this.paint = paint;
     this.sim = new VehicleSim(this.params);
     this.ground = app.collision ? new WorldGround(app.collision) : null;
     this.model = SPECS[variant] ? new CarModel(SPECS[variant], { paint }) : new KartalModel({ variant, paint });
@@ -110,7 +111,7 @@ export class Vehicle {
     const upY = 1 - 2 * (q.x * q.x + q.z * q.z);       // govde yukari ekseninin dikey bileseni
     const again = !inPlaceOnly && this._lastRecover && now - this._lastRecover < 4000;
     if (!inPlaceOnly) this._lastRecover = now;
-    const groundY = this.app.world ? (this.app.world.heightAt(b.pos.x, b.pos.z) ?? b.pos.y - 1) : b.pos.y - 1;
+    const groundY = this.app.world ? (this.app.world.heightAt(b.pos.x, b.pos.z, b.pos.y) ?? b.pos.y - 1) : b.pos.y - 1;
     const wl = this.app.world ? this.app.world.waterAt(b.pos.x, b.pos.z) : null;
     const inWater = wl !== null && wl !== undefined && wl > Math.min(groundY, b.pos.y - 0.3) + 0.35;
     // 1) devrilmis: yerinde dogrult (yakin cevrede bos ve duz bir yer)
@@ -119,7 +120,7 @@ export class Vehicle {
       for (const [dx, dz] of [[0, 0], [1.6, 0], [-1.6, 0], [0, 1.6], [0, -1.6], [2.4, 2.4], [-2.4, -2.4], [2.4, -2.4], [-2.4, 2.4]]) {
         const x = b.pos.x + dx, z = b.pos.z + dz;
         // isin aracin hemen ustunden: ustteki cati/kemer/agac zemin sanilmasin
-        const h = this.app.world ? this.app.world.heightAt(x, z) : null;
+        const h = this.app.world ? this.app.world.heightAt(x, z, b.pos.y) : null;
         const y = this._freeSpot(x, z, Math.max(b.pos.y + 0.6, h !== null && h !== undefined ? h + 0.6 : -Infinity), yaw);
         if (y !== null) { this._place(x, y, z, yaw); return 'upright'; }
       }
@@ -247,13 +248,15 @@ export class Vehicle {
     return this.app.world.isLoadedAt(b.pos.x, b.pos.z);
   }
 
-  update(dt, controls) {
+  /** afterStep(h): her sabit adimdan sonra (or. cok oyunculuda uzak araclarla carpisma). */
+  update(dt, controls, afterStep = null) {
     // arac alti yuklenmemisse fizigi beklet (hizli surerken akis gecikirse)
     if (!this.groundReady()) { this._sync(1); return; }
     this.acc += Math.min(dt, 0.1);
     let n = 0;
     while (this.acc >= STEP && n < 24) {
       this.physicsStep(STEP, controls);
+      if (afterStep) afterStep(STEP);
       this.acc -= STEP;
       n++;
     }
@@ -317,7 +320,7 @@ export class Vehicle {
 
     // zemin golgesi
     _p.copy(this.position);
-    const h = this.app.world ? this.app.world.heightAt(_p.x, _p.z) : 0;
+    const h = this.app.world ? this.app.world.heightAt(_p.x, _p.z, _p.y) : 0;
     const gy = h ?? this.position.y - this.params.cgHeight;
     this.shadow.position.set(_p.x, Math.max(gy, this.position.y - this.params.cgHeight - 0.6) + 0.03, _p.z);
     this.shadow.rotation.z = Math.atan2(this.forward.x, this.forward.z) + Math.PI;

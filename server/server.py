@@ -1,30 +1,26 @@
-"""Silkroad V4 yerel oyun sunucusu.
+"""Silkroad: Convoy Wars V5 - cok oyunculu sunucu.
 
-Statik dosyalari cok is parcacikli olarak sunar. ES modulleri icin dogru MIME
-turlerini zorlar (Windows kayit defteri .js dosyalarini bazen text/plain verir)
-ve buyuk oyun varliklarini (assets/) tarayici onbellegine birakir.
+Istemciden (oyunun kendisi: SilkroadV5.exe ya da tarayici) ayri bir programdir. Oyun mantigi
+calistirmaz ve oyun dosyasi sunmaz: /ws adresinde WebSocket oda sistemi kurar, odadaki oyuncular
+arasinda mesaj aktarir (herkes kendi aracini simule eder, botlari oda kurucusu surer).
 
-Cok oyunculu: /ws adresinde WebSocket (yalnizca standart kutuphane) ile oda sistemi.
-Sunucu oyun mantigi calistirmaz; odadaki oyuncular arasinda mesaj aktarir (yaris
-durumu her oyuncunun kendi tarayicisinda, botlar oda kurucusunda simule edilir).
+Surum: istemci "hello" mesajinda surumunu yollar; sunucunun surumuyle birebir ayni degilse
+baglanti reddedilir (farkli surumler ayni dunyayi/etabi farkli kurar). Her degisiklikte
+tools/bump.py iki tarafin surumunu birlikte yukseltir.
 
 Internet: --tunnel ile Cloudflare'in ucretsiz hizli tuneli (cloudflared) acilir; sabit IP, modem
-ayari ya da hesap gerekmez. Rastgele https://....trycloudflare.com adresi lobide davet dosyasina
-yazilir; arkadas dosyayi acinca oyun kodu GitHub Pages kopyasindan gelir, odaya bu sunucu
-uzerinden baglanir; Silkroad dosyalari (assets/) bu bilgisayardan bir kez iner ve arkadasin
-tarayicisinda kalir (sw.js). Sunucu kapaninca tunel de kapanir.
+ayari ya da hesap gerekmez. Cikan https://....trycloudflare.com adresini arkadasina ver; istemcide
+Cok Oyunculu -> Sunucu adresi kutusuna yazar.
 
-Etap paketleri (assets/packs/<etap>.json, tools/packs.py kaydeder): arkadasin tarayicisi yaris
-oncesi etabin dosyalarini indirir ve icerik ozetleriyle saklar. Sunucu listeyi her istekte guncel
-ozetlerle verir: bir dosya degisirse (boyut/degisme zamani) ozeti yeniden hesaplanir ve arkadasta
-yalniz o dosya yeniden iner.
+Gelistirme / yerel ag: --client <klasor> verilirse o klasordeki oyun da ayni adresten sunulur
+(tarayiciyla oynamak icin). Yalniz oyunun calismasi icin gereken dosyalar sunulur (index.html,
+src/, vendor/, content/); git gecmisi, araclar ve klasor listeleri disariya kapalidir.
 
-Guvenlik: yalniz oyunun calismasi icin gereken dosyalar sunulur (index.html, src/, vendor/,
-assets/); git gecmisi, araclar, testler ve klasor listeleri disariya kapalidir.
-
-Kullanim:  python server.py [port] [--lan] [--tunnel] [--no-browser]
+Kullanim:  python server/server.py [port] [--lan] [--tunnel] [--client DIR] [--open]
   --lan     yerel agdaki diger bilgisayarlar baglanabilsin (0.0.0.0 dinlenir)
-  --tunnel  internetten davet: tools/cloudflared.exe (ya da PATH'teki cloudflared) ile tunel
+  --tunnel  internetten baglanti: cloudflared (server/, tools/ ya da PATH) ile tunel
+  --client  oyun klasorunu da sun (or. --client .)
+  --open    acilista oyunu tarayicida ac (--client ile)
 """
 import base64
 import hashlib
@@ -45,21 +41,34 @@ import threading
 import time
 import webbrowser
 
-ROOT = os.path.dirname(os.path.abspath(__file__))
-ARGS = [a for a in sys.argv[1:] if not a.startswith("--")]
-PORT = int(ARGS[0]) if ARGS else 5070
-LAN = "--lan" in sys.argv
-TUNNEL = "--tunnel" in sys.argv
+VERSION = "5.1.0"
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+ARGV = sys.argv[1:]
+
+
+def _opt(name):
+    if name in ARGV:
+        i = ARGV.index(name)
+        if i + 1 < len(ARGV) and not ARGV[i + 1].startswith("--"):
+            return ARGV[i + 1]
+    return None
+
+
+CLIENT = _opt("--client")
+CLIENT = os.path.abspath(CLIENT) if CLIENT else None
+POS = [a for i, a in enumerate(ARGV) if not a.startswith("--") and (i == 0 or ARGV[i - 1] != "--client")]
+PORT = int(POS[0]) if POS else 5070
+LAN = "--lan" in ARGV
+TUNNEL = "--tunnel" in ARGV
 TUNNEL_URL = None
 WS_IDLE = 90               # sn: bu kadar sessiz kalan WebSocket kapatilir
 STATS = {"sent": 0}
 STATS_LOCK = threading.Lock()
-PACK_HASHES = {}            # yol -> (boyut, degisme zamani, ozet)
-PACK_LOCK = threading.Lock()
 
-# Disariya sunulan yollar (gerisi 404): oyun sayfasi, kod, kutuphaneler, varliklar, API, WebSocket
+# --client ile disariya sunulan yollar (gerisi 404)
 ALLOWED_FILES = {"/", "/index.html"}
-ALLOWED_PREFIXES = ("/src/", "/vendor/", "/assets/", "/content/")
+ALLOWED_PREFIXES = ("/src/", "/vendor/", "/content/")
 
 MIME = {
     ".js": "text/javascript",
@@ -117,6 +126,7 @@ class Conn:
         self.room = None
         self.send_lock = threading.Lock()
         self.alive = True
+        self.ok = False            # surumu dogrulanmis "hello" gelene dek yalniz hello/ping kabul
 
     def send(self, obj):
         data = json.dumps(obj, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
@@ -140,10 +150,12 @@ class Room:
         self.host = host
         self.members = {host.id: host}
         self.started = False
+        self.open = False          # basladiktan sonra da katilinabilir (serbest gezinti)
+        self.mode = ""
         self.created = time.time()
 
     def info(self):
-        return {"t": "room", "code": self.code, "host": self.host.id, "started": self.started,
+        return {"t": "room", "code": self.code, "host": self.host.id, "started": self.started, "open": self.open, "mode": self.mode,
                 "members": [{"id": c.id, "name": c.name} for c in self.members.values()]}
 
     def broadcast(self, obj, exclude=None):
@@ -184,13 +196,25 @@ def leave_room(c):
 def handle_message(c, msg):
     t = msg.get("t")
     if t == "hello":
+        v = str(msg.get("v") or "")
+        if v != VERSION:
+            c.send({"t": "error", "code": "version", "server": VERSION, "client": v,
+                    "msg": f"Sürüm uyuşmuyor: sunucu {VERSION}, oyunun {v or 'eski'}. Aynı sürümü kullanın."})
+            c.alive = False
+            return
+        c.ok = True
         c.name = str(msg.get("name") or c.name)[:24]
-        c.send({"t": "welcome", "id": c.id, "s": time.time() * 1000})
-    elif t == "ping":
+        c.send({"t": "welcome", "id": c.id, "s": time.time() * 1000, "v": VERSION})
+        return
+    if t == "ping":
         c.send({"t": "pong", "c": msg.get("c"), "s": time.time() * 1000})
-    elif t == "rooms":
+        return
+    if not c.ok:
+        return
+    if t == "rooms":
         with ROOMS_LOCK:
-            lst = [{"code": r.code, "host": r.host.name, "n": len(r.members), "started": r.started} for r in ROOMS.values()]
+            lst = [{"code": r.code, "host": r.host.name, "n": len(r.members), "started": r.started, "open": r.open, "mode": r.mode}
+                   for r in ROOMS.values()]
         c.send({"t": "rooms", "list": lst})
     elif t == "create":
         leave_room(c)
@@ -207,7 +231,7 @@ def handle_message(c, msg):
             err = None if r else "Oda bulunamadı"
             if r and len(r.members) >= MAX_ROOM:
                 err = "Oda dolu"
-            if r and r.started:
+            if r and r.started and not r.open:
                 err = "Yarış başlamış"
         if err:
             c.send({"t": "error", "msg": err})
@@ -224,6 +248,9 @@ def handle_message(c, msg):
         r = c.room
         if r and r.host is c:
             r.started = bool(msg.get("v", True))
+            r.open = bool(msg.get("open", False)) and r.started
+            r.mode = str(msg.get("mode") or "")[:12] if r.started else ""
+            r.broadcast(r.info())
     elif t == "relay":
         r = c.room
         if not r:
@@ -286,92 +313,56 @@ def ws_loop(c):
                 handle_message(c, msg)
 
 
-# ---------------------------------------------------------------- etap paketleri
-
-def file_digest(path):
-    h = hashlib.sha1()
-    with open(path, "rb") as f:
-        for chunk in iter(lambda: f.read(1 << 20), b""):
-            h.update(chunk)
-    return h.hexdigest()[:16]
-
-
-def pack_json(stage):
-    """Kayitli dosya listesi + guncel icerik ozetleri. Paket surumu ozetlerden turetilir."""
-    with open(os.path.join(ROOT, "assets", "packs", f"{stage}.json"), encoding="utf-8") as f:
-        rec = json.load(f)
-    files = []
-    with PACK_LOCK:
-        for path, _size, _digest in rec.get("files", []):
-            full = os.path.join(ROOT, path)
-            try:
-                st = os.stat(full)
-            except OSError:
-                continue
-            c = PACK_HASHES.get(path)
-            if not c or c[0] != st.st_size or c[1] != st.st_mtime_ns:
-                c = PACK_HASHES[path] = (st.st_size, st.st_mtime_ns, file_digest(full))
-            files.append([path, c[0], c[2]])
-    files.sort()
-    version = hashlib.sha1("".join(f[2] for f in files).encode()).hexdigest()[:12]
-    return {"stage": stage, "version": version, "total": sum(f[1] for f in files), "files": files}
+def server_info():
+    with ROOMS_LOCK:
+        players = sum(len(r.members) for r in ROOMS.values())
+        rooms = len(ROOMS)
+    return {"server": "silkroad", "version": VERSION, "lan": LAN, "port": PORT, "addresses": lan_addresses() if LAN else [],
+            "tunnel": TUNNEL_URL, "tunnelWanted": TUNNEL, "rooms": rooms, "players": players, "client": bool(CLIENT),
+            "sent": STATS["sent"]}
 
 
-def warm_packs():
-    """Acilista paket ozetlerini hazirla (ilk arkadas istegi beklemesin)."""
-    d = os.path.join(ROOT, "assets", "packs")
-    for name in sorted(os.listdir(d)) if os.path.isdir(d) else []:
-        if name.endswith(".json"):
-            try:
-                pack_json(name[:-5])
-            except (OSError, ValueError):
-                pass
+STATUS_PAGE = """<!DOCTYPE html><html lang="tr"><head><meta charset="utf-8"><title>Silkroad V5 sunucusu</title>
+<style>body{{font:16px/1.5 Georgia,serif;background:#15110b;color:#eadfc6;display:grid;place-items:center;height:100vh;margin:0}}
+div{{padding:24px 30px;border:1px solid #6b5630;border-radius:10px;max-width:520px}}b{{color:#f2c46d}}</style></head>
+<body><div><h2>Silkroad: Convoy Wars sunucusu</h2><p>Sürüm <b>{v}</b> çalışıyor.</p>
+<p>Bu adres oyunun kendisi değil, çok oyunculu sunucudur. Oyunu (SilkroadV5.exe) aç,
+<b>Çok Oyunculu</b> ekranında <b>Sunucu adresi</b> kutusuna bu sayfanın adresini yaz.</p></div></body></html>"""
 
 
 # ---------------------------------------------------------------- HTTP
 
 class Handler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, directory=ROOT, **kwargs)
+        super().__init__(*args, directory=CLIENT or HERE, **kwargs)
 
     extensions_map = {**http.server.SimpleHTTPRequestHandler.extensions_map, **MIME}
+
+    def _bytes(self, body, ctype):
+        self.send_response(200)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        super().end_headers()
+        self.wfile.write(body)
 
     def do_GET(self):
         if self.path.startswith("/ws") and self.headers.get("Upgrade", "").lower() == "websocket":
             return self.websocket()
         if self.path.startswith("/api/info"):
-            info = {"lan": LAN, "port": PORT, "addresses": lan_addresses() if LAN else [],
-                    "tunnel": TUNNEL_URL, "tunnelWanted": TUNNEL, "sent": STATS["sent"]}
-            body = json.dumps(info).encode("utf-8")
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(body)))
-            # davet dosyasi (file://) baglanti kontrolu icin
-            self.send_header("Access-Control-Allow-Origin", "*")
-            self.end_headers()
-            self.wfile.write(body)
-            return
-        m = re.match(r"^/assets/packs/([a-z0-9_]+)\.json(\?.*)?$", self.path)
-        if m:
-            try:
-                body = json.dumps(pack_json(m.group(1)), separators=(",", ":")).encode("utf-8")
-            except (OSError, ValueError):
-                self.send_error(404, "Bulunamadi")
-                return
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(body)))
-            self.send_header("Cache-Control", "no-store")
-            self.send_header("Access-Control-Allow-Origin", "*")
-            super().end_headers()
-            self.wfile.write(body)
-            return
+            return self._bytes(json.dumps(server_info()).encode("utf-8"), "application/json")
+        if not CLIENT:
+            if self.path.split("?", 1)[0] in ("/", "/index.html"):
+                return self._bytes(STATUS_PAGE.format(v=VERSION).encode("utf-8"), "text/html; charset=utf-8")
+            self.send_error(404, "Bulunamadi")
+            return None
         return super().do_GET()
 
     def send_head(self):
         path = self.path.split("?", 1)[0].split("#", 1)[0]
         ok = path in ALLOWED_FILES or path.startswith(ALLOWED_PREFIXES)
-        if not ok or "/." in path or ".." in path:
+        if not CLIENT or not ok or "/." in path or ".." in path:
             self.send_error(404, "Bulunamadi")
             return None
         return super().send_head()
@@ -416,26 +407,25 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.close_connection = True
 
     def end_headers(self):
-        # Oyun varliklari degismez: uzun onbellek. Kod her zaman taze yuklensin.
-        if self.path.startswith("/assets/"):
-            self.send_header("Cache-Control", "public, max-age=86400")
-            # oyunun GitHub Pages kopyasi Silkroad dosyalarini davet edenden ceker
-            self.send_header("Access-Control-Allow-Origin", "*")
-        elif not self.path.startswith("/ws"):
+        if not self.path.startswith("/ws"):
+            # oyun kodu her zaman taze yuklensin (surum degisince eski dosya kalmasin)
             self.send_header("Cache-Control", "no-cache")
         super().end_headers()
 
     def log_message(self, fmt, *args):
-        # Sadece hatalari yaz; binlerce varlik istegi konsolu bogmasin.
+        # Sadece hatalari yaz; binlerce dosya istegi konsolu bogmasin.
         if len(args) > 1 and str(args[1]).startswith(("4", "5")):
             super().log_message(fmt, *args)
 
 
+# ---------------------------------------------------------------- internet tuneli
+
 def find_cloudflared():
-    for name in ("cloudflared.exe", "cloudflared"):
-        p = os.path.join(ROOT, "tools", name)
-        if os.path.exists(p):
-            return p
+    for d in (HERE, os.path.join(os.path.dirname(HERE), "tools")):
+        for name in ("cloudflared.exe", "cloudflared"):
+            p = os.path.join(d, name)
+            if os.path.exists(p):
+                return p
     return shutil.which("cloudflared")
 
 
@@ -443,8 +433,8 @@ def start_tunnel():
     """Cloudflare hizli tuneli: bu bilgisayardan disariya baglanir (sabit IP / port yonlendirme gerekmez)."""
     exe = find_cloudflared()
     if not exe:
-        print("  UYARI: cloudflared bulunamadi; internet daveti kapali.")
-        print("  tools/cloudflared.exe olarak koyun (Cloudflare'in resmi GitHub surumu: cloudflared-windows-amd64.exe).")
+        print("  UYARI: cloudflared bulunamadi; internet baglantisi kapali.")
+        print("  server/cloudflared.exe olarak koyun (Cloudflare'in resmi GitHub surumu: cloudflared-windows-amd64.exe).")
         return None
     # ayni konsolu paylasir: pencere kapaninca tunel de kapanir
     proc = subprocess.Popen([exe, "tunnel", "--no-autoupdate", "--url", f"http://127.0.0.1:{PORT}"],
@@ -457,7 +447,7 @@ def start_tunnel():
             if m and not TUNNEL_URL:
                 TUNNEL_URL = m.group(0)
                 print(f"  Internet adresi hazir: {TUNNEL_URL}")
-                print("  Oyunda Cok Oyunculu -> Oda kur -> 'Davet dosyasi' ile arkadasina gonder.")
+                print("  Arkadasin oyunda Cok Oyunculu -> Sunucu adresi kutusuna bunu yazsin.")
         if not TUNNEL_URL:
             print("  UYARI: internet tuneli acilamadi (cloudflared kapandi).")
 
@@ -486,24 +476,25 @@ def main():
         except OSError:
             pass
     except OSError:
-        print(f"Port {PORT} kullaniliyor; sunucu zaten acik olabilir. Tarayici aciliyor: {url}")
-        if "--no-browser" not in sys.argv:
+        print(f"Port {PORT} kullaniliyor; sunucu zaten acik olabilir.")
+        if CLIENT and "--open" in ARGV:
             webbrowser.open(url)
         return
     print("=" * 60)
-    print("  SILKROAD: CONVOY WARS V4  -  yerel sunucu")
-    print(f"  Adres: {url}")
+    print(f"  SILKROAD: CONVOY WARS  -  cok oyunculu sunucu {VERSION}")
+    print(f"  Bu bilgisayardan: {url}")
+    if CLIENT:
+        print(f"  Oyun da sunuluyor: {CLIENT}")
     if LAN:
         for ip in lan_addresses():
-            print(f"  Yerel ag: http://{ip}:{PORT}/   (arkadaslarin bu adrese girsin)")
+            print(f"  Yerel ag: http://{ip}:{PORT}/   (arkadaslarin Sunucu adresi kutusuna bunu yazsin)")
         print("  Windows guvenlik duvari sorarsa 'Ozel aglar' icin izin verin.")
     if TUNNEL:
         print("  Internet tuneli aciliyor (birkac saniye)...")
         start_tunnel()
-    threading.Thread(target=warm_packs, daemon=True).start()
     print("  Kapatmak icin Ctrl+C")
     print("=" * 60)
-    if "--no-browser" not in sys.argv:
+    if CLIENT and "--open" in ARGV:
         webbrowser.open(url)
     try:
         httpd.serve_forever()

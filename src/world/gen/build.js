@@ -13,7 +13,8 @@ export async function buildGenObjects(pool, list, isCancelled, base = 'content/'
   const parts = [];
   const texKeys = new Set();
   for (const o of list) {
-    for (const p of model(o.m)) { parts.push({ o, p }); texKeys.add(p.tex); }
+    // o.parts: yere ozgu hazir geometri (or. tunel); yoksa model anahtari
+    for (const p of o.parts || model(o.m)) { parts.push({ o, p }); texKeys.add(p.tex); }
   }
   const texSlot = new Map();
   await Promise.all([...texKeys].map(async (tk) => { texSlot.set(tk, await pool.acquire(tk, texUrl(tk, base))); }));

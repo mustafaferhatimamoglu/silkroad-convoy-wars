@@ -94,7 +94,7 @@ export class VehicleCamera {
       if (this.app.collision.raycast(_look, _dir, len, this.hit)) {
         _target.copy(_look).addScaledVector(_dir, Math.max(0.6, this.hit.distance - 0.3));
       }
-      const h = this.app.world.heightAt(_target.x, _target.z);
+      const h = this.app.world.heightAt(_target.x, _target.z, _target.y);
       if (h !== null && _target.y < h + 0.5) _target.y = h + 0.5;
       if (!this.initialized) this.pos.copy(_target);
       const k = 1 - Math.exp(-dt * (far ? 6 : 10));
@@ -118,7 +118,7 @@ export class VehicleCamera {
       this.cineT += dt * 0.25;
       const r = 7.5 + Math.sin(this.cineT * 0.7) * 2;
       _target.set(pos.x + Math.sin(this.cineT) * r, pos.y + 1.2 + Math.sin(this.cineT * 0.5) * 0.8, pos.z + Math.cos(this.cineT) * r);
-      const h = this.app.world.heightAt(_target.x, _target.z);
+      const h = this.app.world.heightAt(_target.x, _target.z, _target.y);
       if (h !== null && _target.y < h + 0.6) _target.y = h + 0.6;
       if (!this.initialized) this.pos.copy(_target);
       this.pos.lerp(_target, 1 - Math.exp(-dt * 3));

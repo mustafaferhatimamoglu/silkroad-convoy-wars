@@ -1,8 +1,8 @@
 """Ralli etabi araclari: arazi taramasi -> rota planlama -> ince engel koridoru -> pilot notlari
 -> oyun verisi (src/data/rally.js) -> otomatik pilotla deneme.
 
-Tarama/koridor/notlar/surus adimlari oyunu tarayicida calistirir: oyun sunucusu (python server.py,
-5070) ve test kosum takimi (node tools/devharness.mjs, 9400) acik olmali. Adresler SRO_GAME ve
+Tarama/koridor/notlar/surus adimlari oyunu tarayicida calistirir: oyun sunucusu (python
+server/server.py 5070 --client .) ve test kosum takimi (node tools/devharness.mjs, 9400) acik olmali. Adresler SRO_GAME ve
 SRO_HARNESS ortam degiskenleriyle degistirilebilir. Ara ciktilar tools/rally/work/<etap>/ altinda
 (git disi): tarama bloklari, grid.npz, extra_obs.json, route.json, profile.json, notes.json, map.png.
 
@@ -43,7 +43,7 @@ OUT = os.path.join(ROOT, 'src', 'data', 'rally.js')
 ASSETS = os.path.join(ROOT, 'assets')
 HARNESS = os.environ.get('SRO_HARNESS', 'http://127.0.0.1:9400')
 GAME = os.environ.get('SRO_GAME', 'http://localhost:5070')
-ORIGIN = (168, 97)   # Jangan bolgesi = Three.js orijini; x = (rx - 168) * 192, z = -(rz - 97) * 192
+ORIGIN = (0, 0)   # V5: Three.js orijini dunyanin guney-bati kosesi; x = rx * 192, z = -rz * 192
 CELL = 4.0           # izgara hucresi (m); bolge basina 48 hucre
 
 
@@ -97,8 +97,9 @@ def wait_for(cond_js, secs=180):
     raise RuntimeError('oyun hazir olmadi: ' + cond_js)
 
 
-def ensure_game(st):
-    nav(f'{GAME}/?mode=drive&city={st.get("city", "jangan")}')
+def ensure_game(st, noveg=False):
+    # noveg: bitki ortusu olmadan (tarama); parkur boyunca agaclar oyunda temizlenir (world/gen/tracks.js)
+    nav(f'{GAME}/?mode=drive&city={st.get("city", "jangan")}' + ('&noveg=1' if noveg else ''))
     time.sleep(2)
     wait_for("!!(window.game && window.app && app.mode && app.mode.constructor.name === 'DriveMode')")
 
@@ -161,7 +162,7 @@ def dilate(mask, it=1):
 # ---------------------------------------------------------------- tarama
 
 def cmd_scan(st):
-    ensure_game(st)
+    ensure_game(st, noveg=True)
     RX0, RX1, RZ0, RZ1 = st['bounds']
     for rx in range(RX0 + 1, RX1 + 1, 3):
         for rz in range(RZ0 + 1, RZ1 + 1, 3):

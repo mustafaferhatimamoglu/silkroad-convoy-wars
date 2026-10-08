@@ -210,7 +210,7 @@ export class VehicleDamage {
         _q2.setFromAxisAngle(_v.copy(D.ang).divideScalar(angL), angL * dt);
         D.quat.premultiply(_q2).normalize();
       }
-      const gy = world ? world.heightAt(D.pos.x, D.pos.z) : null;
+      const gy = world ? world.heightAt(D.pos.x, D.pos.z, D.pos.y) : null;
       const ground = gy === null || gy === undefined ? -1e9 : gy;
       if (D.pos.y < ground + D.radius) {
         D.pos.y = ground + D.radius;

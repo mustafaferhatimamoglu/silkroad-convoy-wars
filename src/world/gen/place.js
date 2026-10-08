@@ -1,6 +1,8 @@
 import { hash2 } from './noise.js';
-import { REGION_M } from './plan.js';
+import { REGION_M, AIRPIER } from './plan.js';
 import { cityLayout } from './city.js';
+import { tunnelItems } from './tunnel.js';
+import { tracksNear, trackDist, TRACK } from './tracks.js';
 
 // Bolge objeleri: bitki ortusu ve kayalar (8 m izgarada tekrarlanabilir dagitim) + bolgeye dusen
 // sehir parcalari. Cikti bolge-yerel Three.js koordinatlarinda: x dogu, z = -kuzey, y metre;
@@ -60,7 +62,21 @@ export function placeRegionObjects(data, rx, rz, d) {
     }
   }
 
-  // ---- bitki ortusu ve kayalar
+  // ---- hava gemisi iskeleleri (rampali; ust yuzey = gemi guvertesi)
+  for (const A of plan.airships || []) {
+    for (const dk of [A.a, A.b]) {
+      const lx = dk.sx - x0, lz = dk.sz - z0;
+      if (lx < 0 || lx >= REGION_M || lz < 0 || lz >= REGION_M) continue;
+      out.push({ m: `airpier:${AIRPIER.ramp}:${AIRPIER.flat}:${AIRPIER.H}`, x: lx, y: dk.wl + 1.2, z: -lz, yaw: Math.atan2(dk.uz, dk.ux), s: 1 });
+    }
+  }
+
+  // ---- tunel ic kesiti ve agiz cepheleri
+  for (const it of tunnelItems(plan, rx, rz)) out.push(it);
+
+  // ---- bitki ortusu ve kayalar (ralli parkuru boyunca temiz; etap taramasinda hic yok: ?noveg=1)
+  if (globalThis.__sroNoVeg) return out;
+  const track = tracksNear(rx, rz, 'all');
   const n = REGION_M / CELL;
   for (let ci = 0; ci < n; ci++) {
     for (let cj = 0; cj < n; cj++) {
@@ -76,6 +92,7 @@ export function placeRegionObjects(data, rx, rz, d) {
       const wl = plan.waterLevel(X, Z);
       if (wl !== null && h < wl + 0.6) continue;
       if (roadAt(lx, lz) > 0.02) continue;
+      if (track.length && trackDist(X, Z, track) < TRACK.clear) continue;
       const gxh = H(lx + 2, lz) - H(lx - 2, lz), gzh = H(lx, lz + 2) - H(lx, lz - 2);
       const slope = Math.hypot(gxh, gzh) / 4;
       const bio = plan.biome(X, Z);

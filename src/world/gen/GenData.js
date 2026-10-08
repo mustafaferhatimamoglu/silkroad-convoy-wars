@@ -2,6 +2,7 @@ import { WorldPlan, WORLD, REGION_M } from './plan.js';
 import { Simplex, hash2, smoothstep } from './noise.js';
 import { placeRegionObjects } from './place.js';
 import { cityLayout } from './city.js';
+import { tracksNear, trackDist, TRACK } from './tracks.js';
 
 // V5 dunya verisi: motorun bekledigi bolge verilerini (yukseklik, zemin dokusu, su, renk haritasi,
 // objeler) dunya planindan aninda uretir. Eski WorldData (Silkroad dosyalari) ile ayni arayuz.
@@ -90,6 +91,7 @@ export class GenWorldData {
     const heights = new Float32Array(VERTS * VERTS);
     const roads = new Float32Array(VERTS * VERTS);
     const kinds = new Uint8Array(VERTS * VERTS);
+    let holes = null;                          // tunel agzi: bu koselere degen ucgenler cizilmez
     const s = {};
     let minH = Infinity, maxH = -Infinity;
     for (let i = 0; i < VERTS; i++) {
@@ -99,6 +101,7 @@ export class GenWorldData {
         heights[k] = s.h * 10;
         roads[k] = s.road;
         kinds[k] = s.roadKind === 'paved' ? 1 : s.roadKind === 'dirt' ? 2 : 0;
+        if (s.hole) (holes || (holes = new Uint8Array(VERTS * VERTS)))[k] = 1;
         if (s.h < minH) minH = s.h;
         if (s.h > maxH) maxH = s.h;
       }
@@ -131,6 +134,7 @@ export class GenWorldData {
     const texture = new Uint16Array(VERTS * VERTS);
     const H = (i, j) => heights[Math.min(CELLS, Math.max(0, i)) * VERTS + Math.min(CELLS, Math.max(0, j))] * 0.1;
     const n = this.n;
+    const track = tracksNear(rx, rz, 'path');      // ralli parkuru: toprak serit
     for (let i = 0; i < VERTS; i++) {
       for (let j = 0; j < VERTS; j++) {
         const k = i * VERTS + j, x = x0 + j * 2, z = z0 + i * 2;
@@ -147,6 +151,8 @@ export class GenWorldData {
           const g = cityLayout(plan, city).ground(x, z);
           const sandy = city.culture === 'desert' || city.culture === 'egypt';
           w = g === 'plaza' ? W.paving : g === 'street' ? (sandy ? W.paving : W.cobble) : (sandy && jit > 0.25 ? W.sand : W.dirt);
+        } else if (track.length && trackDist(x, z, track) < TRACK.paint + jit * 0.9) {
+          w = plan.biome(x, z).sand > 0.5 ? W.gravel : W.dirt;
         } else {
           const bio = plan.biome(x, z);
           const snowline = 330 + n.noise(x / 300, z / 300) * 45;
@@ -190,7 +196,7 @@ export class GenWorldData {
         colormap[o] = Math.min(255, c[0] * shade); colormap[o + 1] = Math.min(255, c[1] * shade); colormap[o + 2] = Math.min(255, c[2] * shade); colormap[o + 3] = 255;
       }
     }
-    return { heights, texture, waterType, waterHeight, colormap, roads, minH, maxH, objects: null };
+    return { heights, texture, waterType, waterHeight, colormap, roads, holes, minH, maxH, objects: null };
   }
 
   /** Mini harita karosu (tarayicida): bolgenin renk haritasi, kuzey yukarida. */

@@ -7,8 +7,10 @@ import { VehicleEffects } from '../vehicle/effects/VehicleEffects.js';
 import { VehicleAudio } from '../vehicle/VehicleAudio.js';
 import { musicForRegion } from '../core/AudioSystem.js';
 import { Transport } from '../world/Transport.js';
+import { NetPresence } from '../net/NetPresence.js';
 
-// Serbest surus modu: Silkroad dunyasinda Tofas Kartal.
+// Serbest surus modu: acik dunyada arac. opts.net verilirse cok oyunculu serbest gezinti
+// (odadaki diger oyuncular ayni dunyada: NetPresence).
 
 export class DriveMode {
   constructor(app, opts = {}) {
@@ -38,6 +40,12 @@ export class DriveMode {
     this.effects = new VehicleEffects(app, this.vehicle);
     this.sound = new VehicleAudio(app.audio, this.vehicle, { engine: s.get('engineSound') });
     this._musicT = 0;
+    if (this.opts.net && this.opts.net.connected) {
+      this.net = this.opts.net;
+      this.presence = new NetPresence(this, this.net);
+      this._presStep = (h) => this.presence.step(h);
+      this._mapOthers = () => this.presence.mapList();
+    }
   }
 
   /** Arac surumunu degistir (garajdan); konum ve yon korunur. */
@@ -53,6 +61,7 @@ export class DriveMode {
     this.camera.vehicle = this.vehicle;
     this.effects = new VehicleEffects(app, this.vehicle);
     this.sound = new VehicleAudio(app.audio, this.vehicle, { engine: app.settings.get('engineSound') });
+    if (this.presence) for (const o of this.presence.others.values()) o.vehicle.shareReflections(this.vehicle);
   }
 
   applyAssists(level) {
@@ -86,11 +95,12 @@ export class DriveMode {
   update(dt) {
     const { input } = this.app;
     if (input.pressed('Escape') && this.onPause && !(this.transport && this.transport.panelOpen)) { this.onPause(); }
-    if (this.paused) { this.camera.update(0, input); return; }
+    if (this.paused) { this.camera.update(0, input); if (this.presence) this.presence.update(dt); return; }
     const c = this._readControls(dt);
     this._keys();
     // gemideyken arac fizigi durur, araci gemi tasir
     if (!(this.transport && this.transport.update(dt, this))) this._stepVehicles(dt, c);
+    if (this.presence) this.presence.update(dt);
     // isinlanma basladiysa (yukleme) odak hedefte kalsin
     if (this.paused) return;
     this._afterVehicle(dt);
@@ -128,7 +138,7 @@ export class DriveMode {
 
   /** Fizik: serbest suruste yalniz oyuncu araci (yaris modu tum araclari birlikte adimlar). */
   _stepVehicles(dt, c) {
-    this.vehicle.update(dt, c);
+    this.vehicle.update(dt, c, this._presStep || null);
   }
 
   /** Arac adimindan sonra: gostergeler, hasar olaylari, kir, kamera, ses, efektler, HUD, muzik. */
@@ -141,6 +151,7 @@ export class DriveMode {
       for (const im of v.sim.impacts) this.camera.addShake(Math.min(1, im.speed / 12));
       v.lastImpacts = v.sim.impacts.splice(0);
       v.applyImpacts(v.lastImpacts);
+      if (this.presence) this.presence.sendDamage(v.lastImpacts);
     }
     // menteseli parca olaylari
     if (v.damage.events.length) {
@@ -163,6 +174,14 @@ export class DriveMode {
     this.hud.update(dt, v, this.camera.mode);
     if (this.app.game && this.app.game.bigMap.open) this.app.game.bigMap.draw(v.position, v.sim.yaw, this._mapOthers ? this._mapOthers() : []);
     this.focus.copy(v.position);
+    // tunel: farlar kendiliginden yanar, cikista eski haline doner
+    this._tunT = (this._tunT || 0) - dt;
+    if (this._tunT <= 0) {
+      this._tunT = 0.3;
+      const inT = this.app.world.inTunnel(v.position.x, v.position.z, v.position.y);
+      if (inT && this._tunLights === undefined) { this._tunLights = v.headlights; v.headlights = true; }
+      else if (!inT && this._tunLights !== undefined) { v.headlights = this._tunLights || this.app.sky.night > 0.5; this._tunLights = undefined; }
+    }
     // bolge muzigi
     this._musicT -= dt;
     if (this._musicT <= 0) {
@@ -212,6 +231,7 @@ export class DriveMode {
   _afterTeleport() {}
 
   dispose() {
+    if (this.presence) this.presence.dispose();
     if (this.transport) this.transport.dispose();
     this.sound.dispose();
     this.effects.dispose();

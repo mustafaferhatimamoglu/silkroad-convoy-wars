@@ -10,6 +10,8 @@ import { Simplex, clamp, lerp, smoothstep } from './noise.js';
 export const REGION_M = 192;
 export const WORLD = { rx: 80, rz: 40, w: 80 * REGION_M, h: 40 * REGION_M };
 export const SEA_LEVEL = 0;
+// tunel kesiti (m): ic yari genislik, duz duvar ve kemer tepe yuksekligi; agizda arazi deligi derinligi
+export const TUNNEL = { halfW: 6, wallH: 4.6, roofH: 7.6, mouth: 6 };
 
 // kultur: china | desert | persian | byzantine | egypt
 export const CITIES = [
@@ -47,6 +49,13 @@ export const FERRIES = [
   { id: 'sea', name: 'İskenderiye Gemisi', a: { x: 2300, z: 2560 }, b: { x: 2700, z: 1120 }, time: 55 },
 ];
 
+// Roc hava gemileri: dev Roc kuslarinin tasidigi gemi. a: istasyon (yol ucu, duzlenmis meydan),
+// b: zirve platosu. Iki uçta rampali yuksek iskele; gemi iskelenin ucunda havada bekler.
+export const AIRSHIPS = [
+  { id: 'roc', name: 'Roc Hava Gemisi', a: { x: 6900, z: 5800 }, b: { x: 6450, z: 6250 }, time: 50, labels: ['Roc istasyonu', 'Roc Dağı zirvesi'] },
+];
+export const AIRPIER = { ramp: 16, flat: 10, H: 3.5 };   // rampa boyu, duz kisim, yukseklik (m)
+
 // nehirler: kaynaktan agiza. width: yatak genisligi, depth: kiyiya gore su derinligi
 export const RIVERS = [
   { id: 'huang', width: 110, depth: 4, pts: [[12100, 7700], [11950, 6500], [12200, 5200], [12050, 3950], [12250, 2600], [12000, 1200], [12150, -50]] },
@@ -69,7 +78,7 @@ const RANGES = [
   { pts: [[15250, -100], [15100, 3000], [15260, 7800]], h: 260, w: 480 },
   { pts: [[6700, 120], [10000, 260], [15400, 150]], h: 190, w: 420 },
 ];
-const PEAKS = [{ x: 6450, z: 6250, h: 520, r: 700 }];   // Roc Dagi
+const PEAKS = [{ x: 6450, z: 6250, h: 520, r: 700, top: { h: 700, r: 95 } }];   // Roc Dagi (zirvede plato)
 // gecit vadileri: dag yuksekligi bu cizgiler boyunca azalir (yol dogal bir vadiden kivrilarak tirmanir)
 const VALLEYS = [
   { pts: [[7500, 3540], [7060, 3570], [6820, 3430], [6660, 3520], [6760, 3720], [6420, 3700], [6200, 3780], [5700, 3820]], k: 0.84, r0: 90, r1: 560 },
@@ -204,6 +213,7 @@ export class WorldPlan {
     // feribot iskeleleri: karadan karsi kiyiya dogru ilerle; ilk derin su noktasi iskele ucu, ondan
     // onceki kuru nokta kiyi (yol oraya kadar uzanir)
     this.ferries = FERRIES.map((f) => ({ ...f, a: this._dock(f.a, f.b), b: this._dock(f.b, f.a) }));
+    this.pads = [];                     // hava gemisi istasyon meydanlari (yollardan sonra duzlenir)
     const roadDefs = ROADS.map((r) => {
       const pts = r.pts.map((p) => p.slice());
       for (const f of this.ferries) for (const d of [f.a, f.b]) {
@@ -242,8 +252,60 @@ export class WorldPlan {
       for (let i = h.length - 2; i >= 0; i--) h[i] = clamp(h[i], h[i + 1] - g, h[i + 1] + g);
       for (let i = 1; i < h.length; i++) h[i] = clamp(h[i], h[i - 1] - g, h[i - 1] + g);
       pin();
+      // tunel agizlari: ust ortu (dogal arazi - yol) en az 9 m olan aralik; disi yarma ile yaklasir
+      if (ta >= 0) {
+        const cover = (i) => this._natural(dense[i][0], dense[i][1], true) - h[i];
+        let a = ta;
+        while (a < tb && cover(a) < 9) a++;
+        let b = tb;
+        while (b + 1 < dense.length - 1 && cover(b + 1) >= 9) b++;
+        while (b > a && cover(b) < 9) b--;
+        ta = a; tb = b;
+      }
       return { ...r, dense, line, h, ta, tb };
     });
+    // hava gemisi rihtimlari: istasyon meydani yol ucu yuksekliginde, zirve platoda
+    this.airships = AIRSHIPS.map((A) => {
+      const dock = (p, q, base, off) => {
+        const dx = q.x - p.x, dz = q.z - p.z, L = Math.hypot(dx, dz), ux = dx / L, uz = dz / L;
+        const sx = p.x + ux * off, sz = p.z + uz * off;
+        const len = AIRPIER.ramp + AIRPIER.flat;
+        return { x0: p.x, z0: p.z, sx, sz, ex: sx + ux * len, ez: sz + uz * len, wl: base + AIRPIER.H - 1.2, ux, uz, base, air: true };
+      };
+      let baseA = this._preRoad(A.a.x, A.a.z);
+      for (const r of this.roads) { const e = r.dense[r.dense.length - 1]; if (Math.hypot(e[0] - A.a.x, e[1] - A.a.z) < 30) baseA = r.h[r.h.length - 1]; }
+      this.pads.push({ x: A.a.x, z: A.a.z, r: 64, h: baseA });
+      const peak = PEAKS.find((P) => P.top && Math.hypot(P.x - A.b.x, P.z - A.b.z) < 50);
+      const baseB = peak ? peak.top.h : this._natural(A.b.x, A.b.z, true);
+      return { ...A, a: dock(A.a, A.b, baseA, 6), b: dock(A.b, A.a, baseB, 20) };
+    });
+
+    // tunel kutulari (hizli on eleme)
+    this.tunnels = this.roads.filter((r) => r.ta >= 0).map((r) => {
+      let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+      for (let i = r.ta; i <= r.tb; i++) { const [x, z] = r.dense[i]; x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); }
+      const m = TUNNEL.halfW + 4;
+      return { r, x0: x0 - m, x1: x1 + m, z0: z0 - m, z1: z1 + m, s0: r.line.cum[r.ta], s1: r.line.cum[r.tb] };
+    });
+  }
+
+  /**
+   * Tunel tabani: (x, z) tunel icindeyse ve y tunel kesitinin icindeyse yol yuksekligi (m) ve egim
+   * yonu; degilse null. y verilmezse yalniz yatay konuma bakilir. out: { h, gx, gz } (dh/dX, dh/dZ).
+   */
+  tunnelFloor(x, z, y, out = {}) {
+    for (const T of this.tunnels) {
+      if (x < T.x0 || x > T.x1 || z < T.z0 || z > T.z1) continue;
+      const r = T.r, q = r.line.nearest(x, z);
+      if (!q || q.i < r.ta || q.i >= r.tb || q.d > TUNNEL.halfW + 2) continue;
+      const h = lerp(r.h[q.i], r.h[q.i + 1], q.t);
+      if (y !== undefined && y !== null && (y < h - 3 || y > h + TUNNEL.roofH + 1.5)) continue;
+      const a = r.dense[q.i], b = r.dense[q.i + 1], L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+      const g = (r.h[q.i + 1] - r.h[q.i]) / L;
+      out.h = h; out.gx = g * (b[0] - a[0]) / L; out.gz = g * (b[1] - a[1]) / L;
+      return out;
+    }
+    return null;
   }
 
   /** Iskele: p (kara) -> q yonunde kiyi (sx,sz,sh) ve iskele ucu (ex,ez); su seviyesi wl. */
@@ -298,6 +360,17 @@ export class WorldPlan {
   }
 
   /** Yollar ve nehirler olmadan dogal yukseklik (m). withCities: sehir duzlukleri dahil. */
+  /** Kum tepesi profili (0..~0.7): yuvarlak sirtli iki kat gurultu; sivri tepe yok, araba asabilir. */
+  _dune(u, v) {
+    let s = 0, a = 1, f = 1, norm = 0;
+    for (let k = 0; k < 2; k++) {
+      const n = this.n2.noise(u * f, v * f);
+      s += (1 - Math.sqrt(n * n + 0.04)) * a; norm += a; a *= 0.3; f *= 2.1;
+    }
+    const r = s / norm;
+    return r * r;
+  }
+
   _natural(x, z, withCities = true) {
     const n = this.n;
     const bio = this.biome(x, z);
@@ -305,8 +378,8 @@ export class WorldPlan {
     // kum tepeleri: ruzgar yonunde uzamis sirtlar
     if (bio.sand > 0.05) {
       const u = (x * 0.8 + z * 0.6) / 140, v = (-x * 0.6 + z * 0.8) / 520;
-      const dune = this.n2.ridged(u + this.n3.noise(x / 700, z / 700) * 0.8, v, 3);
-      h += dune * 14 * bio.sand * smoothstep(0.05, 0.5, bio.sand);
+      const dune = this._dune(u + this.n3.noise(x / 700, z / 700) * 0.8, v);
+      h += dune * 13 * bio.sand * smoothstep(0.05, 0.5, bio.sand);
     }
     // kizil mesalar: basamakli yayla tepeleri (Donwhang)
     if (bio.mesa > 0.05) {
@@ -329,6 +402,7 @@ export class WorldPlan {
     for (const P of PEAKS) {
       const d = Math.hypot(x - P.x, z - P.z);
       if (d < P.r) h += P.h * Math.pow(1 - d / P.r, 1.8) * (0.7 + 0.4 * this.n2.ridged(x / 300, z / 300, 4));
+      if (P.top && d < P.top.r + 70) h = lerp(h, P.top.h, 1 - smoothstep(P.top.r, P.top.r + 70, d));
     }
     // deniz: kiyida plaja iner
     const sd = this.seaDepth(x, z);
@@ -370,7 +444,7 @@ export class WorldPlan {
   /** Nihai arazi yuksekligi (m) + yol bilgisi. */
   sample(x, z, out = {}) {
     let h = this._riverCarve(x, z, this._natural(x, z, true));
-    out.road = 0; out.roadKind = null; out.tunnel = false;
+    out.road = 0; out.roadKind = null; out.tunnel = false; out.hole = false;
     for (const r of this.roads) {
       const q = r.line.nearest(x, z);
       if (!q) continue;
@@ -378,8 +452,12 @@ export class WorldPlan {
       const rh = lerp(r.h[q.i], r.h[q.i + 1], q.t);
       const half = r.width * 0.5;
       if (inTunnel) {
-        // tunel: arazi degismez (dag yerinde); agiz kisminda yol yuzeyine iner
-        if (q.d < half + 4 && h < rh + 2) out.tunnel = true;
+        // tunel: arazi degismez (dag yerinde); agizda tunel kesiti kadar delik (portal cephesi kapatir)
+        if (q.d < TUNNEL.halfW + 3) {
+          out.tunnel = true;
+          // delik koseleri cizilmez; yukseklikleri yol seviyesinde (agiz cizgisinde zemin duz gecsin)
+          if (q.s - r.line.cum[r.ta] < TUNNEL.mouth || r.line.cum[r.tb] - q.s < TUNNEL.mouth) { out.hole = true; h = rh; }
+        }
         continue;
       }
       // sev genisligi yukseklik farkiyla buyur (yarma/dolgu ~35 derece): yol kenari dik kanyon olmaz
@@ -388,6 +466,11 @@ export class WorldPlan {
       h = lerp(h, rh, w);
       const core = 1 - smoothstep(half - 1.5, half + 1.5, q.d);
       if (core > out.road) { out.road = core; out.roadKind = r.kind; }
+    }
+    // hava gemisi istasyon meydani
+    for (const P of this.pads || []) {
+      const d = Math.hypot(x - P.x, z - P.z);
+      if (d < P.r + 50) h = lerp(h, P.h, 1 - smoothstep(P.r, P.r + 50, d));
     }
     out.h = h;
     return out;

@@ -134,6 +134,19 @@ export class BigMap {
       const [ax, ay] = toPx(f.a.ex, f.a.ez), [bx, by] = toPx(f.b.ex, f.b.ez);
       ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
     }
+    // Roc hava gemisi hatlari ve tuneller
+    ctx.setLineDash([3, 4]); ctx.strokeStyle = 'rgba(255,214,120,0.95)';
+    for (const a of plan.airships || []) {
+      const [ax, ay] = toPx(a.a.ex, a.a.ez), [bx, by] = toPx(a.b.ex, a.b.ez);
+      ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+    }
+    ctx.setLineDash([2, 3]); ctx.strokeStyle = 'rgba(30,24,18,0.9)'; ctx.lineWidth = 4;
+    for (const T of plan.tunnels || []) {
+      const r = T.r;
+      ctx.beginPath();
+      for (let i = r.ta; i <= r.tb; i += 4) { const [px, py] = toPx(r.dense[i][0], r.dense[i][1]); if (i === r.ta) ctx.moveTo(px, py); else ctx.lineTo(px, py); }
+      ctx.stroke();
+    }
     ctx.setLineDash([]);
     // sehirler
     ctx.font = '600 14px Georgia, serif'; ctx.textAlign = 'center';
@@ -146,11 +159,14 @@ export class BigMap {
       ctx.fillStyle = '#f2d48a'; ctx.fillText(ct.name, px, py - Math.max(8, ct.r * s) - 6);
     }
     ctx.font = '12px sans-serif';
-    for (const f of plan.ferries) {
-      const [mx, my] = toPx((f.a.ex + f.b.ex) / 2, (f.a.ez + f.b.ez) / 2);
-      ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.7)'; ctx.strokeText('⛴ ' + f.name, mx, my - 6);
-      ctx.fillStyle = '#ffffff'; ctx.fillText('⛴ ' + f.name, mx, my - 6);
-    }
+    const label = (text, x, z, color = '#ffffff') => {
+      const [mx, my] = toPx(x, z);
+      ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.7)'; ctx.strokeText(text, mx, my - 6);
+      ctx.fillStyle = color; ctx.fillText(text, mx, my - 6);
+    };
+    for (const f of plan.ferries) label('⛴ ' + f.name, (f.a.ex + f.b.ex) / 2, (f.a.ez + f.b.ez) / 2);
+    for (const a of plan.airships || []) label('🦅 ' + a.name, (a.a.ex + a.b.ex) / 2, (a.a.ez + a.b.ez) / 2, '#ffd678');
+    for (const T of plan.tunnels || []) { const m = T.r.dense[(T.r.ta + T.r.tb) >> 1]; label('Tünel', m[0], m[1] - 40, '#e8dcc4'); }
     // diger oyuncular
     for (const o of others) {
       const [px, py] = toPx(o.x, o.z);

@@ -12,3 +12,5 @@ __pycache__/
 tools/assets/.cache/
 tools/rally/work/
 tools/cloudflared.exe
+dist/
+server/cloudflared.exe

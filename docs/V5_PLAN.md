@@ -8,16 +8,18 @@ kodla ya da bizim araçlarımızla üretilir.
 
 ## Sürümleme
 
-- Sürüm `shared/version.json` içindedir (5.0.0'dan başlar). **Her değişiklikte minör sürüm bir
-  artar** (5.1.0, 5.2.0 …); yalnız hata düzeltmesi yamada (5.1.1) kalabilir.
-- İstemci ve sunucu aynı minör sürümde değilse sunucu girişi reddeder ("sürüm uyumsuz").
+- Sürüm istemcide `src/version.js`, sunucuda `server/server.py` içindedir (5.0.0'dan başladı).
+  **Her değişiklikte minör sürüm bir artar** (5.1.0, 5.2.0 …): `python tools/bump.py` ikisini
+  birlikte yükseltir; `tests/version.test.mjs` eşitliği denetler.
+- İstemci ve sunucu sürümü birebir aynı değilse sunucu girişi reddeder ("sürüm uyuşmuyor").
 
 ## İstemci / sunucu
 
-- `client/` (şimdilik kök): oyun. Tek bir `.exe` olarak paketlenir (içinde oyun dosyaları; Windows'un
-  kendi Edge tarayıcısı uygulama penceresi olarak kullanılır, ek kurulum yok). GitHub Releases'te
-  yayınlanır.
-- `server/`: çok oyunculu sunucu (oda, ilişki, sürüm denetimi). Oyun dosyası sunmaz.
+- İstemci (kök: `index.html`, `src/`, `vendor/`, `content/`): oyun. `tools/build_client.py` ile tek
+  bir `.exe` olarak paketlenir (içinde oyun dosyaları; Windows'un kendi Edge tarayıcısı uygulama
+  penceresi olarak kullanılır, ek kurulum yok). GitHub Releases'te yayınlanır.
+- `server/`: çok oyunculu sunucu (oda, mesaj aktarımı, sürüm denetimi, tünel). Oyun dosyası sunmaz
+  (`--client` ile geliştirme/yerel ağ için sunabilir).
 - Her mod çok oyunculu: serbest sürüş, ralli, yarış, (ileride) yaya ve FPS/TPS.
 
 ## Aşamalar

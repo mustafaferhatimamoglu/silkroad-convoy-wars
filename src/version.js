@@ -1,31 +1,32 @@
-// Surum ve oyun sunucusu adresi.
+// Oyun surumu ve cok oyunculu sunucu adresi.
 //
-//  PROTOCOL  cok oyunculu mesaj surumu: degisirse farkli surumdeki oyuncular ayni odada yarisamaz.
-//  BUILD     yayinlanan kopyanin kimligi (tools/publish_pages.py commit kimligini yazar; yerelde 'dev').
-//  PAGES_URL oyunun herkese acik kopyasi (GitHub Pages): YALNIZ kod. Silkroad dosyalari (assets/,
-//            Joymax'in telifli icerigi) orada durmaz; davet edenin bilgisayarindan bir kez inip
-//            arkadasin tarayicisinda kalici onbellekte saklanir (sw.js, net/AssetSync.js).
+//  VERSION  istemci surumu. Sunucu (server/server.py) ayni surumu tasir; "hello" mesajinda surumler
+//           birebir tutmazsa sunucu baglantiyi reddeder. Her degisiklikte tools/bump.py ikisini
+//           birlikte yukseltir (5.1.0 -> 5.2.0).
+//  RELEASES guncel istemcinin indirilecegi yer (surum uyusmazsa oyuncuya gosterilir).
 
-export const PROTOCOL = 2;
-export const BUILD = 'dev';
-export const PAGES_URL = 'https://mustafaferhatimamoglu.github.io/silkroad-convoy-wars/';
-
-const KEY = 'sro-host';
+export const VERSION = '5.1.0';
+export const RELEASES = 'https://github.com/mustafaferhatimamoglu/silkroad-convoy-wars/releases';
 
 /**
- * Oyun sunucusu (davet edenin tunel adresi). Oyun ayni sunucudan aciliyorsa '' (goreli adresler).
- * Pages kopyasi ?host=https://....trycloudflare.com ile acilir; adres oturum boyunca saklanir.
+ * Sunucu adresinden WebSocket / HTTP adresleri. Bos adres: oyunun acildigi sunucu (server.py
+ * --client ile ayni adresten). Ornekler: "https://abc.trycloudflare.com", "abc.trycloudflare.com",
+ * "192.168.1.5:5070", "localhost:5070".
  */
-export function hostBase() {
-  const p = new URLSearchParams(location.search).get('host');
-  if (p) {
-    const h = p.replace(/\/+$/, '');
-    if (/^https?:\/\/[^/?#]+$/.test(h)) {
-      try { sessionStorage.setItem(KEY, h); } catch { /* */ }
-      return h;
-    }
+export function serverUrls(addr = '') {
+  let a = String(addr || '').trim().replace(/\/+$/, '').replace(/\/ws$/, '');
+  if (!a) {
+    const ws = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`;
+    return { http: `${location.protocol}//${location.host}`, ws };
   }
-  try { return sessionStorage.getItem(KEY) || ''; } catch { return ''; }
+  if (!/^[a-z]+:\/\//i.test(a)) {
+    // sema yoksa: port ya da yerel/IP adresi -> http, alan adi -> https (tunel)
+    const host = a.split('/')[0];
+    const local = /:\d+$/.test(host) || /^(localhost|\d+\.\d+\.\d+\.\d+|\[[0-9a-f:]+\])$/i.test(host);
+    a = `${local ? 'http' : 'https'}://${a}`;
+  }
+  a = a.replace(/^ws(s?):\/\//i, 'http$1://');
+  return { http: a, ws: `${a.replace(/^http/i, 'ws')}/ws` };
 }
 
 /** Kisa veri ozeti (iki oyuncunun ayni etap verisini kullandigini dogrulamak icin). */

@@ -4,7 +4,7 @@ import { SCALE, VERTS, CELLS, CELL_M } from './WorldData.js';
 import { GenWorldData } from './gen/GenData.js';
 import { buildGenObjects } from './gen/build.js';
 import { TextureArrayPool } from './TextureArrayPool.js';
-import { TerrainMaterials, buildTerrainGeometry, refreshEdgeNormals, buildIndexTexture, sampleHeight } from './Terrain.js';
+import { TerrainMaterials, buildTerrainGeometry, refreshEdgeNormals, buildIndexTexture, sampleHeight, holeIndex } from './Terrain.js';
 import { ObjectMaterials } from './Objects.js';
 import { WaterSystem } from './Water.js';
 
@@ -16,6 +16,8 @@ import { WaterSystem } from './Water.js';
 // sehirler arasi binlerce metrede bile float hassasiyeti kaybolmaz.
 
 const LOD_STEP = 4;
+
+const _tf = { h: 0, gx: 0, gz: 0 };
 
 export class World {
   constructor(renderer, scene, opts = {}) {
@@ -231,6 +233,7 @@ export class World {
       const tileFlags = (id) => { const t = this.data.tile(id); return t ? t.flags & 255 : 0; };
       const indexTex = buildIndexTexture(bin.texture, (id) => slots.get(id) ?? 0, tileFlags);
       const geo = buildTerrainGeometry(bin.heights, 1, this._neighborHeight(r));
+      if (bin.holes) geo.setIndex(holeIndex(bin.holes));
       const cellOffset = { x: (r.rx * CELLS) % 256, y: (r.rz * CELLS) % 256 };
       const mat = this.terrainMats.createNear(indexTex, colormap, cellOffset);
       const mesh = new THREE.Mesh(geo, mat);
@@ -415,15 +418,30 @@ export class World {
     return q;
   }
 
-  /** Arazi yuksekligi (metre). Bolge yuklu degilse null. */
-  heightAt(x, z) {
+  /**
+   * Arazi yuksekligi (metre). Bolge yuklu degilse null. y verilirse ve nokta bir tunelin icindeyse
+   * (dagin altinda) tunel tabani doner: zemin carpismasi, tekerlek isinlari ve kamera tunelde
+   * dagin ustunu degil yolu gorur.
+   */
+  heightAt(x, z, y) {
     const q = this._regionAt(x, z);
     if (!q) return null;
+    if (y !== undefined && this._tunnel(x, z, y)) return _tf.h;
     return sampleHeight(q.r.heights, q.p.lx, q.p.lz) * SCALE;
   }
 
-  /** Arazi normali (render ucgeniyle ayni). */
-  normalAt(x, z, out) {
+  /** Nokta tunel icinde mi (y verilmezse yalniz yatay konum). */
+  inTunnel(x, z, y) { return !!this._tunnel(x, z, y); }
+
+  _tunnel(x, z, y) {
+    const plan = this.data && this.data.plan;
+    if (!plan || !plan.tunnels || !plan.tunnels.length) return null;
+    return plan.tunnelFloor(x, -z, y, _tf);
+  }
+
+  /** Arazi normali (render ucgeniyle ayni); y verilirse tunel icinde tunel tabaninin normali. */
+  normalAt(x, z, out, y) {
+    if (y !== undefined && this._tunnel(x, z, y)) return out.set(-_tf.gx, 1, _tf.gz).normalize();
     const q = this._regionAt(x, z);
     if (!q) return out.set(0, 1, 0);
     const h = q.r.heights;

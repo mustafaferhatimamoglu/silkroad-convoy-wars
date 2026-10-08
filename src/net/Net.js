@@ -1,6 +1,7 @@
-import { hostBase } from '../version.js';
+import { VERSION, serverUrls } from '../version.js';
 
-// Cok oyunculu baglanti: server.py'deki /ws oda sistemi (sunucu yalniz mesaj aktarir).
+// Cok oyunculu baglanti: server/server.py'deki /ws oda sistemi (sunucu yalniz mesaj aktarir).
+// Baglanirken surum gonderilir; sunucu surumu farkliysa 'version' hatasiyla reddeder.
 // Oyun durumu istemcilerde: herkes kendi aracini simule eder ve durumunu yayinlar; botlari oda
 // kurucusu simule eder. Sunucu saatine (ping/pong) gore ortak zaman: yaris herkeste ayni anda
 // baslar, sureler karsilastirilabilir.
@@ -24,24 +25,24 @@ export class Net {
     addEventListener('pagehide', () => { if (this.ws) try { this.ws.close(); } catch { /* */ } });
   }
 
-  /** Sunucuya baglan; donus: Net (hosgeldin mesajindan sonra). */
-  connect(name) {
+  /** Sunucuya baglan (addr: sunucu adresi, bos = oyunun acildigi sunucu); donus: Net (hosgeldin mesajindan sonra). */
+  connect(name, addr = '') {
     this.name = name;
+    this.addr = addr;
     return new Promise((resolve, reject) => {
       let done = false;
-      const fail = (msg) => { if (!done) { done = true; reject(new Error(msg)); } };
+      const fail = (msg, code) => { if (!done) { done = true; const e = new Error(msg); e.code = code; reject(e); } };
       let ws;
-      try {
-        const host = hostBase();
-        ws = new WebSocket(host ? `${host.replace(/^http/, 'ws')}/ws` : `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
-      } catch (e) { fail('Sunucuya bağlanılamadı'); return; }
+      try { ws = new WebSocket(serverUrls(addr).ws); } catch (e) { fail('Sunucu adresi geçersiz'); return; }
       this.ws = ws;
-      ws.onopen = () => this.send({ t: 'hello', name });
+      ws.onopen = () => this.send({ t: 'hello', name, v: VERSION });
       ws.onmessage = (e) => {
         let m;
         try { m = JSON.parse(e.data); } catch { return; }
+        if (m.t === 'error' && m.code === 'version' && !done) { this.serverVersion = m.server; fail(m.msg, 'version'); return; }
         if (m.t === 'welcome' && !done) {
           this.id = m.id; this.connected = true; done = true;
+          this.serverVersion = m.v;
           this.offset = m.s - performance.now();
           this._pingLoop();
           resolve(this);
@@ -49,8 +50,8 @@ export class Net {
         this._msg(m);
       };
       ws.onclose = () => { const was = this.connected; this.connected = false; clearInterval(this._pt); if (was) this._emit('close', {}); fail('Bağlantı kapandı'); };
-      ws.onerror = () => fail('Sunucuya bağlanılamadı (WebSocket)');
-      setTimeout(() => fail('Sunucu yanıt vermedi'), 6000);
+      ws.onerror = () => fail('Sunucuya bağlanılamadı');
+      setTimeout(() => fail('Sunucu yanıt vermedi'), 8000);
     });
   }
 
@@ -94,7 +95,8 @@ export class Net {
   join(code) { this.send({ t: 'join', code }); }
   leave() { this.send({ t: 'leave' }); this.room = null; }
   rooms() { this.send({ t: 'rooms' }); }
-  markStarted(v = true) { this.send({ t: 'started', v }); }
+  /** Kurucu: oda basladi (open: sonradan katilinabilir, serbest gezinti). */
+  markStarted(v = true, open = false, mode = '') { this.send({ t: 'started', v, open, mode }); }
 
   get isHost() { return !!this.room && this.room.host === this.id; }
   get members() { return this.room ? this.room.members : []; }
