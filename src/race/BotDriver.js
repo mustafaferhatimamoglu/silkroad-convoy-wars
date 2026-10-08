@@ -115,6 +115,8 @@ export class BotDriver {
     this.c = { accel: 0, decel: 0, steer: 0, handbrake: 0, shiftUp: false, shiftDown: false };
     // sicramalar (pilot notu J): rota uzerindeki konumlari; yaklasirken havalanma payi kucuk tutulur
     this.jumps = (course.notes || []).filter((n) => n.k === 'J').map((n) => course.cum[n.i]);
+    // sicratan basamak (pilot notu vmax, km/s): bu noktaya en fazla bu hizla varilir
+    this.vmaxNotes = (course.notes || []).filter((n) => n.vmax).map((n) => ({ s: course.cum[n.i], v: n.vmax / 3.6 }));
     this.dbg = {};
   }
 
@@ -151,15 +153,29 @@ export class BotDriver {
     const Cc = this.course, onR = path === Cc.route;
     const sR = onR ? s : Cc.cum[Cc.lineToRoute[i0]];
     const jumpAhead = this.jumps.find((j) => j > sR + 2 && j < sR + 170);
+    const hS = prof.heightAt(k);
     for (let i = i0; i < path.n && path.cum[i] - s < 170; i++) {
       while (k < prof.M - 1 && prof.ss[k] < path.cum[i]) k++;
       let a = (this.aLat * prof.muAt(k)) / 0.78;
       if (path.cum[i] <= leanUntil) a *= 1.55;   // yanindaki araca yaslanarak donuyor
       if (this.mistake && this.mistake.type === 'late' && path.cum[i] - s < 80) a *= 1.35;
-      const vk = Math.sqrt(a / Math.max(Math.abs(path.kap[i]), 1e-4));
+      // tepede (dikey egrilik < 0) tekerlerin yuku hizin karesiyle azalir, yanal tutus da onunla:
+      // v^2 kap <= a (1 - v^2 |kv| / g)  ->  tepeye denk gelen viraj belirgin yavas alinir
+      // (asagidaki tepe denetimi gibi -0.004'ten hafif egrilik zemin puruzu sayilir)
+      const hk0 = prof.heightAt(k - 3), hk1 = prof.heightAt(k), hk2 = prof.heightAt(k + 3);
+      const kvHere = Number.isNaN(hk0) || Number.isNaN(hk1) || Number.isNaN(hk2) ? 0 : Math.min(0, (hk2 - 2 * hk1 + hk0) / 36 + 0.004);
+      const vk = Math.sqrt(a / (Math.max(Math.abs(path.kap[i]), 1e-4) + (a * -kvHere) / G));
       let d = Math.max(0, path.cum[i] - s);
       if (jumpAhead !== undefined && sR + d > jumpAhead) d = Math.max(0, d - 25);
-      vt = Math.min(vt, Math.sqrt(vk * vk + 2 * this.aBrk * d));
+      // yokus asagi frenleme uzar (inilen yukseklik kadar enerji), yokus yukari yercekimi yarim pay
+      let dh = Number.isNaN(hS) || Number.isNaN(hk1) ? 0 : hS - hk1;
+      if (dh < 0) dh *= 0.5;
+      vt = Math.min(vt, Math.sqrt(Math.max(vk * vk, vk * vk + 2 * this.aBrk * d - 2 * G * dh)));
+    }
+    // fren basamaktan 10 m once biter (frenle burun asagi basamaga girmek de firlatir), 4 m sonrasina dek
+    for (const q of this.vmaxNotes) {
+      const d = q.s - sR - 10;
+      if (d > -14 && d < 160) vt = Math.min(vt, Math.sqrt(q.v * q.v + 2 * this.aBrk * Math.max(0, d)));
     }
     const C = this.course, onRoute = path === C.route;
     // dar gecit (kaya sutunlari, agaclar arasi): koridor genisligine gore hiz siniri
@@ -500,6 +516,13 @@ export class BotDriver {
     const grip = (6.6 * sim.p.tire.mu) / 0.9;
     const maxA = Math.min(S.maxAngle, (wb * grip) / Math.max(asp * asp, 1) + 0.02 + 0.02 * clamp(1 - asp / 20, 0, 1));
     c.steer = clamp(delta / maxA + steerBias, -1, 1);
+    // havada direksiyon cevirmek bir ise yaramaz; tam kilitli tekerle inis araci yana devirir:
+    // on tekerler gidis yonune bakar, inisten hemen sonra direksiyon yavas acilir
+    const airborne = sim.wheels.filter((w) => !w.contact).length >= 3;
+    if (airborne && asp > 5) {
+      const beta = Math.atan2(fwd.x * b.vel.z - fwd.z * b.vel.x, fwd.x * b.vel.x + fwd.z * b.vel.z);
+      c.steer = clamp(beta / maxA, -1, 1);
+    } else if (this.landT > 0.2) c.steer = clamp(c.steer, -0.5, 0.5);
     this._lastSteer = c.steer;
 
     // --- hiz
@@ -533,8 +556,7 @@ export class BotDriver {
     this.foot = clamp((this.foot ?? 1) + (over ? -5 : 1.6) * dt, 0.25, 1);
     if (c.accel > 0.3) c.accel = Math.max(0.3, c.accel * this.foot);
     // havada gaz kesilir (bosta donen tekerler inince arkayi savurmasin); inince kisa sure yumusak
-    const air = sim.wheels.filter((w) => !w.contact).length >= 3;
-    if (air) { this.landT = 0.45; c.accel = Math.min(c.accel, 0.1); }
+    if (airborne) { this.landT = 0.45; c.accel = Math.min(c.accel, 0.1); }
     else if (this.landT > 0) { this.landT -= dt; c.accel = Math.min(c.accel, 0.45); }
     void pr;
     return c;

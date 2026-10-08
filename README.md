@@ -153,11 +153,15 @@ python tools/rally/rally.py drive jangan kartal80 ralli   :: otomatik pilotla de
 
 Etap tanımı `tools/rally/stages/<id>.json`: ara noktalar (adı olanlar kontrol kapısı; finişten sonra
 adsız bir nokta kaçış yolu bırakır) ve ayarlar: `road` (toprak yolu ne kadar sıkı izlesin; tarlalar
-böylece kestirme olur), `smooth` (tümsek/set cezası), `maxslope` / `slopecost` (dik yokuş). Rota
+böylece kestirme olur), `smooth` (tümsek/set cezası), `maxslope` / `slopecost` (dik yokuş), `avoid`
+(`[rx, rz, yarıçap m, not]`: rotanın ve hızlı çizginin girmeyeceği alanlar; 4 m ızgaranın yumuşattığı
+kaya eteği, yan eğim gibi yarış denemesinde takla çıkan yerler için). Rota
 eğim/zemin/engel yakınlığı maliyetli A* ile bulunur, görüş hattıyla sadeleştirilip yumuşatılır;
 kaktüs, hurma gövdesi, çalı, kütük ve hendek gibi 4 m ızgarada kaçan ince engeller koridorun 1 m'lik
 taramasıyla bulunup uzak tutulur. Botların hızlı çizgisi rotanın kapılardan geçen gergin ip
-hâlidir; koridor genişlikleri sollama/blok yerlerini sınırlar. Her etap 8 botla baştan sona
+hâlidir; koridor genişlikleri sollama/blok yerlerini sınırlar. Pilot notları 1 m'lik yükseklik
+profilinden çıkar; kısa ve sert basamaklar (teras kenarı) `vmax` güvenli hızıyla işaretlenir, botlar
+oraya o hızla varır. Her etap 8 botla baştan sona
 yarıştırılarak denendi (`/?mode=race&stage=…&bots=7&level=zor&auto=1`).
 
 ## Kervan RPG

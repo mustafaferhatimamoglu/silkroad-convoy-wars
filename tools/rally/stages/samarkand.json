@@ -12,6 +12,7 @@
     [106.3, 105.04, "Batı Yolu"],
     [105.5, 104.1, null],
     [106.0, 103.0, "Taşlı Ova"],
+    [106.8, 102.45, null],
     [107.4, 102.4, "Dağ Eteği"],
     [109.2, 103.1, "Güney Yolu"],
     [111.0, 103.1, null],
@@ -21,5 +22,9 @@
   "road": 0.6,
   "smooth": 1.0,
   "maxslope": 20,
-  "slopecost": 0.3
+  "slopecost": 0.3,
+  "avoid": [
+    [105.7472, 103.9833, 6, "kaya eteği: 18-20° yan eğimde tepeye çıkıp sağa dönerken takla"],
+    [106.8892, 102.3111, 4, "kaya köşesi: hızlı çizgi sağ virajda kayanın kenarına çıkıp devriliyordu"]
+  ]
 }

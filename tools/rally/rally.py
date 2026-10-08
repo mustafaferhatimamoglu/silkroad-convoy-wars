@@ -18,6 +18,7 @@ SRO_HARNESS ortam degiskenleriyle degistirilebilir. Ara ciktilar tools/rally/wor
 
 Etap tanimi tools/rally/stages/<id>.json: ad, aciklama, sehir, bounds [rx0, rx1, rz0, rz1] ve ara
 noktalar [rx, rz, ad|null] (ilki baslangic; adi olanlar kontrol noktasi, sonuncusu finis).
+Istege bagli avoid [[rx, rz, yaricap m, not], ...]: rotanin ve hizli cizginin girmeyecegi alanlar.
 Koordinatlar kesirli bolge koordinati (bolge = 192 m; rx dogu, rz kuzey).
 """
 import argparse
@@ -314,6 +315,16 @@ def load_blocked(st, g):
             ix, iz = int(round(gx)), int(round(gz))
             if 0 <= iz < blocked.shape[0] and 0 <= ix < blocked.shape[1]:
                 blocked[iz, ix] = True
+    # etap tanimi 'avoid': [rx, rz, yaricap m, not] - elle isaretlenen kacinilacak alanlar (4 m izgaranin
+    # yumusattigi dik kaya etegi ya da yan egim gibi; yaris denemesinde takla/takilma yeri cikan noktalar)
+    H, W = blocked.shape
+    for ax, az, rad, *_ in st.get('avoid', []):
+        cx, cz = g.to_grid(ax, az)
+        rc = rad / CELL
+        for z in range(max(0, int(cz - rc) - 1), min(H, int(cz + rc) + 2)):
+            for x in range(max(0, int(cx - rc) - 1), min(W, int(cx + rc) + 2)):
+                if (x - cx) ** 2 + (z - cz) ** 2 <= rc * rc:
+                    blocked[z, x] = True
     return blocked, extra
 
 
@@ -687,7 +698,8 @@ def cmd_emit():
           '// tools/rally/stages/<id>.json). Rota, oyunun carpisma sistemiyle taranan surulebilirlik',
           '// haritasinda planlandi; yol [rx, rz] kesirli bolge koordinatlari (bolge = 192 m),',
           '// kontrol noktalari yol indeksi. Pilot notlari: k = L/R viraj (g: 1 keskin .. 6 hafif,',
-          '// 0 firkete; e: viraj sonu; long: uzun), C tumsek, J sicrama, D cukur.',
+          '// 0 firkete; e: viraj sonu; long: uzun), C tumsek, J sicrama, D cukur; vmax: sicratan basamakta',
+          '// guvenli hiz (km/s, botlar bu noktaya en fazla bu hizla varir).',
           'export const RALLY_STAGES = {']
     ORDER = ['jangan', 'donwhang', 'hotan', 'samarkand', 'constantinople', 'alexandria']   # oyundaki sehir sirasi
     files = glob.glob(os.path.join(TOOLS, 'stages', '*.json'))
@@ -750,7 +762,7 @@ def cmd_emit():
                 if q['k'] in 'LR':
                     js.append(f"      {{ i: {q['i']}, e: {q['e']}, k: '{q['k']}', g: {q['g']}{', long: true' if q['long'] else ''} }},")
                 else:
-                    js.append(f"      {{ i: {q['i']}, k: '{q['k']}' }},")
+                    js.append(f"      {{ i: {q['i']}, k: '{q['k']}'{', vmax: ' + str(q['vmax']) if q.get('vmax') else ''} }},")
             js.append('    ],')
         js.append('  },')
         print(f"etap {st['id']}: {len(path)} nokta, {round(r['length_m'])} m, kapilar {[c['name'] for c in cps]}")
@@ -845,7 +857,34 @@ def vertical_notes(prof):
                 out[-1] = ft
             continue
         out.append(ft)
-    return [{'i': int(I[s]), 'k': k, 'v': round(v, 2)} for s, k, v in out]
+    notes = [{'i': int(I[s]), 'k': k, 'v': round(v, 2), 's': s} for s, k, v in out]
+    # sicratan basamak (teras kenari): 3 m once/sonra egim farki; 5 m'lik egrilikte kaybolur ama arac
+    # tek tarafindan firlatilip havada devrilir. Guvenli hiz deneyle: Semerkant'ta 10.5 derecelik
+    # basamak 60 km/s'te sorunsuz, 70'te sinirda, 80'de takla -> vmax = 3.1 / fark (m/s).
+    # Obje ustu (kopru) gecisleri sayilmaz.
+    S = np.array(prof.get('S', [0] * len(H)))
+    kicks = []
+    for s in range(3, len(H) - 3):
+        if (S[s - 3:s + 4] == 99).any():
+            continue
+        d = math.atan((H[s] - H[s - 3]) / 3) - math.atan((H[s + 3] - H[s]) / 3)
+        if d >= math.radians(8):
+            kicks.append((d, s))
+    picked = []
+    for d, s in sorted(kicks, reverse=True):
+        if all(abs(s - p) > 20 for _, p in picked):
+            picked.append((d, s))
+    for d, s in picked:
+        vmax = round(3.6 * 3.1 / d)
+        near = [q for q in notes if abs(q['s'] - s) <= 15]
+        if near:
+            near[0]['vmax'] = min(vmax, near[0].get('vmax', 999))
+        else:
+            notes.append({'i': int(I[s]), 'k': 'C', 'v': round(vmax, 2), 's': s, 'vmax': vmax})
+    notes.sort(key=lambda q: q['s'])
+    for q in notes:
+        del q['s']
+    return notes
 
 
 def cmd_notes(st):
@@ -861,7 +900,7 @@ def cmd_notes(st):
         if q['k'] in 'LR':
             print(f"  {q['i']:4d}-{q['e']:<4d} {NAME[q['k']]} {'FİRKETE' if q['g'] == 0 else q['g']}{' uzun' if q['long'] else ''}  (R {q['R']} m, {q['deg']} derece)")
         else:
-            print(f"  {q['i']:4d}      {NAME[q['k']]}")
+            print(f"  {q['i']:4d}      {NAME[q['k']]}{'  (en fazla ' + str(q['vmax']) + ' km/s)' if q.get('vmax') else ''}")
 
 
 # ---------------------------------------------------------------- hepsi
