@@ -164,7 +164,7 @@ export class Game {
     this.menuMode = new GarageMode(app, { variant: s.get('vehicleVariant'), paint: s.get('vehicleColor'), at: new THREE.Vector3(pos.x, top, pos.z), cinematic: true, yaw: city.heading });
     app.setMode(this.menuMode);
     if (menu) this.menu.main();
-    app.audio.playMusic('maintheme_cut.ogg');
+    app.audio.playMusic('gen:theme:town');
   }
 
   previewCar(paintOnly = false) {

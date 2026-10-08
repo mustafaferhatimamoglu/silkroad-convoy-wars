@@ -1,4 +1,7 @@
-// Ses sistemi: AudioContext, ana/efekt/muzik kanallari, Silkroad muzikleri (gecisli).
+import { GenMusic } from '../audio/GenMusic.js';
+import { CITIES, REGION_M } from '../world/gen/plan.js';
+
+// Ses sistemi: AudioContext, ana/efekt/muzik kanallari, uretken muzik (V5: ses dosyasi yok).
 // Tarayicilar sesi ilk kullanici etkilesimine kadar baslatmaz; ensure() bunu bekler.
 
 
@@ -44,7 +47,16 @@ export class AudioSystem {
 
   /** Muzik parcasi cal (ayni parca caliyorsa bir sey yapma); 2.5 sn gecis. */
   playMusic(track) {
-    // V5: dosyadan muzik yok (Silkroad parcalari kaldirildi); uretken muzik ayri modulde
+    // uretken muzik: 'gen:<makam>:<town|field>'
+    if (track && track.startsWith('gen:')) {
+      if (this.music.track === track) return;
+      if (!this.ctx) { this._pendingTrack = track; return; }
+      const [, style, mood] = track.split(':');
+      if (!this.gen) this.gen = new GenMusic(this.ctx, this.musicBus);
+      this.gen.set(style, mood || 'field');
+      this.music.track = track;
+      return;
+    }
     if (!track || this.music.track === track || !/^content\//.test(track)) return;
     if (!this.ctx) { this._pendingTrack = track; return; }
     const ctx = this.ctx;
@@ -79,9 +91,16 @@ export class AudioSystem {
   }
 }
 
-/** Bolgeye gore muzik (V5: uretken muzik gelene kadar sessiz; eski Silkroad parcalari kaldirildi). */
+/** Bolgeye gore uretken muzik: sehre yakinsa sehir (ritimli), degilse kultur bolgesinin kir hali. */
 export function musicForRegion(rx, rz) {
-  void rx; void rz;
-  return null;
+  const x = (rx + 0.5) * REGION_M, z = (rz + 0.5) * REGION_M;
+  for (const c of CITIES) if (Math.hypot(x - c.x, z - c.z) < c.r + 380) return `gen:${c.culture}:town`;
+  let style;
+  if (z < 1300 && x < 6200) style = 'egypt';
+  else if (x > 9000) style = 'china';
+  else if (x > 5600) style = 'desert';
+  else if (x > 2800) style = 'persian';
+  else style = 'byzantine';
+  return `gen:${style}:field`;
 }
 
