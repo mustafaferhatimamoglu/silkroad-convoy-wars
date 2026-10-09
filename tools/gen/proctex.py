@@ -222,11 +222,87 @@ def willow():
     return [int(v) for v in a[..., :3][m].mean(0)]
 
 
+def _rgba_save(key, col, alpha):
+    a = np.dstack([col.clip(0, 255), alpha * 255]).astype(np.uint8)
+    img = Image.fromarray(a, 'RGBA').resize((SIZE, SIZE), Image.LANCZOS)
+    arr = np.asarray(img).copy()
+    arr[..., 3] = np.where(arr[..., 3] > 127, 255, 0)
+    Image.fromarray(arr, 'RGBA').save(os.path.join(TEX, key + '.png'), optimize=True)
+    m = arr[..., 3] > 0
+    return [int(v) for v in arr[..., :3][m].mean(0)]
+
+
+def win_euro():
+    """Avrupa penceresi (tek pencere, dikdortgen): tas pervaz, koyu cam, beyaz kayit, alt denizlik."""
+    H, W = 768, 512
+    yy, xx = np.mgrid[0:H, 0:W] / np.array([H, W], np.float32)[:, None, None]
+    col = np.zeros((H, W, 3), np.float32)
+    al = np.ones((H, W), np.float32)
+    stone = np.array([214, 204, 184], np.float32)
+    col[:] = stone
+    glass = (xx > 0.14) & (xx < 0.86) & (yy > 0.12) & (yy < 0.84)
+    col[glass] = [44, 52, 60]
+    # cam yansimasi
+    refl = glass & ((xx - yy * 0.5) % 0.5 < 0.08)
+    col[refl] = [86, 98, 110]
+    mull = glass & ((np.abs(xx - 0.5) < 0.025) | (np.abs(yy - 0.42) < 0.02))
+    col[mull] = [232, 228, 218]
+    sill = (yy > 0.86) & (yy < 0.94)
+    col[sill] = stone * 0.82
+    keyst = (yy < 0.1) & (np.abs(xx - 0.5) < 0.08)
+    col[keyst] = stone * 0.88
+    al[(yy > 0.94) & ((xx < 0.04) | (xx > 0.96))] = 0
+    al[yy > 0.96] = 0
+    n = rng.normal(0, 1, (H, W)).astype(np.float32)
+    col *= (1 + n[..., None] * 0.03)
+    return _rgba_save('build/win_euro', col, al)
+
+
+def win_arch():
+    """Sivri kemerli pencere (Fars/Arap/Misir): cini cerceve, ahsap kafes; kemer disi saydam."""
+    H, W = 768, 512
+    yy, xx = np.mgrid[0:H, 0:W] / np.array([H, W], np.float32)[:, None, None]
+    col = np.zeros((H, W, 3), np.float32)
+    cx = 0.5
+    r = 0.62
+    outer = ((((xx - (cx - 0.5 + r)) ** 2 + ((yy - 0.36) * 0.66) ** 2) < r * r) & (((xx - (cx + 0.5 - r)) ** 2 + ((yy - 0.36) * 0.66) ** 2) < r * r)) | (yy >= 0.36)
+    inner = ((((xx - (cx - 0.36 + r * 0.8)) ** 2 + ((yy - 0.4) * 0.66) ** 2) < (r * 0.8) ** 2) & (((xx - (cx + 0.36 - r * 0.8)) ** 2 + ((yy - 0.4) * 0.66) ** 2) < (r * 0.8) ** 2)) | (yy >= 0.4)
+    inner &= (np.abs(xx - cx) < 0.36) & (yy < 0.92)
+    outer &= (np.abs(xx - cx) < 0.5)
+    col[:] = [42, 104, 150]
+    tile = outer & ~inner & (((xx * 24).astype(int) + (yy * 36).astype(int)) % 2 == 0)
+    col[tile] = [214, 196, 150]
+    col[inner] = [30, 26, 24]
+    lat = inner & (((xx * 18) % 1 < 0.2) | ((yy * 26) % 1 < 0.2))
+    col[lat] = [110, 76, 46]
+    sill = (yy > 0.92)
+    col[sill & outer] = [190, 172, 140]
+    return _rgba_save('build/win_arch', col, outer.astype(np.float32))
+
+
+def win_china():
+    """Cin penceresi: kirmizi cerceve, kare kafes, kagit arkasi."""
+    H, W = 512, 512
+    yy, xx = np.mgrid[0:H, 0:W] / np.array([H, W], np.float32)[:, None, None]
+    col = np.zeros((H, W, 3), np.float32)
+    col[:] = [196, 168, 120]
+    lat = ((xx * 9) % 1 < 0.16) | ((yy * 9) % 1 < 0.16)
+    col[lat] = [120, 34, 26]
+    frame = (xx < 0.08) | (xx > 0.92) | (yy < 0.08) | (yy > 0.92)
+    col[frame] = [150, 40, 30]
+    edge = (xx < 0.02) | (xx > 0.98) | (yy < 0.02) | (yy > 0.98)
+    col[edge] = [200, 150, 60]
+    return _rgba_save('build/win_china', col, np.ones((H, W), np.float32))
+
+
 def main():
     avg_p, pbr_p = os.path.join(TEX, 'avg.json'), os.path.join(TEX, 'pbr.json')
     avg = json.load(open(avg_p))
     pbr = json.load(open(pbr_p))
     avg['build/leaf_willow'] = willow()
+    avg['build/win_euro'] = win_euro()
+    avg['build/win_arch'] = win_arch()
+    avg['build/win_china'] = win_china()
     for key, fn in (('build/lattice', lattice), ('build/dougong', dougong), ('build/arch_window', arch_window)):
         avg[key] = fn()
         pbr[key] = True

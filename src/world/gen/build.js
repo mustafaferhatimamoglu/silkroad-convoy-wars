@@ -5,7 +5,7 @@ import { model } from './models.js';
 // (yalniz collide parcalar: govde, kaya, yapi; yapraklar degil). Dokular obje doku dizisi havuzunda
 // katman indeksiyle okunur (world/Objects.js ObjectMaterials ile ayni oznitelikler).
 
-const PNG = /\/(leaf_|grass_tuft)/;
+const PNG = /\/(leaf_|grass_tuft|win_)/;
 export const texUrl = (key, base = 'content/') => `${base}textures/${key}${PNG.test(key) ? '.png' : '.jpg'}`;
 
 // normal + puruzluluk dosyasi olan anahtarlar (content/textures/pbr.json; gri kopyalar kaynagini gosterir)

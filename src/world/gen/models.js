@@ -483,10 +483,44 @@ function massModel(mi, culture) {
   const pal = D.palette, classes = D.classes;
   const buckets = new Map();
   const bucket = (tex) => { let B = buckets.get(tex); if (!B) buckets.set(tex, (B = { pos: [], col: [], uv: [] })); return B; };
-  const tint = (pi, tex) => {
+  // yan yuz renkleri modelin sinif ortalamasina cekilir (pencere/kapi lekeleri dikey serit yapmasin)
+  const clsAvg = new Map();
+  for (let k = 0; k < n; k++) {
+    if (!has[k]) continue;
+    const p = pal[M.sm[k]];
+    if (!p) continue;
+    let A = clsAvg.get(p[0]);
+    if (!A) clsAvg.set(p[0], (A = [0, 0, 0, 0]));
+    A[0] += lin(p[1]); A[1] += lin(p[2]); A[2] += lin(p[3]); A[3]++;
+  }
+  const tint = (pi, tex, side = false) => {
     const p = pal[pi] || [0, 200, 190, 170];
     const a = MASS.avg[tex] || [180, 180, 180];
-    return [0, 1, 2].map((c) => Math.min(3, Math.max(0.05, lin(p[c + 1]) / Math.max(0.02, lin(a[c])))));
+    const A = side && clsAvg.get(p[0]);
+    return [0, 1, 2].map((c) => {
+      let v = lin(p[c + 1]);
+      if (A) v = v * 0.3 + (A[c] / A[3]) * 0.7;
+      return Math.min(3, Math.max(0.05, v / Math.max(0.02, lin(a[c]))));
+    });
+  };
+  // pencereler (alfa testli kartlar): kultur turune gore
+  const winTex = culture === 'china' ? 'build/win_china' : culture === 'byzantine' ? 'build/win_euro' : 'build/win_arch';
+  const WIN = { pos: [], col: [], uv: [] };
+  const WALLCLS = new Set(['plaster', 'stone', 'brick', 'marble', 'wood']);
+  const addWin = (p0, p1, lo, hi, out, idx) => {
+    if (rock || steps || idx % (res > 1 ? 2 : 3) !== 1) return;
+    const base = Math.max(lo, 0), top = hi;
+    if (top - base < 3.2) return;
+    const mx = (p0[0] + p1[0]) / 2 + out[0] * 0.05, mz = (p0[1] + p1[1]) / 2 + out[1] * 0.05;
+    const tx = (p1[0] - p0[0]) / res, tz = (p1[1] - p0[1]) / res;
+    const ww = Math.min(1.1, res * 0.85) / 2, wh = culture === 'china' ? 1.1 : 1.7;
+    for (let yb = base + 1.1; yb + wh <= top - 0.7; yb += 3.3) {
+      const a = [mx - tx * ww, yb, mz - tz * ww], b = [mx + tx * ww, yb, mz + tz * ww], c = [b[0], yb + wh, b[2]], d = [a[0], yb + wh, a[2]];
+      const nn = nrmOf(a, b, c);
+      const P = nn[0] * out[0] + nn[2] * out[1] >= 0 ? [a, b, c, a, c, d] : [b, a, d, b, d, c];
+      const U = nn[0] * out[0] + nn[2] * out[1] >= 0 ? [[0, 1], [1, 1], [1, 0], [0, 1], [1, 0], [0, 0]] : [[1, 1], [0, 1], [0, 0], [1, 1], [0, 0], [1, 0]];
+      for (let q = 0; q < 6; q++) { WIN.pos.push(P[q][0], P[q][1], P[q][2]); WIN.col.push(1, 1, 1); WIN.uv.push(U[q][0], U[q][1]); }
+    }
   };
   const tri = (B, P, col, uvs) => { for (let v = 0; v < 3; v++) { B.pos.push(P[v][0], P[v][1], P[v][2]); B.col.push(col[0], col[1], col[2]); B.uv.push(uvs[v][0], uvs[v][1]); } };
   const X = (i) => x0 + i * res, Z = (j) => z0 + j * res;
@@ -534,7 +568,8 @@ function massModel(mi, culture) {
       // yan yuzler: komsu bu kenarda daha alcaksa (ya da yoksa) aradaki duvar; kemer altlari
       const sp = pal[M.sm[k]] || [0];
       const stex = rock ? `gray/terrain_${culture}` : massTex(classes[sp[0]], culture);
-      const sc = tint(M.sm[k], stex);
+      const sc = tint(M.sm[k], stex, true);
+      const wallOk = WALLCLS.has(classes[sp[0]]);
       const SB = bucket(stex);
       // [komsu i, j, kenar p0, p1, bizim kose h0, h1, komsunun ayni koseleri s0, s1]
       const edges = [
@@ -560,6 +595,7 @@ function massModel(mi, culture) {
         }
         if (lo0 === null) continue;
         if (h0 - lo0 < 0.03 && h1 - lo1 < 0.03) continue;
+        if (wallOk && !inside) addWin(p0, p1, Math.max(lo0, lo1), Math.min(h0, h1), [ni - i, nj - j], ni !== i ? j : i);
         const u0 = (p0[0] + p0[1]) / 3, u1 = u0 + res / 3;
         const q0 = [p0[0], lo0, p0[1]], q1 = [p1[0], lo1, p1[1]], q2 = [p1[0], h1, p1[1]], q3 = [p0[0], h0, p0[1]];
         tri(SB, [q0, q1, q2], sc, [[u0, lo0 / 3], [u1, lo1 / 3], [u1, h1 / 3]]);
@@ -573,6 +609,17 @@ function massModel(mi, culture) {
     }
   }
   const parts = [];
+  if (WIN.pos.length) {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(WIN.pos, 3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(WIN.uv, 2));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(WIN.col, 3));
+    const idx = new Uint32Array(WIN.pos.length / 3);
+    for (let q = 0; q < idx.length; q++) idx[q] = q;
+    g.setIndex(new THREE.BufferAttribute(idx, 1));
+    g.computeVertexNormals();
+    parts.push({ geo: g, tex: winTex, alpha: true, collide: false });
+  }
   for (const [tex, B] of buckets) {
     if (!B.pos.length) continue;
     const g = new THREE.BufferGeometry();
