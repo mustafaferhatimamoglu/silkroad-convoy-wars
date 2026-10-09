@@ -115,6 +115,7 @@ export class TerrainMaterials {
     this.opts = Object.assign({ farStart: 140, farEnd: 320, sharpness: 0.75, blendDepth: 0.18 }, opts);
     this.shared = {
       tTiles: { value: pool.texture },
+      tTilesN: { value: pool.normalTexture },
       uLayerLum: { value: this.layerLum },
       uFar: { value: new THREE.Vector2(this.opts.farStart, this.opts.farEnd) },
       uSharp: { value: this.opts.sharpness },
@@ -146,6 +147,7 @@ varying vec2 vCell;
 varying vec3 vTerrN;
 varying float vHCell;
 uniform highp sampler2DArray tTiles;
+uniform highp sampler2DArray tTilesN;
 uniform sampler2D tIndex;
 uniform sampler2D tColormap;
 uniform vec2 uCellOffset;
@@ -153,18 +155,26 @@ uniform vec2 uFar;
 uniform float uSharp;
 uniform float uBlendDepth;
 uniform vec4 uLayerLum[${cap4}];
+// karisik normal (RGB) + puruzluluk (A): map_fragment'te hesaplanir, normal/puruzluluk adiminda kullanilir
+vec4 gNR = vec4(0.5, 0.5, 1.0, 0.92);
+
+vec4 nrTap(vec4 id, vec2 g, vec2 gdx, vec2 gdy) {
+  int layer = int(id.r * 255.0 + 0.5);
+  float inv = 1.0 / exp2(floor(id.g * 255.0 + 0.5));
+  return textureGrad(tTilesN, vec3(g * inv, float(layer)), gdx * inv, gdy * inv);
+}
 
 // yan izdusum (ucurum): baskin karonun dokusu, yatay eksen + yukseklik ile
 // (turevler dallanma disinda hesaplanip verilir: tekdüze olmayan akista dFdx tanimsiz)
 vec3 sideTap(vec4 id, vec2 uv, vec2 dx, vec2 dy) {
   int layer = int(id.r * 255.0 + 0.5);
-  float inv = 1.0 / (4.0 * exp2(floor(id.g * 255.0 + 0.5)));
+  float inv = 1.0 / exp2(floor(id.g * 255.0 + 0.5));
   return textureGrad(tTiles, vec3(uv * inv, float(layer)), dx * inv, dy * inv).rgb;
 }
 
 vec3 splatTap(vec4 id, vec2 g, vec2 gdx, vec2 gdy, out float h) {
   int layer = int(id.r * 255.0 + 0.5);
-  float inv = 1.0 / (4.0 * exp2(floor(id.g * 255.0 + 0.5)));
+  float inv = 1.0 / exp2(floor(id.g * 255.0 + 0.5));
   vec3 c = textureGrad(tTiles, vec3(g * inv, float(layer)), gdx * inv, gdy * inv).rgb;
   h = dot(c, vec3(0.2126, 0.7152, 0.0722)) - uLayerLum[layer >> 2][layer & 3] + 0.5;
   return c;
@@ -187,6 +197,7 @@ vec3 splatTap(vec4 id, vec2 g, vec2 gdx, vec2 gdy, out float h) {
   float h0, h1, h2, h3;
   if (i00 == i10 && i00 == i01 && i00 == i11) {
     splat = splatTap(i00, g, gdx, gdy, h0);
+    gNR = nrTap(i00, g, gdx, gdy);
   } else {
     vec3 c0 = splatTap(i00, g, gdx, gdy, h0);
     vec3 c1 = splatTap(i10, g, gdx, gdy, h1);
@@ -199,6 +210,8 @@ vec3 splatTap(vec4 id, vec2 g, vec2 gdx, vec2 gdy, out float h) {
     vec4 b = max(hw - vec4(ma), vec4(0.0));
     vec3 hb = (c0 * b.x + c1 * b.y + c2 * b.z + c3 * b.w) / max(b.x + b.y + b.z + b.w, 1e-4);
     splat = mix(lin, hb, uSharp);
+    vec4 fw = mix(w, b / max(b.x + b.y + b.z + b.w, 1e-4), uSharp);
+    gNR = nrTap(i00, g, gdx, gdy) * fw.x + nrTap(i10, g, gdx, gdy) * fw.y + nrTap(i01, g, gdx, gdy) * fw.z + nrTap(i11, g, gdx, gdy) * fw.w;
   }
   // Dik yamaclarda ustten izdusum dokuyu dikey cizgilere uzatir: yandan (triplanar)
   // izdusume gec. Yalnizca dik piksellerde calisir; duz zeminin maliyeti degismez.
@@ -217,13 +230,26 @@ vec3 splatTap(vec4 id, vec2 g, vec2 gdx, vec2 gdy, out float h) {
     if (aw.x > 0.02) { side += sideTap(dom, vec2(g.y, vHCell), vec2(gdx.y, hdx), vec2(gdy.y, hdy)) * aw.x; sw += aw.x; }
     if (aw.y > 0.02) { side += sideTap(dom, vec2(g.x, vHCell), vec2(gdx.x, hdx), vec2(gdy.x, hdy)) * aw.y; sw += aw.y; }
     splat = mix(splat, side / max(sw, 1e-4), steep);
+    gNR.xyz = mix(gNR.xyz, vec3(0.5, 0.5, 1.0), steep);
   }
   float farT = smoothstep(uFar.x, uFar.y, length(vViewPosition));
   if (farT > 0.0) {
     vec3 cm = texture(tColormap, vCell / 96.0).rgb;
     splat = mix(splat, cm, farT);
+    gNR = mix(gNR, vec4(0.5, 0.5, 1.0, 0.95), farT);
   }
   diffuseColor.rgb *= splat;
+}
+`)
+        .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = clamp(gNR.a, 0.3, 1.0);')
+        .replace('#include <normal_fragment_maps>', `
+{
+  // dunya eksenine hizali teget cerceve (u = dogu, v = kuzey), gorus uzayinda
+  vec3 tN = gNR.xyz * 2.0 - 1.0;
+  vec3 Tv = (viewMatrix * vec4(1.0, 0.0, 0.0, 0.0)).xyz;
+  Tv = normalize(Tv - normal * dot(normal, Tv));
+  vec3 Bv = normalize(cross(normal, Tv));
+  normal = normalize(Tv * tN.x + Bv * tN.y + normal * max(tN.z, 0.2));
 }
 `);
     };

@@ -25,7 +25,7 @@ export class World {
     this.scene = scene;
     this.opts = Object.assign({
       nearRadius: 2, farRadius: 5, objects: true, water: true,
-      tileSize: 512, tileCapacity: 120, objTexSize: 256, objTexCapacity: 640,
+      tileSize: 1024, tileCapacity: 24, objTexSize: 512, objTexCapacity: 96,
       shadows: true, buildBudgetMs: 10,
     }, opts);
     this.data = new GenWorldData('content/');
@@ -48,8 +48,8 @@ export class World {
   async init() {
     await this.data.load();
     const o = this.opts;
-    this.tilePool = new TextureArrayPool(this.renderer, { size: o.tileSize, capacity: o.tileCapacity, name: 'zemin' });
-    this.objPool = new TextureArrayPool(this.renderer, { size: o.objTexSize, capacity: o.objTexCapacity, anisotropy: 4, name: 'obje' });
+    this.tilePool = new TextureArrayPool(this.renderer, { size: o.tileSize, capacity: o.tileCapacity, name: 'zemin', normals: true, roughness: 0.92 });
+    this.objPool = new TextureArrayPool(this.renderer, { size: o.objTexSize, capacity: o.objTexCapacity, anisotropy: 8, name: 'obje', normals: true, roughness: 0.85 });
     this.terrainMats = new TerrainMaterials(this.tilePool);
     this.tilePool.onSlotFilled = (slot, key) => {
       const t = this.data.tile(key);
@@ -224,7 +224,7 @@ export class World {
       for (let k = 0; k < bin.texture.length; k++) ids.add(bin.texture[k] & 0x3ff);
       const slots = new Map();
       await Promise.all([...ids].map(async (id) => {
-        slots.set(id, await this.tilePool.acquire(id, this.data.tileUrl(id) || ''));
+        slots.set(id, await this.tilePool.acquire(id, this.data.tileUrl(id) || '', this.data.tileNormalUrl ? this.data.tileNormalUrl(id) : null));
       }));
       if (gen !== r.gen || r.target !== 'near') {
         for (const id of ids) this.tilePool.release(id);

@@ -8,6 +8,16 @@ import { model } from './models.js';
 const PNG = /\/(leaf_|grass_tuft)/;
 export const texUrl = (key, base = 'content/') => `${base}textures/${key}${PNG.test(key) ? '.png' : '.jpg'}`;
 
+// normal + puruzluluk dosyasi olan anahtarlar (content/textures/pbr.json; gri kopyalar kaynagini gosterir)
+let PBR = {};
+export function setPbr(map) { PBR = map || {}; }
+export function nrUrl(key, base = 'content/') {
+  const v = PBR[key];
+  if (v === true) return `${base}textures/${key}_nr.webp`;
+  if (typeof v === 'string') return `${base}textures/${v}_nr.webp`;
+  return null;
+}
+
 /** list: placeRegionObjects ciktisi. pool: TextureArrayPool. */
 export async function buildGenObjects(pool, list, isCancelled, base = 'content/') {
   const parts = [];
@@ -17,7 +27,7 @@ export async function buildGenObjects(pool, list, isCancelled, base = 'content/'
     for (const p of o.parts || model(o.m)) { parts.push({ o, p }); texKeys.add(p.tex); }
   }
   const texSlot = new Map();
-  await Promise.all([...texKeys].map(async (tk) => { texSlot.set(tk, await pool.acquire(tk, texUrl(tk, base))); }));
+  await Promise.all([...texKeys].map(async (tk) => { texSlot.set(tk, await pool.acquire(tk, texUrl(tk, base), nrUrl(tk, base))); }));
   if (isCancelled()) { for (const tk of texKeys) pool.release(tk); return null; }
 
   const counts = { opaque: { v: 0, i: 0 }, alpha: { v: 0, i: 0 } };

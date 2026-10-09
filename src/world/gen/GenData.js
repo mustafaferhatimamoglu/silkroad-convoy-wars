@@ -3,6 +3,7 @@ import { CITIES } from './features.js';
 import { Simplex, smoothstep } from './noise.js';
 import { placeRegionObjects } from './place.js';
 import { setMassing } from './models.js';
+import { setPbr, nrUrl } from './build.js';
 import { tracksNear, trackDist, TRACK } from './tracks.js';
 
 // V5 dunya verisi: motorun bekledigi bolge verilerini (yukseklik, zemin dokusu, su, renk haritasi,
@@ -26,6 +27,7 @@ export class GenWorldData {
     this.tiles = await r.json();
     this.tileByName = Object.fromEntries(this.tiles.map((t) => [t.name, t]));
     this.plan = await BlueprintPlan.load(this.base);
+    try { setPbr(await (await fetch(this.base + 'textures/pbr.json')).json()); } catch { /* normalsiz */ }
     let avg = {};
     try { avg = await (await fetch(this.base + 'textures/avg.json')).json(); } catch { /* renk tonu olmadan */ }
     setMassing(this.plan.massing, avg);
@@ -69,6 +71,7 @@ export class GenWorldData {
     return t ? { flags: t.surface, color: t.color, name: t.name } : null;
   }
   tileUrl(id) { const t = this.tiles[id]; return t ? this.base + 'textures/' + t.file : null; }
+  tileNormalUrl(id) { const t = this.tiles[id]; return t ? nrUrl('terrain/' + t.name, this.base) : null; }
 
   /** Bolge verisi (onbellekli): { heights, texture, waterType, waterHeight, colormap } */
   region(key) {

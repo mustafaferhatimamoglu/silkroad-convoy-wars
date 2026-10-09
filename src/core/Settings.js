@@ -3,10 +3,10 @@
 const KEY = 'sro-v4-settings';
 
 export const QUALITY = {
-  dusuk: { label: 'Düşük', pixelRatio: 0.85, shadowMap: 2048, shadowExtent: 55, nearRadius: 1, farRadius: 3, msaa: 0, bloom: false, tileSize: 256, objTex: 256, anisotropy: 4 },
-  orta: { label: 'Orta', pixelRatio: 1.0, shadowMap: 2048, shadowExtent: 65, nearRadius: 2, farRadius: 4, msaa: 4, bloom: true, tileSize: 512, objTex: 256, anisotropy: 8 },
-  yuksek: { label: 'Yüksek', pixelRatio: 1.0, shadowMap: 4096, shadowExtent: 75, nearRadius: 2, farRadius: 5, msaa: 4, bloom: true, tileSize: 512, objTex: 256, anisotropy: 16 },
-  ultra: { label: 'Ultra', pixelRatio: 1.5, shadowMap: 4096, shadowExtent: 90, nearRadius: 3, farRadius: 6, msaa: 8, bloom: true, tileSize: 512, objTex: 256, anisotropy: 16 },
+  dusuk: { label: 'Düşük', pixelRatio: 0.85, shadowMap: 2048, shadowExtent: 55, nearRadius: 1, farRadius: 3, msaa: 0, bloom: false, tileSize: 512, objTex: 256, anisotropy: 4 },
+  orta: { label: 'Orta', pixelRatio: 1.0, shadowMap: 2048, shadowExtent: 65, nearRadius: 2, farRadius: 4, msaa: 4, bloom: true, tileSize: 1024, objTex: 512, anisotropy: 8 },
+  yuksek: { label: 'Yüksek', pixelRatio: 1.0, shadowMap: 4096, shadowExtent: 75, nearRadius: 2, farRadius: 5, msaa: 4, bloom: true, tileSize: 1024, objTex: 512, anisotropy: 16 },
+  ultra: { label: 'Ultra', pixelRatio: 1.5, shadowMap: 4096, shadowExtent: 90, nearRadius: 3, farRadius: 6, msaa: 8, bloom: true, tileSize: 1024, objTex: 512, anisotropy: 16 },
 };
 
 const DEFAULTS = {

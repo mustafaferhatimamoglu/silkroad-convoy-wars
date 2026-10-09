@@ -81,13 +81,25 @@ export class ObjectMaterials {
   constructor(pool) {
     this.pool = pool;
     const tObj = { value: pool.texture };
+    const tObjN = { value: pool.normalTexture };
+    const hasN = !!pool.normalTexture;
     const patch = (alpha) => (shader) => {
       shader.uniforms.tObj = tObj;
+      if (hasN) shader.uniforms.tObjN = tObjN;
       shader.vertexShader = shader.vertexShader
         .replace('#include <common>', '#include <common>\nattribute float layer;\nvarying float vLayer;\nvarying vec2 vOUv;')
         .replace('#include <begin_vertex>', '#include <begin_vertex>\nvLayer = layer;\nvOUv = uv;');
       shader.fragmentShader = shader.fragmentShader
-        .replace('#include <common>', '#include <common>\nuniform highp sampler2DArray tObj;\nvarying float vLayer;\nvarying vec2 vOUv;')
+        .replace('#include <common>', '#include <common>\nuniform highp sampler2DArray tObj;\n' + (hasN ? 'uniform highp sampler2DArray tObjN;\n' : '') + 'varying float vLayer;\nvarying vec2 vOUv;')
+        .replace('#include <roughnessmap_fragment>', hasN ? 'float roughnessFactor = roughness * texture(tObjN, vec3(vOUv, floor(vLayer + 0.5))).a;' : '#include <roughnessmap_fragment>')
+        .replace('#include <normal_fragment_maps>', hasN ? `
+#ifdef USE_NORMALMAP_TANGENTSPACE
+{
+  vec3 mapN = texture(tObjN, vec3(vNormalMapUv, floor(vLayer + 0.5))).xyz * 2.0 - 1.0;
+  mapN.xy *= normalScale;
+  normal = normalize(tbn * mapN);
+}
+#endif` : '#include <normal_fragment_maps>')
         .replace('#include <map_fragment>', `
 {
   vec4 texel = texture(tObj, vec3(vOUv, floor(vLayer + 0.5)));
@@ -95,11 +107,15 @@ export class ObjectMaterials {
   diffuseColor.rgb *= texel.rgb;
 }`);
     };
-    this.opaque = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.86, metalness: 0.0, vertexColors: true });
+    // normal haritasi / puruzluluk: Three'nin yollari acilsin diye 1x1 sahte dokular; ornekleme dizimizden
+    const dummy = new THREE.DataTexture(new Uint8Array([128, 128, 255, 255]), 1, 1);
+    dummy.needsUpdate = true;
+    const nOpts = hasN ? { normalMap: dummy, roughnessMap: dummy } : {};
+    this.opaque = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1.0, metalness: 0.0, vertexColors: true, ...nOpts });
     this.opaque.onBeforeCompile = patch(false);
     this.opaque.customProgramCacheKey = () => 'sro-obj-opaque';
 
-    this.alpha = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, metalness: 0.0, side: THREE.DoubleSide, vertexColors: true });
+    this.alpha = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1.0, metalness: 0.0, side: THREE.DoubleSide, vertexColors: true, ...nOpts });
     this.alpha.onBeforeCompile = patch(true);
     this.alpha.customProgramCacheKey = () => 'sro-obj-alpha';
 

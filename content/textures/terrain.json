@@ -6,9 +6,9 @@
   "surface": 1,
   "scale": 1,
   "color": [
-   205,
-   179,
-   132
+   220,
+   200,
+   172
   ]
  },
  {
@@ -16,11 +16,11 @@
   "name": "dirt",
   "file": "terrain/dirt.jpg",
   "surface": 0,
-  "scale": 0,
+  "scale": 1,
   "color": [
-   124,
-   98,
-   69
+   113,
+   99,
+   75
   ]
  },
  {
@@ -28,11 +28,11 @@
   "name": "gravel",
   "file": "terrain/gravel.jpg",
   "surface": 0,
-  "scale": 0,
+  "scale": 1,
   "color": [
-   128,
-   119,
-   106
+   92,
+   93,
+   86
   ]
  },
  {
@@ -40,11 +40,11 @@
   "name": "grass",
   "file": "terrain/grass.jpg",
   "surface": 10,
-  "scale": 0,
+  "scale": 1,
   "color": [
-   80,
-   109,
-   43
+   85,
+   95,
+   42
   ]
  },
  {
@@ -54,9 +54,9 @@
   "surface": 10,
   "scale": 1,
   "color": [
-   148,
-   135,
-   77
+   152,
+   143,
+   81
   ]
  },
  {
@@ -64,11 +64,11 @@
   "name": "rock",
   "file": "terrain/rock.jpg",
   "surface": 3,
-  "scale": 1,
+  "scale": 2,
   "color": [
-   120,
-   116,
-   107
+   73,
+   71,
+   64
   ]
  },
  {
@@ -76,11 +76,11 @@
   "name": "redrock",
   "file": "terrain/redrock.jpg",
   "surface": 3,
-  "scale": 1,
+  "scale": 2,
   "color": [
-   161,
-   88,
-   53
+   113,
+   77,
+   51
   ]
  },
  {
@@ -90,9 +90,9 @@
   "surface": 9,
   "scale": 1,
   "color": [
-   218,
-   222,
-   226
+   216,
+   232,
+   246
   ]
  },
  {
@@ -100,11 +100,11 @@
   "name": "mud",
   "file": "terrain/mud.jpg",
   "surface": 6,
-  "scale": 0,
+  "scale": 1,
   "color": [
-   74,
-   57,
-   40
+   107,
+   103,
+   101
   ]
  },
  {
@@ -112,11 +112,11 @@
   "name": "cobble",
   "file": "terrain/cobble.jpg",
   "surface": 100,
-  "scale": 0,
+  "scale": 1,
   "color": [
-   124,
-   116,
-   105
+   131,
+   110,
+   78
   ]
  },
  {
@@ -124,11 +124,11 @@
   "name": "paving",
   "file": "terrain/paving.jpg",
   "surface": 100,
-  "scale": 0,
+  "scale": 1,
   "color": [
-   172,
-   161,
-   140
+   151,
+   146,
+   133
   ]
  },
  {
@@ -138,9 +138,9 @@
   "surface": 0,
   "scale": 1,
   "color": [
-   97,
-   100,
-   50
+   149,
+   144,
+   85
   ]
  },
  {
@@ -148,11 +148,11 @@
   "name": "road",
   "file": "terrain/road.jpg",
   "surface": 0,
-  "scale": 0,
+  "scale": 1,
   "color": [
-   137,
-   118,
-   91
+   134,
+   113,
+   70
   ]
  }
 ]
