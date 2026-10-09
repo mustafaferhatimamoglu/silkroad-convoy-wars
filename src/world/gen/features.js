@@ -25,3 +25,19 @@ export const DOCKS = {
   EU_FERRY2: P(75, 98, 734, 168), AM_FERRY1: P(89, 103, 1254, 1114), AM_FERRY2: P(89, 101, 1246, 1210),
   SD_FERRY: P(48, 93, 1525, 1688),
 };
+
+// Hatlar (orijinal baglantilar): feribotlar nehir/bogaz/deniz gecisi; Roc hava gemileri Karakurum
+// istasyonlarindan Roc Dagi'na. Sure feribotta rota boyundan hesaplanir.
+export const FERRY_ROUTES = [
+  { id: 'huang1', name: 'Sarı Nehir Feribotu', a: 'CH_FERRY', b: 'WC_FERRY' },
+  { id: 'huang2', name: 'Güney Nehir Feribotu', a: 'CH_FERRY2', b: 'WC_FERRY2' },
+  { id: 'tarim1', name: 'Tarım Feribotu', a: 'KT_FERRY2', b: 'WC_FERRY3' },
+  { id: 'tarim2', name: 'Karakaş Feribotu', a: 'KT_FERRY3', b: 'WC_FERRY4' },
+  { id: 'strait', name: 'Boğaz Feribotu', a: 'EU_FERRY2', b: 'AM_FERRY1' },
+  { id: 'sea', name: 'İskenderiye Gemisi', a: 'SD_FERRY', b: 'AM_FERRY2' },
+];
+export const AIR_ROUTES = [
+  { id: 'roc1', name: 'Roc Hava Gemisi', a: 'KT_FLYSHIP1', b: 'RM_FLYSHIP1', labels: ['Karakurum istasyonu', 'Roc Dağı'] },
+  { id: 'roc2', name: 'Kuzey Roc Gemisi', a: 'KT_FLYSHIP2', b: 'RM_FLYSHIP2', labels: ['Kuzey istasyonu', 'Roc Dağı kuzey'] },
+  { id: 'roc3', name: 'Batı Roc Gemisi', a: 'AM_FLYSHIP', b: 'RM_FLYSHIP3', labels: ['Batı istasyonu', 'Roc Dağı zirvesi'] },
+];

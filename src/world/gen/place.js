@@ -3,6 +3,7 @@ import { REGION_M } from './blueprint.js';
 import { tunnelItems } from './tunnel.js';
 import { tracksNear, trackDist, TRACK } from './tracks.js';
 import { archInfo } from './models.js';
+import { AIRPIER } from './docks.js';
 
 // Bolge objeleri: orijinal haritanin sablonundaki nesne yerlesimi (tur + konum + yon + sinir
 // kutusu) bizim modellerimize cevrilir: agac boyu, sur uzunlugu/yuksekligi, ev tabani ve kati,
@@ -161,6 +162,23 @@ export function placeRegionObjects(data, rx, rz, d) {
     const lx = g.x - x0, lz = g.z - z0;
     if (lx < 0 || lx >= REGION_M || lz < 0 || lz >= REGION_M) continue;
     out.push({ m: `portal:${g.culture}`, x: lx, y: H(lx, lz) - 0.3, z: -lz, yaw: g.yaw, s: 1 });
+  }
+  // feribot iskeleleri (kiyidan iskele ucuna, guverte su seviyesinin 1.2 m ustunde)
+  for (const f of plan.ferries) {
+    for (const dk of [f.a, f.b]) {
+      const lx = dk.sx - x0, lz = dk.sz - z0;
+      if (lx < 0 || lx >= REGION_M || lz < 0 || lz >= REGION_M) continue;
+      const L = Math.round(Math.hypot(dk.ex - dk.sx, dk.ez - dk.sz) + 2);
+      out.push({ m: `pier:${L}`, x: lx, y: dk.wl + 1.2, z: -lz, yaw: Math.atan2(dk.ez - dk.sz, dk.ex - dk.sx), s: 1 });
+    }
+  }
+  // hava gemisi iskeleleri (rampali; ust yuzey = gemi guvertesi)
+  for (const A of plan.airships || []) {
+    for (const dk of [A.a, A.b]) {
+      const lx = dk.sx - x0, lz = dk.sz - z0;
+      if (lx < 0 || lx >= REGION_M || lz < 0 || lz >= REGION_M) continue;
+      out.push({ m: `airpier:${AIRPIER.ramp}:${AIRPIER.flat}:${AIRPIER.H}`, x: lx, y: dk.wl + 1.2, z: -lz, yaw: Math.atan2(dk.uz, dk.ux), s: 1 });
+    }
   }
   for (const it of tunnelItems(plan, rx, rz)) out.push(it);
   return out;

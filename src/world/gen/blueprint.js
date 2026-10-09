@@ -52,10 +52,12 @@ export class BlueprintPlan {
     const hs = new Int16Array(raw.heights.buffer, raw.heights.byteOffset, hw * hh);
     this.ground = new Uint8Array(raw.ground.buffer, raw.ground.byteOffset, M.ground.w * M.ground.h);
     this.gw = M.ground.w; this.gh = M.ground.h;
-    const ws = new Int16Array(raw.water.buffer, raw.water.byteOffset, M.water.w * M.water.h);
-    this.water = ws; this.ww = M.water.w;
+    // su seviyesi (32 m blok); kiyiya bitisik bos alanlar denize donusunce burada genisler (kopya)
+    this.water = Int16Array.from(new Int16Array(raw.water.buffer, raw.water.byteOffset, M.water.w * M.water.h));
+    this.ww = M.water.w; this.wh = M.water.h;
     this.H = new Float32Array(hw * hh);
     this.voidDist = new Uint8Array(hw * hh);     // bos hucrenin oyun alanina uzakligi (ornek), 0 = alan ici
+    this.sea = new Uint8Array(hw * hh);          // 1 = kiyiya bitisik bos alan: deniz
     this._fillVoid(hs);
     this.regionHas = new Uint8Array((this.rx1 - this.rx0 + 1) * (this.rz1 - this.rz0 + 1));
     const per = REGION_M / M.heights.res;
@@ -64,7 +66,7 @@ export class BlueprintPlan {
         let near = false;
         for (let a = 0; a < per && !near; a++) for (let b = 0; b < per; b++) {
           const k = ((rz - this.rz0) * per + a) * hw + (rx - this.rx0) * per + b;
-          if (this.voidDist[k] < 8) { near = true; break; }    // alan ya da 128 m icindeki dag
+          if (this.voidDist[k] < 8 || (this.sea[k] && this.voidDist[k] < 90)) { near = true; break; }    // alan, 128 m icindeki dag ya da deniz
         }
         this.regionHas[(rz - this.rz0) * (this.rx1 - this.rx0 + 1) + (rx - this.rx0)] = near ? 1 : 0;
       }
@@ -83,16 +85,24 @@ export class BlueprintPlan {
     this.cities = []; this.portals = []; this.ferries = []; this.airships = []; this.tunnels = []; this.pads = []; this.roads = [];
   }
 
-  /** Bos hucreler: en yakin alan kenarinin yuksekliginden uzaklikla yukselen sirt. */
+  /**
+   * Bos hucreler (orijinal haritada olmayan alan): en yakin alan kenari su ise deniz (kiyidan
+   * uzaklastikca derinlesen taban, kenarin su seviyesi), kara ise uzaklikla yukselen sirt.
+   */
   _fillVoid(hs) {
-    const w = this.hw, h = this.hh, H = this.H, D = this.voidDist, VOID = -32768;
-    const base = new Float32Array(w * h);
+    const w = this.hw, h = this.hh, H = this.H, D = this.voidDist, SEA = this.sea, VOID = -32768;
+    const base = new Float32Array(w * h), lvl = new Float32Array(w * h).fill(NaN);
     let q = [];
     for (let i = 0; i < w * h; i++) {
-      if (hs[i] === VOID) { D[i] = 255; } else { D[i] = 0; H[i] = hs[i] * 0.1; base[i] = H[i]; q.push(i); }
+      if (hs[i] === VOID) { D[i] = 255; continue; }
+      D[i] = 0; H[i] = hs[i] * 0.1; base[i] = H[i];
+      const x = i % w, z = (i / w) | 0;
+      const wv = this.water[(z >> 1) * this.ww + (x >> 1)];
+      if (wv !== VOID && H[i] < wv * 0.1 - 0.3) lvl[i] = wv * 0.1;     // su kenari
+      q.push(i);
     }
-    // BFS: uzaklik (ornek) ve en yakin kenar yuksekligi (en fazla 60 ornek = 960 m)
-    for (let d = 1; d < 60 && q.length; d++) {
+    // BFS: uzaklik (ornek), en yakin kenar yuksekligi ve (su kenariysa) seviyesi; en fazla 250 ornek
+    for (let d = 1; d < 250 && q.length; d++) {
       const nq = [];
       for (const i of q) {
         const x = i % w, z = (i / w) | 0;
@@ -101,21 +111,58 @@ export class BlueprintPlan {
           if (xx < 0 || zz < 0 || xx >= w || zz >= h) continue;
           const j = zz * w + xx;
           if (D[j] !== 255) continue;
-          D[j] = d; base[j] = base[i]; nq.push(j);
+          D[j] = Math.min(254, d); base[j] = base[i]; lvl[j] = lvl[i]; nq.push(j);
         }
       }
       q = nq;
     }
+    // farkli seviyeli iki deniz bos alanda bulusursa arada kum seti (su basamagi gorunmesin)
+    const bar = new Uint8Array(w * h);
+    for (let i = 0; i < w * h; i++) {
+      if (D[i] === 0 || Number.isNaN(lvl[i])) continue;
+      const x = i % w, z = (i / w) | 0;
+      for (let dz = -2; dz <= 2 && !bar[i]; dz++) for (let dx = -2; dx <= 2; dx++) {
+        const xx = x + dx, zz = z + dz;
+        if (xx < 0 || zz < 0 || xx >= w || zz >= h) continue;
+        const j = zz * w + xx;
+        if (!Number.isNaN(lvl[j]) && Math.abs(lvl[j] - lvl[i]) > 1) { bar[i] = 1; break; }
+      }
+    }
     for (let i = 0; i < w * h; i++) {
       if (D[i] === 0) continue;
-      const d = D[i] === 255 ? 60 : D[i];
       const x = i % w, z = (i / w) | 0;
       const X = this.X0 + x * 16, Z = this.Z0 + z * 16;
+      if (bar[i]) {
+        // set: iki seviyenin ustunde alcak kumluk
+        let top = lvl[i];
+        for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) {
+          const j = clamp(z + dz, 0, h - 1) * w + clamp(x + dx, 0, w - 1);
+          if (!Number.isNaN(lvl[j])) top = Math.max(top, lvl[j]);
+        }
+        H[i] = top + 2 + this.n.noise(X / 90, Z / 90) * 1.2;
+        continue;
+      }
+      if (!Number.isNaN(lvl[i])) {
+        // deniz: kiyidan aciga dogru 4 m'den 40 m'ye derinlesen taban
+        SEA[i] = 1;
+        const d = D[i] === 255 ? 250 : D[i];
+        H[i] = lvl[i] - 4 - Math.min(36, d * 0.9) + this.n.noise(X / 300, Z / 300) * 2;
+        const k = (z >> 1) * this.ww + (x >> 1);
+        if (this.water[k] === VOID) this.water[k] = Math.round(lvl[i] * 10);
+        continue;
+      }
+      const d = D[i] === 255 ? 60 : Math.min(60, D[i]);
       // kenardan ~100 m icinde 90 m yukselen, sonra yavas tirmanan sirt + daglik gurultu
       const rise = 90 * smoothstep(0, 7, d) + d * 3.5;
       const rough = 0.6 + 0.7 * this.n.ridged(X / 420, Z / 420, 4);
       H[i] = base[i] + rise * rough;
     }
+  }
+
+  /** Deniz hucresi mi (16 m izgara). */
+  seaAt(X, Z) {
+    const x = clamp(Math.round((X - this.X0 - 8) / 16), 0, this.hw - 1), z = clamp(Math.round((Z - this.Z0 - 8) / 16), 0, this.hh - 1);
+    return this.sea[z * this.hw + x] === 1;
   }
 
   // ---------------------------------------------------------------- sorgular
@@ -164,7 +211,7 @@ export class BlueprintPlan {
   /** Su seviyesi (m) ya da null: 32 m blok. */
   waterLevel(X, Z) {
     const bx = Math.floor((X - this.X0) / 32), bz = Math.floor((Z - this.Z0) / 32);
-    if (bx < 0 || bz < 0 || bx >= this.ww || bz >= this.meta.water.h) return null;
+    if (bx < 0 || bz < 0 || bx >= this.ww || bz >= this.wh) return null;
     const v = this.water[bz * this.ww + bx];
     return v === -32768 ? null : v * 0.1;
   }
@@ -173,7 +220,7 @@ export class BlueprintPlan {
   sample(X, Z, out = {}) {
     let h = this.templateH(X, Z);
     const g = this.groundAt(X, Z, 3);
-    const name = this.classes[g];
+    const name = g === 0 && this.seaAt(X, Z) ? 'mud' : this.classes[g];     // deniz tabani yumusak
     // ayrinti: sinifa gore 2-8 m puruz; yamacta ve dagda kayalik sirtlar
     const amp = CLASS_DETAIL[name] ?? 0.3;
     if (amp > 0) {
@@ -183,6 +230,11 @@ export class BlueprintPlan {
         // kum dalgaciklari
         h += Math.sin((X * 0.8 + Z * 0.6) / 2.4 + this.n2.noise(X / 30, Z / 30) * 3) * 0.12;
       }
+    }
+    // hava gemisi istasyon meydanlari: iskele boyunca duz
+    for (const P of this.pads) {
+      const d = Math.hypot(X - P.x, Z - P.z);
+      if (d < P.r + 40) h = h + (P.h - h) * (1 - smoothstep(P.r, P.r + 40, d));
     }
     out.h = h;
     out.road = name === 'paving' || name === 'cobble' ? 1 : 0;

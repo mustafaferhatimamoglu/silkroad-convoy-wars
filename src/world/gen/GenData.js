@@ -5,6 +5,7 @@ import { placeRegionObjects, clampUnderStructures } from './place.js';
 import { setMassing } from './models.js';
 import { setPbr, nrUrl } from './build.js';
 import { tracksNear, trackDist, TRACK } from './tracks.js';
+import { setupTransport } from './docks.js';
 
 // V5 dunya verisi: motorun bekledigi bolge verilerini (yukseklik, zemin dokusu, su, renk haritasi,
 // objeler) orijinal haritanin kaba sablonundan (content/world, tools/gen/blueprint.py) ve kendi
@@ -32,6 +33,7 @@ export class GenWorldData {
     try { avg = await (await fetch(this.base + 'textures/avg.json')).json(); } catch { /* renk tonu olmadan */ }
     setMassing(this.plan.massing, avg);
     this.plan.cities = CITIES.map((c) => ({ ...c, h: this.plan.templateH(c.x, c.z) }));
+    setupTransport(this.plan);
     this.n = new Simplex(this.plan.seed + 7);
     this.regions = new Map();
     const P = this.plan;

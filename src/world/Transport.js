@@ -233,8 +233,28 @@ export class Transport {
     const lin = Math.max(0, Math.min(1, tr.t / tr.dur));
     const k = ease(lin);
     const A = tr.from.moor, B = tr.to.moor;
-    const X = A.x + (B.x - A.x) * k, Z = A.z + (B.z - A.z) * k;
+    let X = A.x + (B.x - A.x) * k, Z = A.z + (B.z - A.z) * k;
     let yaw = Math.atan2(B.z - A.z, B.x - A.x);
+    if (r.f.path && !r.air) {
+      // feribot rotasi: su uzerinden yol; seviye rota boyunca (kanal/deniz farki)
+      const fwd = tr.from === r.A;
+      let s = k * r.f.length;
+      if (r.f.fade) {
+        // acik deniz: 160 m acil, karar (2.4 sn), karsi kiyinin 160 m aciginda belir, yanas
+        const S = Math.min(160, r.f.length * 0.3), T = tr.dur, tf = 2.4, ts = (T - tf) / 2;
+        const tt = tr.t;
+        if (tt < ts) s = ease(tt / ts) * S;
+        else if (tt < ts + tf) s = tt < ts + tf / 2 ? S : r.f.length - S;
+        else s = r.f.length - S + ease((tt - ts - tf) / ts) * S;
+        if (ride) this._fade(tt > ts - 0.6 && tt < ts + tf + 0.6 ? 1 : 0);
+      }
+      const q = pathAt(r.f.path, fwd ? s : r.f.length - s);
+      X = q[0]; Z = q[1];
+      yaw = fwd ? q[3] : q[3] + Math.PI;
+      b.y = q[2] + 1.15;
+      if (tr.yaw0 === undefined) tr.yaw0 = b.yaw ?? tr.from.yaw;
+      yaw = lerpAngle(tr.yaw0, yaw, ease(Math.min(1, lin / 0.12)));
+    }
     if (r.air) {
       // hava gemisi: yay cizerek tirman/al, kalkista yolculuk yonune don
       if (tr.yaw0 === undefined) tr.yaw0 = b.yaw ?? tr.from.yaw;
@@ -249,7 +269,7 @@ export class Transport {
     if (tr.t >= tr.dur) {
       b.at = tr.to;
       b.trip = null;
-      if (r.air) b.y = tr.to.wl + 1.15;
+      b.y = tr.to.wl + 1.15;
       if (ride) { ride.phase = 'off'; ride.t = 0; ride.dest = tr.to; b.trip = { ...tr, t: tr.dur, dur: tr.dur }; }
       else if (b.at !== b.home && !tr.empty) b.trip = { from: b.at, to: b.home, t: 0, dur: tr.dur * 0.8, empty: true };
     }
@@ -283,7 +303,21 @@ export class Transport {
     v._sync(1);
   }
 
+  /** Ekran kararmasi (acik deniz gecisi). */
+  _fade(on) {
+    if (!this._fadeEl) {
+      const el = document.createElement('div');
+      el.style.cssText = 'position:fixed;inset:0;background:#000;opacity:0;pointer-events:none;transition:opacity .55s;z-index:40;display:flex;align-items:center;justify-content:center;color:#e8dcc4;font:600 22px system-ui';
+      el.textContent = 'Açık denizde…';
+      document.body.appendChild(el);
+      this._fadeEl = el;
+    }
+    const o = on ? '1' : '0';
+    if (this._fadeEl.style.opacity !== o) this._fadeEl.style.opacity = o;
+  }
+
   _release(ride) {
+    this._fade(0);
     const b = ride.boat, v = ride.mode.vehicle;
     v.acc = 0;
     if (v._hist) v._hist.length = 0;            // geri sarma gemiden once ki konuma atlamasin
@@ -403,6 +437,14 @@ function makeRoc(k) {
  * gemi genisligince arazinin en az 25 m ustu (uclara dogru payi azalir) ve hafif bir yay;
  * tirmanis/inis yumusatilir.
  */
+/** Rota uzerinde s (m) noktasi: [X, Z, su seviyesi, yon]. path: [[X, Z, wl, s], ...] */
+function pathAt(path, s) {
+  let lo = 0, hi = path.length - 1;
+  while (hi - lo > 1) { const m = (lo + hi) >> 1; if (path[m][3] <= s) lo = m; else hi = m; }
+  const a = path[lo], b = path[hi], L = b[3] - a[3] || 1, t = Math.max(0, Math.min(1, (s - a[3]) / L));
+  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t, Math.atan2(b[1] - a[1], b[0] - a[0])];
+}
+
 function airProfile(plan, A, B, N = 80) {
   const y0 = A.wl + 1.15, y1 = B.wl + 1.15;
   const ax = A.moor.x, az = A.moor.z, bx = B.moor.x, bz = B.moor.z;
