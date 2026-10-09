@@ -2,6 +2,7 @@ import { hash2 } from './noise.js';
 import { REGION_M } from './blueprint.js';
 import { tunnelItems } from './tunnel.js';
 import { tracksNear, trackDist, TRACK } from './tracks.js';
+import { archInfo } from './models.js';
 
 // Bolge objeleri: orijinal haritanin sablonundaki nesne yerlesimi (tur + konum + yon + sinir
 // kutusu) bizim modellerimize cevrilir: agac boyu, sur uzunlugu/yuksekligi, ev tabani ve kati,
@@ -29,6 +30,8 @@ function refine(kind, name, w, d, h) {
   return kind;
 }
 
+// agac modellerimizin olcek 1'deki yaklasik boyu (m)
+const TREE_H = { palm: 9.5, pine: 12, cypress: 10, broad: 8, willow: 5.6, dead: 5 };
 const VEG = new Set(['grass', 'bush', 'tree', 'palm', 'pine', 'willow', 'bamboo', 'rock']);
 
 export function placeRegionObjects(data, rx, rz, d) {
@@ -58,7 +61,10 @@ export function placeRegionObjects(data, rx, rz, d) {
     if (!VEG.has(kind) && plan.massing.models && plan.massing.models[mi]) {
       const ox0 = X - x0, oz0 = Z - z0;
       if (ox0 < -60 || ox0 > REGION_M + 60 || oz0 < -60 || oz0 > REGION_M + 60) continue;
-      out.push({ m: `mass:${mi}:${culture}`, x: ox0, y: Y, z: -oz0, yaw, s: 1 });
+      const ak = archInfo(mi, m[8], culture);
+      const key = ak === 'rock' ? `mass:${mi}:${culture === 'desert' || culture === 'egypt' || culture === 'persian' ? 'redrock' : 'rock'}`
+        : ak === 'steps' ? `mass:${mi}:${culture}+steps` : ak ? `arch:${mi}:${culture}:${ak}` : `mass:${mi}:${culture}`;
+      out.push({ m: key, x: ox0, y: Y, z: -oz0, yaw, s: 1 });
       continue;
     }
     // sinir kutusu merkezi (model yerel, Three ekseni) -> dunya: x' = c*x + s*z, z' = -s*x + c*z ; plan Z = -z
@@ -75,15 +81,33 @@ export function placeRegionObjects(data, rx, rz, d) {
     switch (kind) {
       case 'grass': push(`tuft:${v % 4}`, yaw, Math.min(1.8, Math.max(0.6, h / 0.7)), gy - 0.05); break;
       case 'bush': push(`bush:${v % 4}`, yaw, Math.min(2.2, Math.max(0.6, h / 1.4)), gy - 0.1); break;
-      case 'palm': push(`palm:${v}`, yaw, Math.min(1.6, Math.max(0.5, h / 9)), gy - 0.15); break;
-      case 'pine': push(`pine:${v}`, yaw, Math.min(1.8, Math.max(0.4, h / 12)), gy - 0.15); break;
-      case 'bamboo': push(`cypress:${v}`, yaw, Math.min(1.4, Math.max(0.4, h / 9)), gy - 0.1); break;
+      case 'palm':
+      case 'pine':
+      case 'bamboo':
       case 'willow':
       case 'tree': {
         const nm = m[8];
-        const sp = /tropical|palm/.test(nm) ? 'palm' : /kara|pine|fir|snow/.test(nm) ? 'pine' : /cypress|longtree|poplar/.test(nm) ? 'cypress' : 'broad';
-        const base = sp === 'palm' ? 9 : sp === 'pine' ? 12 : sp === 'cypress' ? 9 : 6.5;
-        push(`${sp}:${v}`, yaw, Math.min(2.6, Math.max(0.35, h / base)), gy - 0.15);
+        const sp = kind === 'willow' || /willow/.test(nm) ? 'willow' : kind === 'palm' || /tropical|palm/.test(nm) ? 'palm'
+          : kind === 'pine' || /kara|pine|fir|snow/.test(nm) ? 'pine' : kind === 'bamboo' || /cypress|longtree|poplar|bamboo/.test(nm) ? 'cypress'
+            : /_dry|dead/.test(nm) ? 'dead' : 'broad';
+        const base = TREE_H[sp];
+        // orijinal model cogu zaman bir koru/sira: govde konumlari ve boylari kumeden
+        const cl = plan.veg && plan.veg[mi];
+        if (cl) {
+          for (const [tx, tz, th] of cl) {
+            const px = X + c * tx + s * tz - x0, pz = Z - (-s * tx + c * tz) - z0;
+            if (px < -40 || px > REGION_M + 40 || pz < -40 || pz > REGION_M + 40) continue;
+            const ty = H(Math.min(Math.max(px, 0), 191.9), Math.min(Math.max(pz, 0), 191.9));
+            const vv = Math.floor(hash2(Math.round(px * 7 + X), Math.round(pz * 7 + Z), 37) * 6);
+            if (th < 1.6) { out.push({ m: `tuft:${vv % 4}`, x: px, y: ty - 0.05, z: -pz, yaw: yaw + vv, s: Math.max(0.6, th / 0.7) }); continue; }
+            if (th < 3.2) { out.push({ m: `bush:${vv % 4}`, x: px, y: ty - 0.1, z: -pz, yaw: yaw + vv, s: Math.max(0.6, th / 1.6) }); continue; }
+            out.push({ m: `${sp}:${vv}`, x: px, y: ty - 0.15, z: -pz, yaw: yaw + vv * 1.1, s: Math.min(16, Math.max(0.35, th / base)) });
+          }
+          break;
+        }
+        if (h < 1.6) { push(`tuft:${v % 4}`, yaw, Math.max(0.6, h / 0.7), gy - 0.05); break; }
+        if (h < 3.2) { push(`bush:${v % 4}`, yaw, Math.max(0.6, h / 1.6), gy - 0.1); break; }
+        push(`${sp}:${v}`, yaw, Math.min(16, Math.max(0.35, h / base)), gy - 0.15);
         break;
       }
       case 'rock': {
@@ -140,6 +164,50 @@ export function placeRegionObjects(data, rx, rz, d) {
   }
   for (const it of tunnelItems(plan, rx, rz)) out.push(it);
   return out;
+}
+
+/**
+ * Arazi yapilarin ustune cikmasin: 16 m'lik sablon araziyi merdiven/teras/avlu gibi yapilarin
+ * icinden gecirebilir. Siluet izgarasi olan her yapinin tabaninda arazi koseleri yapinin ust
+ * yuzeyinin (kemer altinda tavaninin) biraz altina indirilir. heights: 0.1 m birim, yerinde.
+ */
+export function clampUnderStructures(plan, rx, rz, heights) {
+  const MS = plan.massing && plan.massing.models;
+  if (!MS) return;
+  const x0 = rx * REGION_M, z0 = rz * REGION_M, x1 = x0 + REGION_M, z1 = z0 + REGION_M;
+  const K = plan.objKinds, Mo = plan.objModels;
+  for (let dz = -2; dz <= 2; dz++) {
+    for (let dx = -2; dx <= 2; dx++) {
+      for (const [mi, X, Z, Y, yaw] of plan.objectsIn(rx + dx, rz + dz)) {
+        const M = MS[mi];
+        if (!M) continue;
+        const m = Mo[mi];
+        const kind = refine(K[m[0]], m[8], m[5] - m[2], m[7] - m[4], m[6] - Math.max(m[3], -2));
+        if (kind === 'skip' || VEG.has(kind)) continue;
+        const c = Math.cos(yaw), s = Math.sin(yaw);
+        const R = Math.hypot(Math.max(Math.abs(M.x0), Math.abs(M.x0 + M.nx * M.res)), Math.max(Math.abs(M.z0), Math.abs(M.z0 + M.nz * M.res)));
+        if (X + R < x0 || X - R > x1 || Z + R < z0 || Z - R > z1) continue;
+        const j0 = Math.max(0, Math.floor((X - R - x0) / 2)), j1 = Math.min(VERTS - 1, Math.ceil((X + R - x0) / 2));
+        const i0 = Math.max(0, Math.floor((Z - R - z0) / 2)), i1 = Math.min(VERTS - 1, Math.ceil((Z + R - z0) / 2));
+        for (let i = i0; i <= i1; i++) {
+          for (let j = j0; j <= j1; j++) {
+            // dunya (plan) -> Three farki -> model yerel (yaw tersine)
+            const tx = x0 + j * 2 - X, tz = -(z0 + i * 2 - Z);
+            const lx = c * tx - s * tz, lz = s * tx + c * tz;
+            const ci = Math.floor((lx - M.x0) / M.res), cj = Math.floor((lz - M.z0) / M.res);
+            if (ci < 0 || cj < 0 || ci >= M.nx || cj >= M.nz) continue;
+            const k = cj * M.nx + ci;
+            if (M.top[k] === -32768) continue;
+            const top = M.top[k] / 10, low = M.low[k] === 32767 ? null : M.low[k] / 10;
+            const lid = low !== null && low > 2.6 && low < top - 0.3 ? low : top;
+            const cap = (Y + lid - 0.12) * 10;
+            const v = i * VERTS + j;
+            if (heights[v] > cap) heights[v] = cap;
+          }
+        }
+      }
+    }
+  }
 }
 
 function cityCulture(plan, X, Z) {

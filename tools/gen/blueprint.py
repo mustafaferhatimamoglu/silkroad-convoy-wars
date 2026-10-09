@@ -45,6 +45,9 @@ def classify(name, flags, color):
     lum = 0.3 * r + 0.59 * g + 0.11 * b
     if re.search(r'marble|tile|city|floor|brick|_road|pha_road|wood', n):
         return C['paving'] if lum > 95 else C['cobble']
+    # sehir dosemeleri (Konstantiniyye, Iskenderiye, Semerkant tas meydanlari)
+    if re.search(r'(const|alex|samar|jang|dunh)\w*stone|godgarden_stone', n):
+        return C['cobble'] if 'const' in n else C['paving'] if lum > 95 else C['cobble']
     if flags == 9 or re.search(r'snow|_ice|wreck_ice', n):
         return C['snow']
     if flags in (6, 7) or re.search(r'water|swmp', n):
@@ -57,7 +60,7 @@ def classify(name, flags, color):
         return C['redrock'] if (r > g * 1.22 and r > b * 1.5) else C['rock']
     if flags == 1 or 'sand' in n or 'salt' in n:
         return C['sand']
-    if 'stone' in n:
+    if 'stone' in n and lum < 110:
         return C['gravel']
     if 'fld' in n and g > r * 0.95 and lum < 90:
         return C['farmland']
@@ -84,12 +87,15 @@ def main():
     world = json.load(open(os.path.join(SRC, 'world.json')))
     tiles = json.load(open(os.path.join(SRC, 'textures', 'tiles.json')))
     tclass = np.zeros(1024, np.uint8)
+    tcol = np.zeros((1024, 3), np.float32)
     for k, v in tiles.items():
         tclass[int(k)] = classify(os.path.splitext(v['source'])[0], v['flags'], v['color'])
+        tcol[int(k)] = v['color'][:3]
     W, H = (RX1 - RX0 + 1), (RZ1 - RZ0 + 1)
     hgt = np.full((H * HN, W * HN), np.nan, np.float32)            # [z][x], z guneyden kuzeye
     gnd = np.zeros((H * GN, W * GN), np.uint8)
     wat = np.full((H * 6, W * 6), VOID_H, np.int16)
+    col = np.zeros((H * HN, W * HN, 3), np.uint8)                   # 16 m ortalama zemin rengi (sRGB)
     have = 0
     for r in world['regions']:
         if r.get('isDungeon') or not (RX0 <= r['x'] <= RX1 and RZ0 <= r['z'] <= RZ1):
@@ -103,6 +109,7 @@ def main():
         ix, iz = r['x'] - RX0, r['z'] - RZ0
         # 16 m: 8x8 hucre ortalamasi; 8 m: 4x4 hucre cogunluk sinifi
         hgt[iz * HN:(iz + 1) * HN, ix * HN:(ix + 1) * HN] = hm[:96, :96].reshape(HN, 8, HN, 8).mean(axis=(1, 3))
+        col[iz * HN:(iz + 1) * HN, ix * HN:(ix + 1) * HN] = np.clip(tcol[t[:96, :96] & 0x3ff].reshape(HN, 8, HN, 8, 3).mean(axis=(1, 3)), 0, 255).astype(np.uint8)
         cls = tclass[t[:96, :96] & 0x3ff]
         oh = np.eye(len(CLASSES), dtype=np.uint8)[cls].reshape(GN, 4, GN, 4, len(CLASSES)).sum(axis=(1, 3))
         gnd[iz * GN:(iz + 1) * GN, ix * GN:(ix + 1) * GN] = oh.argmax(axis=2)
@@ -122,8 +129,8 @@ def main():
     smooth = np.where(m, num / np.maximum(den, 1e-6), np.nan)
     hq = np.where(m, np.clip(np.round(smooth * 10), -32000, 32000), VOID_H).astype(np.int16)
     os.makedirs(OUT, exist_ok=True)
-    for name, arr in (('heights', hq), ('ground', gnd), ('water', wat)):
-        open(os.path.join(OUT, f'{name}.dat'), 'wb').write(gzip.compress(arr.tobytes(), 9))
+    for name, arr in (('heights', hq), ('ground', gnd), ('water', wat), ('color', col)):
+        open(os.path.join(OUT, f'{name}.dat'), 'wb').write(gzip.compress(arr.tobytes(), 9, mtime=0))
     meta = {
         'format': 'silkroad-v5-blueprint', 'version': 1,
         'note': 'Orijinal haritanin kaba ozeti (tools/gen/blueprint.py). Satir-major [z][x], z guneyden kuzeye.',
@@ -131,9 +138,10 @@ def main():
         'heights': {'file': 'heights.dat', 'res': H_RES, 'w': W * HN, 'h': H * HN, 'type': 'int16', 'unit': 'dm', 'void': VOID_H},
         'ground': {'file': 'ground.dat', 'res': G_RES, 'w': W * GN, 'h': H * GN, 'type': 'uint8', 'classes': CLASSES},
         'water': {'file': 'water.dat', 'res': 32, 'w': W * 6, 'h': H * 6, 'type': 'int16', 'unit': 'dm', 'none': VOID_H},
+        'color': {'file': 'color.dat', 'res': H_RES, 'w': W * HN, 'h': H * HN, 'type': 'uint8x3', 'note': 'zemin ortalama rengi'},
     }
     json.dump(meta, open(os.path.join(OUT, 'blueprint.json'), 'w'), indent=1)
-    for name in ('heights', 'ground', 'water'):
+    for name in ('heights', 'ground', 'water', 'color'):
         print(name, os.path.getsize(os.path.join(OUT, f'{name}.dat')) // 1024, 'KB')
     if '--preview' in sys.argv:
         preview(hq, gnd, wat)

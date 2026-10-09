@@ -189,10 +189,20 @@ export class World {
       t.generateMipmaps = true;
       t.anisotropy = 4;
       t.needsUpdate = true;
+      const cm = this.data.region(key).corrmap;
+      if (cm) {
+        // renk duzeltme haritasi (dogrusal, /2.5): yakin zemin dokusunu orijinal palete yaklastirir
+        const c = new THREE.DataTexture(cm, 128, 128, THREE.RGBAFormat);
+        c.wrapS = c.wrapT = THREE.ClampToEdgeWrapping;
+        c.magFilter = THREE.LinearFilter;
+        c.minFilter = THREE.LinearFilter;
+        c.needsUpdate = true;
+        t.userData.corr = c;
+      }
       p = Promise.resolve(t);
       this.colormapCache.set(key, p);
       if (this.colormapCache.size > 200) {
-        for (const [k, v] of this.colormapCache) { if (!this.regions.has(k)) { v.then((tx) => tx.dispose()); this.colormapCache.delete(k); if (this.colormapCache.size <= 150) break; } }
+        for (const [k, v] of this.colormapCache) { if (!this.regions.has(k)) { v.then((tx) => { tx.dispose(); if (tx.userData.corr) tx.userData.corr.dispose(); }); this.colormapCache.delete(k); if (this.colormapCache.size <= 150) break; } }
       }
     }
     return p;

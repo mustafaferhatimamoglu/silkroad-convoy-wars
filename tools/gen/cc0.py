@@ -25,7 +25,7 @@ SIZE = 1024
 # anahtar -> (kaynak, renk tonu (r,g,b) ya da None, ton gucu)
 MAP = {
     # zemin
-    'terrain/sand': ('Ground096B', None, 0),
+    'terrain/sand': ('Ground079S', None, 0),
     'terrain/dirt': ('Ground109', None, 0),
     'terrain/gravel': ('Gravel040', None, 0),
     'terrain/grass': ('Grass004', None, 0),
@@ -34,10 +34,12 @@ MAP = {
     'terrain/redrock': ('Rock029', None, 0),
     'terrain/snow': ('Snow010A', None, 0),
     'terrain/mud': ('Ground036', None, 0),
-    'terrain/cobble': ('PavingStones141', None, 0),
+    'terrain/cobble': ('PavingStones151', None, 0),
     'terrain/paving': ('PavingStones128', None, 0),
     'terrain/farmland': ('Ground037', None, 0),
     'terrain/road': ('Ground102', None, 0),
+    'terrain/slab': ('PavingStones111', None, 0),          # Cin avlulari: kare tas levha
+    'terrain/slab_dark': ('PavingStones112', None, 0),
     # yapi
     'build/plaster_white': ('Plaster003', (226, 222, 210), 0.7),
     'build/plaster_adobe': ('Plaster003', (206, 168, 122), 0.85),
@@ -60,7 +62,8 @@ MAP = {
 LEAVES = {'build/leaf_broad': 'LeafSet024', 'build/leaf_pine': 'LeafSet019'}
 # zemin karolari: id sirasi eski terrain.json ile ayni (GenData adla esler), yuzey bayragi, olcek ussu
 TERRAIN = [('sand', 1, 1), ('dirt', 0, 1), ('gravel', 0, 1), ('grass', 10, 1), ('steppe', 10, 1), ('rock', 3, 2), ('redrock', 3, 2),
-           ('snow', 9, 1), ('mud', 6, 1), ('cobble', 100, 1), ('paving', 100, 1), ('farmland', 0, 1), ('road', 0, 1)]
+           ('snow', 9, 1), ('mud', 6, 1), ('cobble', 100, 1), ('paving', 100, 1), ('farmland', 0, 1), ('road', 0, 1),
+           ('slab', 100, 1), ('slab_dark', 100, 1)]
 
 
 def read(z, suffix):
@@ -208,6 +211,9 @@ def main():
         os.makedirs(os.path.join(TEX, 'sky'), exist_ok=True)
         shutil.copy(h, os.path.join(TEX, 'sky', 'sky_2k.hdr'))
     print('tamam:', len(pbr), 'normalli anahtar')
+    # prosedurel dokular (kafes kapi, konsol bandi, kemerli pencere) pbr/avg'ye eklenir
+    import runpy
+    runpy.run_path(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'proctex.py'), run_name='__main__')
 
 
 if __name__ == '__main__':

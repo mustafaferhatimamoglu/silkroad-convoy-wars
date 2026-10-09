@@ -30,7 +30,7 @@ export class BlueprintPlan {
     if (node) { meta = node.meta; raw = node.files; }
     else {
       meta = await (await fetch(`${base}world/blueprint.json`)).json();
-      const names = ['heights', 'ground', 'water', 'objects', 'massing'];
+      const names = ['heights', 'ground', 'water', 'objects', 'massing', 'vegclusters', 'color'];
       const bufs = await Promise.all(names.map((n) => fetchGz(`${base}world/${n}.dat`)));
       raw = Object.fromEntries(names.map((n, i) => [n, bufs[i]]));
     }
@@ -69,12 +69,16 @@ export class BlueprintPlan {
         this.regionHas[(rz - this.rz0) * (this.rx1 - this.rx0 + 1) + (rx - this.rx0)] = near ? 1 : 0;
       }
     }
+    // orijinal zeminin 16 m ortalama rengi (sRGB, bos hucre 0)
+    this.color = raw.color && M.color ? new Uint8Array(raw.color.buffer, raw.color.byteOffset, M.color.w * M.color.h * 3) : null;
     // nesneler
     const obj = JSON.parse(new TextDecoder().decode(raw.objects));
     this.objKinds = obj.kinds;
     this.objModels = obj.models;
     this.objRegions = obj.regions;
     this.massing = raw.massing ? JSON.parse(new TextDecoder().decode(raw.massing)) : {};
+    // bitki kumeleri: model -> [[x, z, boy, tac yaricapi]] (model yerel; tools/gen/vegclusters.mjs)
+    this.veg = raw.vegclusters ? JSON.parse(new TextDecoder().decode(raw.vegclusters)) : {};
     // ozellikler (feribot, kapi, tunel...) sonradan baglanir
     this.cities = []; this.portals = []; this.ferries = []; this.airships = []; this.tunnels = []; this.pads = []; this.roads = [];
   }
@@ -131,6 +135,16 @@ export class BlueprintPlan {
     const cr = (p0, p1, p2, p3, t) => p1 + 0.5 * t * (p2 - p0 + t * (2 * p0 - 5 * p1 + 4 * p2 - p3 + t * (3 * (p1 - p2) + p3 - p0)));
     const row = (z) => cr(at(ix - 1, z), at(ix, z), at(ix + 1, z), at(ix + 2, z), tx);
     return cr(row(iz - 1), row(iz), row(iz + 1), row(iz + 2), tz);
+  }
+
+  /** Orijinal 16 m hucre rengi [r,g,b] (sRGB) ya da null (bos/alan disi). cx, cz: kuresel hucre. */
+  colorCell(cx, cz) {
+    if (!this.color) return null;
+    const x = cx - this.rx0 * 12, z = cz - this.rz0 * 12;
+    if (x < 0 || z < 0 || x >= this.hw || z >= this.hh) return null;
+    const k = (z * this.hw + x) * 3, C = this.color;
+    if (C[k] + C[k + 1] + C[k + 2] === 0) return null;
+    return [C[k], C[k + 1], C[k + 2]];
   }
 
   voidAt(X, Z) {

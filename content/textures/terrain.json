@@ -6,9 +6,9 @@
   "surface": 1,
   "scale": 1,
   "color": [
-   220,
-   200,
-   172
+   166,
+   140,
+   105
   ]
  },
  {
@@ -114,9 +114,9 @@
   "surface": 100,
   "scale": 1,
   "color": [
-   131,
-   110,
-   78
+   105,
+   98,
+   88
   ]
  },
  {
@@ -153,6 +153,30 @@
    134,
    113,
    70
+  ]
+ },
+ {
+  "id": 13,
+  "name": "slab",
+  "file": "terrain/slab.jpg",
+  "surface": 100,
+  "scale": 1,
+  "color": [
+   115,
+   117,
+   118
+  ]
+ },
+ {
+  "id": 14,
+  "name": "slab_dark",
+  "file": "terrain/slab_dark.jpg",
+  "surface": 100,
+  "scale": 1,
+  "color": [
+   116,
+   117,
+   112
   ]
  }
 ]

@@ -1,7 +1,7 @@
 import { BlueprintPlan, REGION_M } from './blueprint.js';
 import { CITIES } from './features.js';
 import { Simplex, smoothstep } from './noise.js';
-import { placeRegionObjects } from './place.js';
+import { placeRegionObjects, clampUnderStructures } from './place.js';
 import { setMassing } from './models.js';
 import { setPbr, nrUrl } from './build.js';
 import { tracksNear, trackDist, TRACK } from './tracks.js';
@@ -116,6 +116,9 @@ export class GenWorldData {
         if (s.h > maxH) maxH = s.h;
       }
     }
+    clampUnderStructures(plan, rx, rz, heights);
+    minH = Infinity; maxH = -Infinity;
+    for (let k = 0; k < heights.length; k++) { const h = heights[k] * 0.1; if (h < minH) minH = h; if (h > maxH) maxH = h; }
     // su: 6x6 blok (32 m), blok merkezindeki seviye; bloktaki bir kose altta kaliyorsa su var
     const waterType = new Uint8Array(36).fill(255);
     const waterHeight = new Float32Array(36);
@@ -139,13 +142,17 @@ export class GenWorldData {
     const W = {
       sand: word('sand'), dirt: word('dirt'), gravel: word('gravel'), grass: word('grass'), steppe: word('steppe'),
       rock: word('rock'), redrock: word('redrock'), snow: word('snow'), mud: word('mud'), cobble: word('cobble'),
-      paving: word('paving'), farmland: word('farmland'), road: word('road'),
+      paving: word('paving'), farmland: word('farmland'), road: word('road'), slab: word('slab'), slabDark: word('slab_dark'),
     };
     const texture = new Uint16Array(VERTS * VERTS);
     const H = (i, j) => heights[Math.min(CELLS, Math.max(0, i)) * VERTS + Math.min(CELLS, Math.max(0, j))] * 0.1;
     const n = this.n;
     const track = tracksNear(rx, rz, 'path');      // ralli parkuru: toprak serit
     const CW = plan.classes.map((c) => W[c === 'forest' ? 'grass' : c === 'void' ? 'rock' : c] ?? W.dirt);
+    // Cin sehirlerinde avlu/yol dosemesi kare tas levha
+    let near = null, nd = Infinity;
+    for (const c of plan.cities) { const dd = Math.hypot(x0 + 96 - c.x, z0 + 96 - c.z); if (dd < nd) { nd = dd; near = c; } }
+    const slabs = near && near.culture === 'china' && nd < 2200;
     const sandy = plan.cls.sand, rockC = plan.cls.rock, redC = plan.cls.redrock, pave = plan.cls.paving, cob = plan.cls.cobble, snowC = plan.cls.snow;
     for (let i = 0; i < VERTS; i++) {
       for (let j = 0; j < VERTS; j++) {
@@ -157,7 +164,7 @@ export class GenWorldData {
         const c = plan.groundAt(x, z, 3.5);
         let w = CW[c];
         if (heights[k] < wl[k] - 2) w = c === sandy ? W.sand : W.mud;
-        else if (c === pave || c === cob) w = CW[c];
+        else if (c === pave || c === cob) w = slabs ? (c === pave ? W.slab : W.slabDark) : CW[c];
         else if (track.length && trackDist(x, z, track) < TRACK.paint + jit * 0.9) w = c === sandy ? W.gravel : W.dirt;
         else if (slope > 0.78 - jit * 0.12 && c !== snowC) w = c === redC || c === sandy ? W.redrock : W.rock;
         else if (slope > 0.5 - jit * 0.1 && (c === rockC || c === redC)) w = CW[c];
@@ -165,21 +172,57 @@ export class GenWorldData {
         texture[k] = w;
       }
     }
-    // renk haritasi (uzak gorunus): 128x128, katman ortalama rengi x egim golgesi
+    // renk duzeltmesi: orijinal zeminin 16 m ortalama rengi / bizim karolarin ayni hucredeki
+    // ortalamasi (dogrusal). Yerel karo farklari (cimen/yol) korunur, genel palet orijinale yaklasir.
+    const lin = (c) => Math.pow(c / 255, 2.2), srgb = (v) => Math.pow(Math.min(1, Math.max(0, v)), 1 / 2.2) * 255;
+    const tileLin = (w) => { const t = this.tiles[w & 0x3ff]; return t ? t.color.map(lin) : [0.2, 0.2, 0.2]; };
+    const classLin = plan.classes.map((c, i) => tileLin(slabs && i === pave ? W.slab : slabs && i === cob ? W.slabDark : CW[i]));
+    const gx0 = Math.floor((x0 - plan.X0) / 16), gz0 = Math.floor((z0 - plan.Z0) / 16);
+    const cell = new Map();
+    const corrCell = (cx, cz) => {
+      const key = cx * 4096 + cz;
+      let r = cell.get(key);
+      if (r) return r;
+      const o = plan.colorCell(cx + plan.rx0 * 12, cz + plan.rz0 * 12);
+      if (!o) r = [1, 1, 1];
+      else {
+        const s3 = [0, 0, 0];
+        for (let a = 0; a < 2; a++) for (let b = 0; b < 2; b++) {
+          const ggx = Math.min(plan.gw - 1, Math.max(0, cx * 2 + b)), ggz = Math.min(plan.gh - 1, Math.max(0, cz * 2 + a));
+          const L = classLin[plan.ground[ggz * plan.gw + ggx]];
+          s3[0] += L[0] / 4; s3[1] += L[1] / 4; s3[2] += L[2] / 4;
+        }
+        r = o.map((c, i) => Math.min(2.5, Math.max(0.35, lin(c) / Math.max(0.004, s3[i]))));
+      }
+      cell.set(key, r);
+      return r;
+    };
+    const corrAt = (lx, lz, out) => {
+      const fx = lx / 16 - 0.5, fz = lz / 16 - 0.5;
+      const ix = Math.floor(fx), iz = Math.floor(fz), tx = fx - ix, tz = fz - iz;
+      const a = corrCell(gx0 + ix, gz0 + iz), b = corrCell(gx0 + ix + 1, gz0 + iz), c = corrCell(gx0 + ix, gz0 + iz + 1), e = corrCell(gx0 + ix + 1, gz0 + iz + 1);
+      for (let q = 0; q < 3; q++) out[q] = (a[q] * (1 - tx) + b[q] * tx) * (1 - tz) + (c[q] * (1 - tx) + e[q] * tx) * tz;
+      return out;
+    };
+    // renk haritasi (uzak gorunus): 128x128, duzeltilmis karo rengi x egim golgesi; corrmap: duzeltme / 2.5
     const colormap = new Uint8Array(128 * 128 * 4);
+    const corrmap = new Uint8Array(128 * 128 * 4);
+    const cr = [1, 1, 1];
     for (let v = 0; v < 128; v++) {
       for (let u = 0; u < 128; u++) {
         const i = Math.min(CELLS, Math.round((v * CELLS) / 127)), j = Math.min(CELLS, Math.round((u * CELLS) / 127));
-        const t = this.tiles[texture[i * VERTS + j] & 0x3ff];
         const gx = (H(i, j + 1) - H(i, j - 1)) / 4, gz = (H(i + 1, j) - H(i - 1, j)) / 4;
         const shade = Math.max(0.55, Math.min(1.25, 1 - gx * 0.55 + gz * 0.45));
         const o = (v * 128 + u) * 4;
-        let c = t.color;
+        corrAt((u * 192) / 127, (v * 192) / 127, cr);
+        corrmap[o] = Math.round((cr[0] / 2.5) * 255); corrmap[o + 1] = Math.round((cr[1] / 2.5) * 255); corrmap[o + 2] = Math.round((cr[2] / 2.5) * 255); corrmap[o + 3] = 255;
+        let c;
         if (heights[i * VERTS + j] < wl[i * VERTS + j]) c = [38, 84, 104];
+        else { const L = tileLin(texture[i * VERTS + j]); c = [srgb(L[0] * cr[0]), srgb(L[1] * cr[1]), srgb(L[2] * cr[2])]; }
         colormap[o] = Math.min(255, c[0] * shade); colormap[o + 1] = Math.min(255, c[1] * shade); colormap[o + 2] = Math.min(255, c[2] * shade); colormap[o + 3] = 255;
       }
     }
-    return { heights, texture, waterType, waterHeight, colormap, roads, holes, minH, maxH, objects: null };
+    return { heights, texture, waterType, waterHeight, colormap, corrmap, roads, holes, minH, maxH, objects: null };
   }
 
   /** Mini harita karosu (tarayicida): bolgenin renk haritasi, kuzey yukarida. */

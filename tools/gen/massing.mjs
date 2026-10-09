@@ -54,6 +54,8 @@ function loadGeom(mid) {
   for (const m of d.meshes || []) {
     const gp = path.join(MODELS, 'geometry', path.basename(m.geom));
     if (!fs.existsSync(gp)) continue;
+    // ince ortu/sancak/tente (iki yuzlu yaprak yuzeyler): kati siluete girmez
+    if (/bigroof|2sid|_flag|banner|curtain|cloth|awning|canopy/i.test(path.basename(m.geom) + ' ' + (m.texture || ''))) continue;
     let g;
     try { g = JSON.parse(fs.readFileSync(gp, 'utf8')); } catch { continue; }   // bozuk dosya
     const P = g.data.attributes.position.array;
@@ -77,6 +79,7 @@ function loadGeom(mid) {
  * yuzeyin doku koordinatindan okunur: ust yuz rengi en yuksek ornegin rengi, yan yuz rengi dikey
  * orneklerin ortalamasi, turu dikey orneklerde cogunluk.
  */
+const CLOTH = TEX.classes.indexOf('cloth'), WATER = TEX.classes.indexOf('water');
 function rasterize(tris, bb, res) {
   const [x0, , z0, x1, , z1] = bb;
   const nx = Math.max(1, Math.ceil((x1 - x0) / res)), nz = Math.max(1, Math.ceil((z1 - z0) / res));
@@ -96,6 +99,7 @@ function rasterize(tris, bb, res) {
   };
   for (const t of tris) {
     if (t[9]) continue;                       // saydam dokulu (yaprak, oymali kafes): siluete girmez
+    if (t[10].cls === CLOTH || t[10].cls === WATER) continue;   // sancak/tente/su yuzeyi: ince, siluete girmez
     const [ax, ay, az, bx, by, bz, cx, cy, cz] = t;
     cur = t[10];
     const uv = cur.uv || [0, 0, 0, 0, 0, 0];

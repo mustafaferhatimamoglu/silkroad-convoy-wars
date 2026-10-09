@@ -112,7 +112,7 @@ export class TerrainMaterials {
     // katman basina ortalama parlaklik (yukseklik karisimini dokudan bagimsiz yapar), vec4 paketli
     this.cap4 = Math.ceil(pool.capacity / 4);
     this.layerLum = new Float32Array(this.cap4 * 4).fill(0.5);
-    this.opts = Object.assign({ farStart: 140, farEnd: 320, sharpness: 0.75, blendDepth: 0.18 }, opts);
+    this.opts = Object.assign({ farStart: 140, farEnd: 320, sharpness: 0.75, blendDepth: 0.18, tintK: 0.85 }, opts);
     this.shared = {
       tTiles: { value: pool.texture },
       tTilesN: { value: pool.normalTexture },
@@ -120,10 +120,21 @@ export class TerrainMaterials {
       uFar: { value: new THREE.Vector2(this.opts.farStart, this.opts.farEnd) },
       uSharp: { value: this.opts.sharpness },
       uBlendDepth: { value: this.opts.blendDepth },
+      uTintK: { value: this.opts.tintK },
     };
   }
 
   setLayerLuminance(slot, lum) { this.layerLum[slot] = lum; }
+
+  /** Duzeltme haritasi olmayan bolgeler icin 1.0 (= 102/255 x 2.5). */
+  static unitCorr() {
+    if (!TerrainMaterials._unit) {
+      const t = new THREE.DataTexture(new Uint8Array([102, 102, 102, 255]), 1, 1, THREE.RGBAFormat);
+      t.needsUpdate = true;
+      TerrainMaterials._unit = t;
+    }
+    return TerrainMaterials._unit;
+  }
 
   /** Yakin (tam detay) bolge malzemesi. */
   createNear(indexTex, colormapTex, cellOffset) {
@@ -133,6 +144,7 @@ export class TerrainMaterials {
     const uniforms = {
       tIndex: { value: indexTex },
       tColormap: { value: colormapTex },
+      tCorr: { value: (colormapTex.userData && colormapTex.userData.corr) || TerrainMaterials.unitCorr() },
       uCellOffset: { value: new THREE.Vector2(cellOffset.x, cellOffset.y) },
     };
     mat.userData.uniforms = uniforms;
@@ -150,6 +162,8 @@ uniform highp sampler2DArray tTiles;
 uniform highp sampler2DArray tTilesN;
 uniform sampler2D tIndex;
 uniform sampler2D tColormap;
+uniform sampler2D tCorr;
+uniform float uTintK;
 uniform vec2 uCellOffset;
 uniform vec2 uFar;
 uniform float uSharp;
@@ -232,6 +246,8 @@ vec3 splatTap(vec4 id, vec2 g, vec2 gdx, vec2 gdy, out float h) {
     splat = mix(splat, side / max(sw, 1e-4), steep);
     gNR.xyz = mix(gNR.xyz, vec3(0.5, 0.5, 1.0), steep);
   }
+  // orijinal palete renk duzeltmesi (16 m olcekli, yerel karo farklari korunur)
+  splat *= mix(vec3(1.0), texture(tCorr, vCell / 96.0).rgb * 2.5, uTintK);
   float farT = smoothstep(uFar.x, uFar.y, length(vViewPosition));
   if (farT > 0.0) {
     vec3 cm = texture(tColormap, vCell / 96.0).rgb;

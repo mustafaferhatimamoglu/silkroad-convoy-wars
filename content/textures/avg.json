@@ -1,4 +1,14 @@
 {
+"build/arch_window": [
+133,
+121,
+100
+],
+"gray/build_arch_window": [
+157,
+157,
+157
+],
 "build/bark": [
 125,
 110,
@@ -59,10 +69,30 @@
 157,
 157
 ],
+"build/dougong": [
+73,
+84,
+77
+],
+"gray/build_dougong": [
+148,
+148,
+148
+],
 "build/grass_tuft": [
 68,
 94,
 37
+],
+"build/lattice": [
+152,
+81,
+57
+],
+"gray/build_lattice": [
+155,
+155,
+155
 ],
 "build/leaf_broad": [
 83,
@@ -78,6 +108,11 @@
 50,
 79,
 38
+],
+"build/leaf_willow": [
+86,
+118,
+76
 ],
 "build/marble": [
 222,
@@ -210,9 +245,9 @@
 157
 ],
 "terrain/cobble": [
-131,
-110,
-78
+105,
+98,
+88
 ],
 "gray/terrain_cobble": [
 157,
@@ -310,11 +345,31 @@
 156
 ],
 "terrain/sand": [
-220,
-200,
-172
+166,
+140,
+105
 ],
 "gray/terrain_sand": [
+157,
+157,
+157
+],
+"terrain/slab": [
+115,
+117,
+118
+],
+"gray/terrain_slab": [
+157,
+157,
+157
+],
+"terrain/slab_dark": [
+116,
+117,
+112
+],
+"gray/terrain_slab_dark": [
 157,
 157,
 157

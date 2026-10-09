@@ -47,5 +47,13 @@
   "type": "int16",
   "unit": "dm",
   "none": -32768
+ },
+ "color": {
+  "file": "color.dat",
+  "res": 16,
+  "w": 1812,
+  "h": 1116,
+  "type": "uint8x3",
+  "note": "zemin ortalama rengi"
  }
 }

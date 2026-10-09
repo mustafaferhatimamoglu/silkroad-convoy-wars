@@ -60,6 +60,14 @@ function cards(cx, cy, cz, w, h, n, rnd, tilt = 0) {
   return mergeGeos(geos);
 }
 
+/** Sabit kose rengi (doku carpani). */
+function tone(geo, rgb) {
+  const n = geo.attributes.position.count, c = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) c.set(rgb, i * 3);
+  geo.setAttribute('color', new THREE.BufferAttribute(c, 3));
+  return geo;
+}
+
 function mergeGeos(geos) {
   let vc = 0, ic = 0;
   for (const g of geos) { if (!g.index) mergeIndexed(g); vc += g.attributes.position.count; ic += g.index.count; }
@@ -159,6 +167,60 @@ const TREES = {
       tiers.push(cards(0, y, 0, w * 2, w * 1.25, 3, rnd, 0.15));
     }
     return [part(t.geo, 'build/bark'), part(mergeGeos(tiers), 'build/leaf_pine', { alpha: true, collide: false })];
+  },
+  willow(rnd) {
+    // kisa kalin govde, yukari acilan dallar; dal ucundan sarkan seyrek perde (govde gorunur kalir)
+    const h = 1.9 + rnd() * 0.6;
+    const t = trunk(h, 0.36, 0.24, 0.6, rnd, 7);
+    const [tx, ty, tz] = t.top;
+    const R = 2.8 + rnd() * 0.8;
+    const wood = [t.geo];
+    const crown = [], hang = [];
+    const tips = [];
+    const nb = 5 + Math.floor(rnd() * 2);
+    for (let k = 0; k < nb; k++) {
+      const a = (k / nb) * TAU + rnd() * 0.5, L = 2.6 + rnd() * 1.2, tilt = 0.55 + rnd() * 0.35;
+      const g = new THREE.CylinderGeometry(0.06, 0.17, L, 5, 1, true);
+      g.translate(0, L / 2, 0);
+      placed(g, tx, ty - 0.15, tz, 0, -a, -tilt);
+      wood.push(g);
+      tips.push([tx + Math.cos(a) * Math.sin(tilt) * L, ty - 0.15 + Math.cos(tilt) * L, tz + Math.sin(a) * Math.sin(tilt) * L]);
+    }
+    for (const p of tips) crown.push(cards(p[0], p[1] + 0.2, p[2], R * 0.75, R * 0.45, 2, rnd, 1.0));
+    // perde: her dal ucundan 3-4 kart, ucun cevresinde, asagi sarkar
+    for (const p of tips) {
+      const n = 5 + Math.floor(rnd() * 3);
+      for (let k = 0; k < n; k++) {
+        const a = rnd() * TAU, r = 0.3 + rnd() * 1.3;
+        const top = p[1] + 0.2 + rnd() * 0.3, len = top - (1.4 + rnd() * 1.0), w = 0.7 + rnd() * 0.5;
+        const g = new THREE.PlaneGeometry(w, len);
+        placed(g, p[0] + Math.cos(a) * r, top - len / 2, p[2] + Math.sin(a) * r, 0, Math.PI / 2 - a + (rnd() - 0.5) * 0.8, 0);
+        hang.push(g);
+      }
+    }
+    return [part(tone(mergeGeos(wood), [0.55, 0.47, 0.42]), 'build/bark'), part(mergeGeos([...crown, ...hang]), 'build/leaf_willow', { alpha: true, collide: false })];
+  },
+  dead(rnd) {
+    // yapraksiz kuru agac: govde + yukari acilan catal dallar
+    const h = 2.5 + rnd() * 2.5;
+    const t = trunk(h, 0.26, 0.14, 0.5, rnd, 6);
+    const wood = [t.geo];
+    const [tx, ty, tz] = t.top;
+    const n = 4 + Math.floor(rnd() * 3);
+    for (let k = 0; k < n; k++) {
+      const a = (k / n) * TAU + rnd() * 0.6, L = 1.2 + rnd() * 1.8;
+      const y0 = ty - rnd() * h * 0.45;
+      const g = new THREE.CylinderGeometry(0.03, 0.11, L, 4, 1, true);
+      g.translate(0, L / 2, 0);
+      placed(g, tx, y0, tz, 0, -a, -(0.45 + rnd() * 0.6));
+      wood.push(g);
+      const g2 = new THREE.CylinderGeometry(0.02, 0.05, L * 0.6, 4, 1, true);
+      g2.translate(0, L * 0.3, 0);
+      const bx = tx + Math.cos(a) * Math.sin(0.7) * L * 0.6, by = y0 + Math.cos(0.7) * L * 0.6, bz = tz + Math.sin(a) * Math.sin(0.7) * L * 0.6;
+      placed(g2, bx, by, bz, 0, -a - 0.8, -0.3);
+      wood.push(g2);
+    }
+    return [part(mergeGeos(wood), 'build/bark')];
   },
   bush(rnd) {
     const R = 0.8 + rnd() * 0.9;
@@ -316,7 +378,33 @@ function gate(culture, L = 28, T = 7, H = 13) {
   return parts;
 }
 
-const MASS = { data: null, avg: {} };
+import { massFeatures, archKind, buildingModel, spireModel, wallModel } from './arch.js';
+
+const MASS = { data: null, avg: {}, info: new Map() };
+
+/** Yapinin mimari turu (bir kez hesaplanir): 'rock' | 'pitched' | 'flat' | 'dome' | 'spire' | 'wall' | null. */
+export function archInfo(mi, name, culture) {
+  const key = `${mi}:${culture}`;
+  let r = MASS.info.get(key);
+  if (r !== undefined) return r.kind;
+  const M = MASS.data && MASS.data.models[mi];
+  const f = M ? massFeatures(M, MASS.data.palette) : null;
+  r = { f, kind: f ? archKind(f, String(name).toLowerCase(), culture) : null };
+  MASS.info.set(key, r);
+  return r.kind;
+}
+
+function archModel(mi, culture, kind) {
+  const r = MASS.info.get(`${mi}:${culture}`);
+  const f = r && r.f;
+  let parts = null;
+  if (f) {
+    if (kind === 'spire') parts = spireModel(f, culture, MASS.avg);
+    else if (kind === 'wall') parts = wallModel(f, culture, MASS.avg);
+    else parts = buildingModel(f, culture, kind, MASS.avg);
+  }
+  return parts && parts.length ? parts : massModel(mi, culture);
+}
 /** data: { classes, palette: [[tur, r, g, b]], models: { mi: {...} } }; avg: doku ortalama renkleri. */
 export function setMassing(data, avg = {}) { MASS.data = data; MASS.avg = avg; }
 
@@ -338,6 +426,11 @@ function massTex(cls, culture) {
   }
 }
 const lin = (c) => Math.pow(c / 255, 2.2);
+const STEP_CLS = new Set(['stone', 'paving', 'marble', 'wood', 'brick']);
+function nrmOf(a, b, c) {
+  const ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2], vx = c[0] - a[0], vy = c[1] - a[1], vz = c[2] - a[2];
+  return [uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx];
+}
 
 /**
  * Siluetten yapi (world/massing): model-yerel izgarada her hucre [alt, ust] dolu aralik. Ust
@@ -349,7 +442,10 @@ function massModel(mi, culture) {
   const D = MASS.data, M = D && D.models[mi];
   if (!M) return [];
   const { res, x0, z0, nx, nz } = M;
-  const NONE = -32768, S = 1.25;
+  const rock = culture === 'rock' || culture === 'redrock';
+  const steps = culture.endsWith('+steps');
+  if (steps) culture = culture.slice(0, -6);
+  const NONE = -32768, S = rock ? 3.5 : steps ? 0.08 : 1.25;
   const n = nx * nz;
   const b = new Float32Array(n), t = new Float32Array(n), has = new Uint8Array(n);
   for (let k = 0; k < n; k++) {
@@ -403,15 +499,41 @@ function massModel(mi, culture) {
       const c0 = corner[k * 4], c1 = corner[k * 4 + 1], c2 = corner[k * 4 + 2], c3 = corner[k * 4 + 3];
       // ust yuz
       const tp = pal[M.tm[k]] || [0];
-      const ttex = t[k] < 1.4 && classes[tp[0]] !== 'grass' ? 'gray/terrain_paving' : massTex(classes[tp[0]], culture);
+      const ttex = rock ? `gray/terrain_${culture}` : t[k] < 1.4 && classes[tp[0]] !== 'grass' ? 'gray/terrain_paving' : massTex(classes[tp[0]], culture);
       const tc = tint(M.tm[k], ttex);
       const TB = bucket(ttex);
       const A = [xa, c0, za], Bp = [xb, c1, za], Cp = [xb, c2, zb], Dp = [xa, c3, zb];
-      tri(TB, [Dp, Cp, Bp], tc, [topUV(Dp), topUV(Cp), topUV(Bp)]);
-      tri(TB, [Dp, Bp, A], tc, [topUV(Dp), topUV(Bp), topUV(A)]);
+      // egimli tas/doseme hucresi: rampa yerine basamak (orijinal merdivenler 1 m izgarada rampaya doner)
+      const gx = (c1 + c2 - c0 - c3) / 2, gz = (c2 + c3 - c0 - c1) / 2, tw = Math.abs(c0 + c2 - c1 - c3);
+      const tcls = classes[tp[0]];
+      const g = Math.max(Math.abs(gx), Math.abs(gz));
+      if (!rock && STEP_CLS.has(tcls) && g > 0.3 * res && g < 1.6 * res && tw < 0.25 * g + 0.1 && Math.min(Math.abs(gx), Math.abs(gz)) < g * 0.35) {
+        const ax = Math.abs(gx) >= Math.abs(gz);
+        const lo = ax ? (gx > 0 ? (c0 + c3) / 2 : (c1 + c2) / 2) : (gz > 0 ? (c0 + c1) / 2 : (c2 + c3) / 2);
+        const nS = Math.max(1, Math.round(g / 0.3)), dh = g / nS;
+        // u: egim boyunca 0 (alt kenar) -> res (ust kenar); w: yanal
+        const pt = (u, w, y) => (ax ? [gx > 0 ? xa + u : xb - u, y, za + w] : [xa + w, y, gz > 0 ? za + u : zb - u]);
+        const up = ax ? [-Math.sign(gx), 0, 0] : [0, 0, -Math.sign(gz)];
+        for (let q = 0; q < nS; q++) {
+          const u0 = (q / nS) * res, u1 = ((q + 1) / nS) * res, y0 = lo + q * dh, y1 = y0 + dh;
+          const r0 = pt(u0, 0, y0), r1 = pt(u0, res, y0), r2 = pt(u0, res, y1), r3 = pt(u0, 0, y1);
+          const ru = (pp) => [(pp[0] + pp[2]) / 3, pp[1] / 3];
+          const rc = [tc[0] * 0.72, tc[1] * 0.72, tc[2] * 0.72];
+          const rn = nrmOf(r0, r1, r2);
+          if (rn[0] * up[0] + rn[2] * up[2] >= 0) { tri(TB, [r0, r1, r2], rc, [ru(r0), ru(r1), ru(r2)]); tri(TB, [r0, r2, r3], rc, [ru(r0), ru(r2), ru(r3)]); }
+          else { tri(TB, [r1, r0, r3], rc, [ru(r1), ru(r0), ru(r3)]); tri(TB, [r1, r3, r2], rc, [ru(r1), ru(r3), ru(r2)]); }
+          const t0 = pt(u0, 0, y1), t1 = pt(u1, 0, y1), t2 = pt(u1, res, y1), t3 = pt(u0, res, y1);
+          const tn = nrmOf(t0, t1, t2);
+          if (tn[1] >= 0) { tri(TB, [t0, t1, t2], tc, [topUV(t0), topUV(t1), topUV(t2)]); tri(TB, [t0, t2, t3], tc, [topUV(t0), topUV(t2), topUV(t3)]); }
+          else { tri(TB, [t1, t0, t3], tc, [topUV(t1), topUV(t0), topUV(t3)]); tri(TB, [t1, t3, t2], tc, [topUV(t1), topUV(t3), topUV(t2)]); }
+        }
+      } else {
+        tri(TB, [Dp, Cp, Bp], tc, [topUV(Dp), topUV(Cp), topUV(Bp)]);
+        tri(TB, [Dp, Bp, A], tc, [topUV(Dp), topUV(Bp), topUV(A)]);
+      }
       // yan yuzler: komsu bu kenarda daha alcaksa (ya da yoksa) aradaki duvar; kemer altlari
       const sp = pal[M.sm[k]] || [0];
-      const stex = massTex(classes[sp[0]], culture);
+      const stex = rock ? `gray/terrain_${culture}` : massTex(classes[sp[0]], culture);
       const sc = tint(M.sm[k], stex);
       const SB = bucket(stex);
       // [komsu i, j, kenar p0, p1, bizim kose h0, h1, komsunun ayni koseleri s0, s1]
@@ -771,6 +893,7 @@ export function model(key) {
   else if (kind === 'gate') m = gate(a[1], a[2] ? Number(a[2]) : 28, a[3] ? Number(a[3]) : 7, a[4] ? Number(a[4]) : 13);
   else if (kind === 'block') m = blockModel(a[1], Number(a[2]), Number(a[3]), Number(a[4]), rnd);
   else if (kind === 'mass') m = massModel(Number(a[1]), a[2]);
+  else if (kind === 'arch') m = archModel(Number(a[1]), a[2], a[3]);
   else if (kind === 'bridge') m = bridge(a[1], Number(a[2]), Number(a[3]));
   else if (kind === 'tent') m = tent(a[1], Number(a[2]), Number(a[3]), Number(a[4]));
   else if (kind === 'fence') m = fence(Number(a[1]), Number(a[2]));
