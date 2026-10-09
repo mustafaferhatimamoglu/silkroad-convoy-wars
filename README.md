@@ -1,9 +1,10 @@
 # Silkroad: Convoy Wars — V5
 
-İpek Yolu'nda geçen, tarayıcı motoruyla çalışan 3B araç oyunu. V5'te dünya, zemin ve yapı
-dokuları, binalar, bitkiler, müzik ve simge **tamamen bizim ürettiğimiz** içeriktir: Silkroad
-Online'ın dosyalarına bağımlılık yoktur (şehir adları ve kültürler esin kaynağıdır). Bu yüzden
-oyunun tamamı tek bir exe olarak paylaşılabilir. Plan ve aşamalar: [docs/V5_PLAN.md](docs/V5_PLAN.md).
+İpek Yolu'nda geçen, tarayıcı motoruyla çalışan 3B araç oyunu. V5'in haritası orijinal Silkroad
+Online haritasının **kaba bir şablonundan** kurulur (16 m'lik yükseklik, zemin sınıfı ve ortalama
+rengi, su, yapıların konum/yön/silueti, ağaç kümeleri); geometri, dokular (CC0 ve kendi
+ürettiklerimiz), binalar, bitkiler, müzik ve simge bizimdir. Orijinal oyunun hiçbir dosyası pakete
+girmez; bu yüzden oyunun tamamı tek bir exe olarak paylaşılabilir. Plan ve aşamalar: [docs/V5_PLAN.md](docs/V5_PLAN.md).
 
 ## Oynamak
 
@@ -49,18 +50,31 @@ Xbox uyumlu kumanda desteklenir (RT gaz, LT fren, sol çubuk direksiyon, A el fr
 
 ## Dünya
 
-80 × 40 bölgelik (≈15 × 7,7 km) üretilmiş dünya: doğudan batıya Jangan → büyük nehir (feribot) →
-Donwhang → Hotan → sıradağ (açık geçit yolu ve 870 m'lik tünel; kuzeyde Roc Dağı) → Semerkant →
-Konstantiniyye (boğaz, feribot); güneydeki limandan gemiyle İskenderiye. Arazi sabit tohumlu
-gürültü ve elle tasarlanmış özelliklerden (`src/world/gen/plan.js`) üretilir; yollar %9 eğim
-sınırlı, yarma/dolgu şevli. Şehirler kültürüne göre kodla kurulur (sur, kule, açık kapılar,
-evler, meydan yapısı); çarpışma görünen geometriden yapılır.
+Orijinal haritanın 151 × 93 bölgesi (≈29 × 18 km, bölge = 192 m): Jangan, Donwhang, Hotan,
+Semerkant, Konstantiniyye ve İskenderiye orijinal yerlerinde. Şablon `tools/gen/` ile yalnız bu
+bilgisayardaki V4 verisinden çıkarılır ve `content/world/` altına yazılır:
+
+| Dosya | İçerik | Üretici |
+|---|---|---|
+| `heights.dat`, `ground.dat`, `water.dat`, `color.dat` | 16 m yükseklik, 8 m zemin sınıfı, 32 m su seviyesi, 16 m zemin rengi | `python -I tools/gen/blueprint.py` |
+| `objects.dat` | nesne konumları + model sınır kutuları/türleri | `python -I tools/gen/blueprint.py --objects` |
+| `massing.dat` | yapı siluetleri (1-2 m ızgara: üst/alt yükseklik, malzeme, renk) | `node tools/gen/massing.mjs` |
+| `vegclusters.dat` | ağaç modellerindeki gövde konumu/boyu (koru ve sıralar) | `node tools/gen/vegclusters.mjs` |
+
+Oyun bu şablondan araziyi (Catmull-Rom + zemin sınıfına göre ayrıntı gürültüsü), zemini (CC0 PBR
+dokular; renk orijinal 16 m paletine göre düzeltilir), yapıları (siluetten mimari: Çin salonları,
+kubbe, minare, sur; diğerleri pencereli siluet bloklar) ve bitkileri kurar. Haritada olmayan
+alanlar kıyıya bitişikse deniz, değilse dağ olur. Dokular: `python -I tools/gen/cc0.py <indirme
+klasörü>` (ambientCG CC0 malzemeleri; ardından `tools/gen/proctex.py` kafes kapı, konsol bandı,
+pencere ve söğüt dokularını üretir).
 
 - **Işınlanma kapıları**: her şehrin meydanında; içinde yavaşlayıp G → hedef şehir.
-- **Feribotlar**: iskelenin ucunda ya da güvertede yavaşla, G. Araç gemiyle karşıya geçer.
-- **Roc hava gemileri**: Hotan'ın kuzey kapısından çıkan toprak yolun sonundaki istasyonda; rampadan
-  iskeleye çık, G. Gemiyi iki dev Roc kuşu taşır, Roc Dağı'nın zirve platosuna uçar (ve geri).
-- **Tünel**: Hotan–Semerkant arasında, dağın altından; içeride farlar kendiliğinden yanar.
+- **Feribotlar** (orijinal iskele yerlerinde): Sarı Nehir ve Güney Nehir (Jangan batısı), Tarım ve
+  Karakaş (Hotan doğusu), Boğaz (Konstantiniyye – Anadolu) ve İskenderiye Gemisi. İskelenin ucunda
+  ya da güvertede yavaşla, G. Nehirde gemi su üzerinden rota izler; uzun deniz hatlarında açılır,
+  kısa bir kararmayla karşı kıyının açığına geçer.
+- **Roc hava gemileri**: Karakurum istasyonlarından Roc Dağı'na üç hat; rampadan iskeleye çık, G.
+  Gemiyi iki dev Roc kuşu taşır.
 - **Harita**: M (tekerlek yakınlaştırır, sürükleyerek kaydırılır).
 - **Müzik**: bölgeye göre makam/çalgı ile üretilir (Karplus-Strong telli, ney/dizi, davul).
 
@@ -72,12 +86,12 @@ parkurları gibi araziden açılmıştır: parkur boyunca ağaç ve kaya temizle
 
 | Etap | Uzunluk | Kapılar |
 |---|---|---|
-| Jangan Bayırları – Lotus Gölü | 2.2 km | Pirinç Tarlaları, Lotus Gölü, Kuzey Tepesi, Tapınak Sırtı, Jangan Kuzey Bayırı |
-| Donwhang – Kızıl Mesalar | 2.2 km | Taş Düzlüğü, Mesa Geçidi, Kurumuş Dere, Batı Tepeleri, Donwhang Batı Kapısı |
-| Hotan Vahası – Taklamakan | 2.0 km | Vaha Gölü, Kum Tepeleri, Kızıl Kayalar Firketesi, Çöl Düzlüğü, Kervan Kuyusu, Hotan Batı Yolu |
-| Semerkant – Zerefşan Vadisi | 2.7 km | Bağ Evleri, Kuzey Sırtı, Çoban Yaylası, Dağ Eteği, Kervan Yolu Geçidi, Zerefşan Kıyısı |
-| Konstantiniyye – Boğaz Sırtları | 2.5 km | Doğu Bağları, Bağ Yokuşu, Kuzey Ormanı, Boğaz Manzarası, Konstantiniyye Batı Kapısı |
-| İskenderiye – Kum Denizi | 2.3 km | Batı Kumulları, Kum Denizi, Firavun Taşları, Nil Kıyısı, İskenderiye Doğu Kapısı |
+| Jangan Kırları – Göl Tapınağı | 2.8 km | Pirinç Tarlası, Tarla Yolu, Doğu Sırtı, Saray Yolu, Sur Dibi, Göl Kıyısı, Batı Burcu |
+| Donwhang Çölü – Kızıl Platolar | 3.3 km | Kervan Yolu, Batı Geçidi, Kuyu Başı, Sur Altı, Kızıl Kanyon, Dar Boğaz, Vaha Gölü |
+| Hotan Vahası – Lord Yarkan Rallisi | 2.7 km | Vaha Kavşağı, Hurma Düzlüğü, Uzun Viraj, Kuzey Yolu Kavşağı, Kayalık Boğaz, Kum Tepeleri, Çöl Firketesi, Kanyon Kenarı, Lord Yarkan Manzarası |
+| Semerkant Vadisi – Karlı Dağ Eteği | 3.2 km | Doğu Kapısı, Orta Kavşak, Batı Yolu, Taşlı Ova, Dağ Eteği, Güney Yolu, Doğu Geçidi |
+| Konstantiniyye Kıyıları | 2.3 km | Haliç Kıyısı, Gölet Başı, Orman Yolu, Nehir Köprüsü, Kuzey Sırtları, Kuzey Kapısı |
+| İskenderiye Tepeleri – Vaha | 2.8 km | Bağ Evleri, Zeytinlik, Nil Kıyısı, Kuzey Vadisi, Doğu Sırtı, Doğu Kıyısı, Çöl Tepeleri, Güney Burnu |
 
 Sıradaki kapı ışık sütunuyla, ondan sonraki sönük direklerle görünür; mini haritada rota
 çizilidir. Üst paneldeki **pilot notları** yaklaşan virajın yönünü ve şiddetini (1 en keskin … 6
@@ -139,7 +153,7 @@ rz kuzey). Tarama dünyayı bitki örtüsü olmadan kurar (`?noveg=1`); planlana
 kayalar oyunda temizlenir (`src/world/gen/tracks.js`). İsteğe bağlı `avoid`
 (`[rx, rz, yarıçap m, not]`) rotanın ve hızlı çizginin girmeyeceği alanları işaretler (yarış denemesinde
 takla çıkan kaya eteği, yan eğim gibi). Pilot notları kısa ve sert basamakları `vmax` güvenli hızıyla
-işaretler; botlar oraya o hızla varır. Her etap 8 botla baştan sona yarıştırılarak denendi. Yerel harita (tasarım için): `node tools/gen/localmap.mjs çıktı.rgb rx0 rx1 rz0 rz1`.
+işaretler; botlar oraya o hızla varır. Her etap 8 botla baştan sona yarıştırılarak denendi.
 
 ## Yapı
 
@@ -149,7 +163,7 @@ server/server.py      çok oyunculu sunucu (oda sistemi, sürüm denetimi, tüne
 src/
   core/               uygulama, renderer, girişler, ayarlar, fare kilidi
   world/              bölge akışı, zemin, objeler, su, gökyüzü, çarpışma, ulaşım (feribot, hava gemisi, kapılar)
-  world/gen/          dünya üretimi: plan (arazi, yollar, tünel), şehir düzeni, modeller, yerleşim, parkurlar
+  world/gen/          dünya üretimi: şablon (blueprint), mimari (arch), modeller, yerleşim, ulaşım (docks), parkurlar
   vehicle/            araç fiziği (physics/), modeller, kamera, ses
   audio/              üretken müzik
   modes/              sürüş, garaj, dünya gezgini, ralli, yarış
@@ -157,7 +171,7 @@ src/
   net/                sunucu bağlantısı, lobi, uzak araçlar, serbest gezinti varlığı
   ui/                 göstergeler, menüler, büyük harita, stiller
   data/               şehirler, ralli etapları (üretilmiş)
-content/              kendi ürettiğimiz dokular ve simge (tools/gen/textures.py, tools/gen/icon.py)
+content/              harita şablonu (world/), CC0 + kendi dokularımız (textures/), simge
 tools/                dünya/doku/simge üreticileri, ralli araçları, istemci paketleyici, sürüm aracı
 tests/                node --test ile çalışan fizik ve sürüm testleri
 vendor/               three.js r186, three-mesh-bvh

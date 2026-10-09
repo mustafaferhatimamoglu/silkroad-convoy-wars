@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { REGION_M } from './blueprint.js';
-import { TUNNEL } from './plan.js';
+export const TUNNEL = { halfW: 6, wallH: 4.6, roofH: 7.6, mouth: 6 };   // tunel kesiti (m)
 import { boxUV } from './models.js';
 
 // Tunel: yol cizgisi boyunca ic kesit (tasli zemin, duz duvar, kemer tavan) + iki agizda tas

@@ -443,9 +443,9 @@ function massModel(mi, culture) {
   if (!M) return [];
   const { res, x0, z0, nx, nz } = M;
   const rock = culture === 'rock' || culture === 'redrock';
-  const steps = culture.endsWith('+steps');
-  if (steps) culture = culture.slice(0, -6);
-  const NONE = -32768, S = rock ? 3.5 : steps ? 0.08 : 1.25;
+  const steps = culture.endsWith('+steps'), soft = culture.endsWith('+soft');
+  if (steps || soft) culture = culture.slice(0, -5 - (steps ? 1 : 0));
+  const NONE = -32768, S = rock || soft ? 3.5 : steps ? 0.08 : 1.25;
   const n = nx * nz;
   const b = new Float32Array(n), t = new Float32Array(n), has = new Uint8Array(n);
   for (let k = 0; k < n; k++) {
@@ -508,7 +508,7 @@ function massModel(mi, culture) {
   const WIN = { pos: [], col: [], uv: [] };
   const WALLCLS = new Set(['plaster', 'stone', 'brick', 'marble', 'wood']);
   const addWin = (p0, p1, lo, hi, out, idx) => {
-    if (rock || steps || idx % (res > 1 ? 2 : 3) !== 1) return;
+    if (rock || steps || soft || idx % (res > 1 ? 2 : 3) !== 1) return;
     const base = Math.max(lo, 0), top = hi;
     if (top - base < 3.2) return;
     const mx = (p0[0] + p1[0]) / 2 + out[0] * 0.05, mz = (p0[1] + p1[1]) / 2 + out[1] * 0.05;

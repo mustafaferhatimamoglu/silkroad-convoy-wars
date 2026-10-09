@@ -257,7 +257,7 @@ vec3 splatTap(vec4 id, vec2 g, vec2 gdx, vec2 gdy, out float h) {
   diffuseColor.rgb *= splat;
 }
 `)
-        .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = clamp(gNR.a, 0.3, 1.0);')
+        .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = clamp(gNR.a, 0.62, 1.0);')
         .replace('#include <normal_fragment_maps>', `
 {
   // dunya eksenine hizali teget cerceve (u = dogu, v = kuzey), gorus uzayinda

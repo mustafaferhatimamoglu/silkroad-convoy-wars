@@ -66,9 +66,9 @@ def classify(name, flags, color):
         return C['farmland']
     if lum > 125 and r > b * 1.25:
         return C['sand']
-    if r > g * 1.3 and r > b * 1.7:
+    if r > g * 1.3 and r > b * 1.7 and re.search(r'canyon|petra_stone|cliff', n):
         return C['redrock']
-    return C['dirt']
+    return C['dirt']                                             # kizil tozlu tarla/toprak da toprak
 
 
 def read_region(key):

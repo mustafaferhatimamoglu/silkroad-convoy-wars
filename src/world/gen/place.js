@@ -33,6 +33,7 @@ function refine(kind, name, w, d, h) {
 
 // agac modellerimizin olcek 1'deki yaklasik boyu (m)
 const TREE_H = { palm: 9.5, pine: 12, cypress: 10, broad: 8, willow: 5.6, dead: 5 };
+const BUILDING = new Set(['house', 'wall', 'tower', 'gate', 'bridge', 'stair']);
 const VEG = new Set(['grass', 'bush', 'tree', 'palm', 'pine', 'willow', 'bamboo', 'rock']);
 
 export function placeRegionObjects(data, rx, rz, d) {
@@ -62,8 +63,10 @@ export function placeRegionObjects(data, rx, rz, d) {
     if (!VEG.has(kind) && plan.massing.models && plan.massing.models[mi]) {
       const ox0 = X - x0, oz0 = Z - z0;
       if (ox0 < -60 || ox0 > REGION_M + 60 || oz0 < -60 || oz0 > REGION_M + 60) continue;
-      const ak = archInfo(mi, m[8], culture);
-      const key = ak === 'rock' ? `mass:${mi}:${culture === 'desert' || culture === 'egypt' || culture === 'persian' ? 'redrock' : 'rock'}`
+      // kucuk esya/ciftlik nesnesi (saman yigini, cit, araba...): yumusak siluet, mimari ve pencere yok
+      const soft = !BUILDING.has(kind) || Math.max(w, dd) < 5 || h < 3;
+      const ak = soft ? (archInfo(mi, m[8], culture) === 'rock' ? 'rock' : null) : archInfo(mi, m[8], culture);
+      const key = soft && ak !== 'rock' ? `mass:${mi}:${culture}+soft` : ak === 'rock' ? `mass:${mi}:${culture === 'desert' || culture === 'egypt' || culture === 'persian' ? 'redrock' : 'rock'}`
         : ak === 'steps' ? `mass:${mi}:${culture}+steps` : ak ? `arch:${mi}:${culture}:${ak}` : `mass:${mi}:${culture}`;
       out.push({ m: key, x: ox0, y: Y, z: -oz0, yaw, s: 1 });
       continue;
@@ -98,6 +101,7 @@ export function placeRegionObjects(data, rx, rz, d) {
           for (const [tx, tz, th] of cl) {
             const px = X + c * tx + s * tz - x0, pz = Z - (-s * tx + c * tz) - z0;
             if (px < -40 || px > REGION_M + 40 || pz < -40 || pz > REGION_M + 40) continue;
+            if (track.length && trackDist(px + x0, pz + z0, track) < TRACK.clear + th * 0.06) continue;   // ralli parkuru acik
             const ty = H(Math.min(Math.max(px, 0), 191.9), Math.min(Math.max(pz, 0), 191.9));
             const vv = Math.floor(hash2(Math.round(px * 7 + X), Math.round(pz * 7 + Z), 37) * 6);
             if (th < 1.6) { out.push({ m: `tuft:${vv % 4}`, x: px, y: ty - 0.05, z: -pz, yaw: yaw + vv, s: Math.max(0.6, th / 0.7) }); continue; }
