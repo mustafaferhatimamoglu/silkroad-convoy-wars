@@ -95,11 +95,11 @@ export class ObjectMaterials {
   diffuseColor.rgb *= texel.rgb;
 }`);
     };
-    this.opaque = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.86, metalness: 0.0 });
+    this.opaque = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.86, metalness: 0.0, vertexColors: true });
     this.opaque.onBeforeCompile = patch(false);
     this.opaque.customProgramCacheKey = () => 'sro-obj-opaque';
 
-    this.alpha = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, metalness: 0.0, side: THREE.DoubleSide });
+    this.alpha = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, metalness: 0.0, side: THREE.DoubleSide, vertexColors: true });
     this.alpha.onBeforeCompile = patch(true);
     this.alpha.customProgramCacheKey = () => 'sro-obj-alpha';
 

@@ -1,11 +1,13 @@
-import { WorldPlan, WORLD, REGION_M } from './plan.js';
-import { Simplex, hash2, smoothstep } from './noise.js';
+import { BlueprintPlan, REGION_M } from './blueprint.js';
+import { CITIES } from './features.js';
+import { Simplex, smoothstep } from './noise.js';
 import { placeRegionObjects } from './place.js';
-import { cityLayout } from './city.js';
+import { setMassing } from './models.js';
 import { tracksNear, trackDist, TRACK } from './tracks.js';
 
 // V5 dunya verisi: motorun bekledigi bolge verilerini (yukseklik, zemin dokusu, su, renk haritasi,
-// objeler) dunya planindan aninda uretir. Eski WorldData (Silkroad dosyalari) ile ayni arayuz.
+// objeler) orijinal haritanin kaba sablonundan (content/world, tools/gen/blueprint.py) ve kendi
+// ayrinti ureticimizden aninda uretir. Koordinatlar orijinal Silkroad bolgeleriyle ayni.
 //  - Bolge: 192 m, 97x97 kose (2 m hucre), yukseklik birimi = 0.1 m (motor uyumu).
 //  - Doku kelimesi: alt 10 bit katman kimligi (content/textures/terrain.json), ust 3 bit olcek ussu.
 
@@ -23,12 +25,17 @@ export class GenWorldData {
     const r = await fetch(this.base + 'textures/terrain.json');
     this.tiles = await r.json();
     this.tileByName = Object.fromEntries(this.tiles.map((t) => [t.name, t]));
-    this.plan = new WorldPlan();
+    this.plan = await BlueprintPlan.load(this.base);
+    let avg = {};
+    try { avg = await (await fetch(this.base + 'textures/avg.json')).json(); } catch { /* renk tonu olmadan */ }
+    setMassing(this.plan.massing, avg);
+    this.plan.cities = CITIES.map((c) => ({ ...c, h: this.plan.templateH(c.x, c.z) }));
     this.n = new Simplex(this.plan.seed + 7);
     this.regions = new Map();
-    for (let rz = 0; rz < WORLD.rz; rz++) {
-      for (let rx = 0; rx < WORLD.rx; rx++) {
-        this.regions.set(this.key(rx, rz), { key: this.key(rx, rz), x: rx, z: rz, objects: true, minH: 0, maxH: 400 });
+    const P = this.plan;
+    for (let rz = P.rz0; rz <= P.rz1; rz++) {
+      for (let rx = P.rx0; rx <= P.rx1; rx++) {
+        if (P.hasRegion(rx, rz)) this.regions.set(this.key(rx, rz), { key: this.key(rx, rz), x: rx, z: rz, objects: true, minH: 0, maxH: 400 });
       }
     }
     return this;
@@ -112,7 +119,7 @@ export class GenWorldData {
     const wl = new Float32Array(VERTS * VERTS).fill(-1e9);
     for (let bz = 0; bz < 6; bz++) {
       for (let bx = 0; bx < 6; bx++) {
-        const lvl = plan.waterLevel(x0 + bx * 32 + 16, z0 + bz * 32 + 16);
+        const lvl = plan.waterLevel(x0 + bx * 32 + 16, z0 + bz * 32 + 16);   // sablon blogu
         if (lvl === null) continue;
         let under = false;
         for (let i = bz * 16; i <= bz * 16 + 16 && !under; i++) for (let j = bx * 16; j <= bx * 16 + 16; j++) if (heights[i * VERTS + j] < lvl * 10) { under = true; break; }
@@ -135,6 +142,8 @@ export class GenWorldData {
     const H = (i, j) => heights[Math.min(CELLS, Math.max(0, i)) * VERTS + Math.min(CELLS, Math.max(0, j))] * 0.1;
     const n = this.n;
     const track = tracksNear(rx, rz, 'path');      // ralli parkuru: toprak serit
+    const CW = plan.classes.map((c) => W[c === 'forest' ? 'grass' : c === 'void' ? 'rock' : c] ?? W.dirt);
+    const sandy = plan.cls.sand, rockC = plan.cls.rock, redC = plan.cls.redrock, pave = plan.cls.paving, cob = plan.cls.cobble, snowC = plan.cls.snow;
     for (let i = 0; i < VERTS; i++) {
       for (let j = 0; j < VERTS; j++) {
         const k = i * VERTS + j, x = x0 + j * 2, z = z0 + i * 2;
@@ -142,43 +151,14 @@ export class GenWorldData {
         const gx = (H(i, j + 1) - H(i, j - 1)) / 4, gz = (H(i + 1, j) - H(i - 1, j)) / 4;
         const slope = Math.sqrt(gx * gx + gz * gz);
         const jit = n.noise(x / 9, z / 9) * 0.5 + n.noise(x / 37, z / 37) * 0.5;   // gecis kenari titresimi
-        let w;
-        const city = plan.cityAt(x, z);
-        if (heights[k] < wl[k] - 2) w = h < 1 ? W.sand : W.mud;
-        else if (roads[k] > 0.45 - jit * 0.08) w = kinds[k] === 1 ? (city ? W.paving : W.cobble) : W.road;
-        else if (city) {
-          // meydan tas doseme, caddeler kaldirim, gerisi sikismis toprak (col sehirlerinde kum)
-          const g = cityLayout(plan, city).ground(x, z);
-          const sandy = city.culture === 'desert' || city.culture === 'egypt';
-          w = g === 'plaza' ? W.paving : g === 'street' ? (sandy ? W.paving : W.cobble) : (sandy && jit > 0.25 ? W.sand : W.dirt);
-        } else if (track.length && trackDist(x, z, track) < TRACK.paint + jit * 0.9) {
-          w = plan.biome(x, z).sand > 0.5 ? W.gravel : W.dirt;
-        } else {
-          const bio = plan.biome(x, z);
-          const snowline = 330 + n.noise(x / 300, z / 300) * 45;
-          if (h > snowline && slope < 0.9) w = W.snow;
-          else if (slope > 0.62 - jit * 0.1) w = bio.mesa > 0.25 || bio.sand > 0.5 ? W.redrock : W.rock;
-          else if (h > 250 + jit * 30) w = slope > 0.4 ? W.rock : W.gravel;
-          else if (slope > 0.38 - jit * 0.08) w = h > 90 || bio.sand < 0.5 ? (jit > 0 ? W.gravel : W.dirt) : W.sand;
-          else if (h < 3.2 && plan.seaDepth(x, z) > -120) w = W.sand;   // plaj
-          else if (wl[k] > -1e8 && heights[k] < wl[k] + 15) w = W.mud;    // su kiyisi
-          else {
-            // biyom agirliklari + gurultu: en yuksek skor
-            const fn = n.noise(x / 140, z / 140);
-            const sc = [
-              [W.sand, bio.sand + jit * 0.25],
-              [W.steppe, bio.steppe + fn * 0.2],
-              [W.grass, bio.grass + bio.forest * 0.3 - fn * 0.15],
-              [W.dirt, 0.18 + (slope > 0.35 ? 0.4 : 0) + n.noise(x / 60, z / 60) * 0.12],
-              [W.redrock, bio.mesa * (slope > 0.5 ? 1.2 : 0.2)],
-            ];
-            // ekin tarlalari: yesil bolgede sehir cevresi
-            if (bio.grass > 0.5 && bio.wet > 0.2 && hash2(Math.floor(x / 60), Math.floor(z / 60), 3) < 0.45) sc.push([W.farmland, 1.2]);
-            let best = sc[0];
-            for (const c of sc) if (c[1] > best[1]) best = c;
-            w = best[0];
-          }
-        }
+        const c = plan.groundAt(x, z, 3.5);
+        let w = CW[c];
+        if (heights[k] < wl[k] - 2) w = c === sandy ? W.sand : W.mud;
+        else if (c === pave || c === cob) w = CW[c];
+        else if (track.length && trackDist(x, z, track) < TRACK.paint + jit * 0.9) w = c === sandy ? W.gravel : W.dirt;
+        else if (slope > 0.78 - jit * 0.12 && c !== snowC) w = c === redC || c === sandy ? W.redrock : W.rock;
+        else if (slope > 0.5 - jit * 0.1 && (c === rockC || c === redC)) w = CW[c];
+        else if (slope > 0.55 - jit * 0.1 && c !== snowC) w = jit > 0 ? W.gravel : W.dirt;
         texture[k] = w;
       }
     }

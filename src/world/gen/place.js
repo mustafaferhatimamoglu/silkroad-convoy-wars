@@ -1,127 +1,149 @@
 import { hash2 } from './noise.js';
-import { REGION_M, AIRPIER } from './plan.js';
-import { cityLayout } from './city.js';
+import { REGION_M } from './blueprint.js';
 import { tunnelItems } from './tunnel.js';
 import { tracksNear, trackDist, TRACK } from './tracks.js';
 
-// Bolge objeleri: bitki ortusu ve kayalar (8 m izgarada tekrarlanabilir dagitim) + bolgeye dusen
-// sehir parcalari. Cikti bolge-yerel Three.js koordinatlarinda: x dogu, z = -kuzey, y metre;
-// yaw Three.js Y donusu; s olcek.
+// Bolge objeleri: orijinal haritanin sablonundaki nesne yerlesimi (tur + konum + yon + sinir
+// kutusu) bizim modellerimize cevrilir: agac boyu, sur uzunlugu/yuksekligi, ev tabani ve kati,
+// kapi acikligi, kopru boyu korunur; geometri ve dokular bizim. Cikti bolge-yerel Three.js
+// koordinatlarinda: x dogu, z = -kuzey, y metre; yaw Three.js Y donusu; s olcek.
 
 const VERTS = 97;
-const CELL = 8;
+const q = (v, step = 0.5) => Math.max(step, Math.round(v / step) * step);
+
+/** Sablon modelinin bizim turumuz; adlardan ince ayar. */
+function refine(kind, name, w, d, h) {
+  const n = name.toLowerCase();
+  if (/smoke|_fx|effect|particle|fire-|_fire|brazier|water_|waterfall|shadow/.test(n)) return 'skip';
+  if (kind === 'house' || kind === 'prop') {
+    if (/petra|canyon|rocky|_rock|cliff|crag/.test(n)) return 'rockmass';
+    if (/tree|palm/.test(n)) return 'tree';
+    if (/flower|plant|weed|grass|pot\d|_pot/.test(n)) return 'grass';
+    if (/bush|hedge/.test(n)) return 'bush';
+    if (/tent|yurt|ger\d/.test(n)) return 'tent';
+    if (/wagon|cart/.test(n)) return 'cart';
+    if (/stall|shop|booth/.test(n) && Math.max(w, d) < 6) return 'stall';
+    if (h < 0.4 || Math.max(w, d) < 0.6) return 'skip';
+    if (Math.max(w, d) < 2.6 || h < 1.6) return 'prop';
+  }
+  return kind;
+}
+
+const VEG = new Set(['grass', 'bush', 'tree', 'palm', 'pine', 'willow', 'bamboo', 'rock']);
 
 export function placeRegionObjects(data, rx, rz, d) {
   const plan = data.plan;
   const x0 = rx * REGION_M, z0 = rz * REGION_M;
   const out = [];
   const H = (lx, lz) => {
-    // bolge yerel metre -> arazi yuksekligi (iki dogrusal)
     const fx = Math.min(Math.max(lx / 2, 0), 95.999), fz = Math.min(Math.max(lz / 2, 0), 95.999);
     const j = Math.floor(fx), i = Math.floor(fz), tx = fx - j, tz = fz - i;
     const h = d.heights;
     const a = h[i * VERTS + j], b = h[i * VERTS + j + 1], c = h[(i + 1) * VERTS + j], e = h[(i + 1) * VERTS + j + 1];
     return ((a * (1 - tx) + b * tx) * (1 - tz) + (c * (1 - tx) + e * tx) * tz) * 0.1;
   };
-  const roadAt = (lx, lz) => {
-    const j = Math.round(lx / 2), i = Math.round(lz / 2);
-    let m = 0;
-    for (let di = -3; di <= 3; di++) for (let dj = -3; dj <= 3; dj++) {
-      const ii = i + di, jj = j + dj;
-      if (ii >= 0 && ii < VERTS && jj >= 0 && jj < VERTS) m = Math.max(m, d.roads[ii * VERTS + jj]);
+  const track = tracksNear(rx, rz, 'all');
+  const noVeg = !!globalThis.__sroNoVeg;
+  const K = plan.objKinds, M = plan.objModels;
+  for (const [mi, X, Z, Y, yaw] of plan.objectsIn(rx, rz)) {
+    const m = M[mi];
+    const culture = m[1] === 'common' || m[1] === 'ruin' ? cityCulture(plan, X, Z) : m[1];
+    const bx0 = m[2], by0 = m[3], bz0 = m[4], bx1 = m[5], by1 = m[6], bz1 = m[7];
+    const w = bx1 - bx0, dd = bz1 - bz0;
+    const h = by1 - Math.max(by0, -2);
+    const kind = refine(K[m[0]], m[8], w, dd, h);
+    if (kind === 'skip') continue;
+    if (VEG.has(kind) && (noVeg || (track.length && trackDist(X, Z, track) < TRACK.clear))) continue;
+    // yapi siluetten: orijinal konum, yon ve yukseklik (model kendi ekseninde)
+    if (!VEG.has(kind) && plan.massing.models && plan.massing.models[mi]) {
+      const ox0 = X - x0, oz0 = Z - z0;
+      if (ox0 < -60 || ox0 > REGION_M + 60 || oz0 < -60 || oz0 > REGION_M + 60) continue;
+      out.push({ m: `mass:${mi}:${culture}`, x: ox0, y: Y, z: -oz0, yaw, s: 1 });
+      continue;
     }
-    return m;
-  };
-  const push = (m, lx, lz, yaw, s = 1, sink = 0.15) => out.push({ m, x: lx, y: H(lx, lz) - sink, z: -lz, yaw, s });
-
-  // ---- sehir parcalari (merkezi bu bolgede olanlar)
-  for (const c of plan.cities) {
-    if (c.x + c.r + 40 < x0 || c.x - c.r - 40 > x0 + REGION_M || c.z + c.r + 40 < z0 || c.z - c.r - 40 > z0 + REGION_M) continue;
-    const L = cityLayout(plan, c);
-    for (const it of L.items) {
-      const lx = it.x - x0, lz = it.z - z0;
-      if (lx < 0 || lx >= REGION_M || lz < 0 || lz >= REGION_M) continue;
-      push(it.m, lx, lz, it.yaw, 1, it.m.startsWith('wall') || it.m.startsWith('gate') || it.m.startsWith('tower') ? 1.0 : 0.4);
+    // sinir kutusu merkezi (model yerel, Three ekseni) -> dunya: x' = c*x + s*z, z' = -s*x + c*z ; plan Z = -z
+    const cx = (bx0 + bx1) / 2, cz = (bz0 + bz1) / 2;
+    const c = Math.cos(yaw), s = Math.sin(yaw);
+    const ox = c * cx + s * cz, oz = -s * cx + c * cz;
+    const lx = X + ox - x0, lz = Z - oz - z0;
+    if (lx < -40 || lx > REGION_M + 40 || lz < -40 || lz > REGION_M + 40) continue;
+    const gy = H(Math.min(Math.max(lx, 0), 191.9), Math.min(Math.max(lz, 0), 191.9));
+    const v = Math.floor(hash2(Math.round(X * 7), Math.round(Z * 7), 31) * 6);
+    const push = (key, ry = yaw, sc = 1, y = gy) => out.push({ m: key, x: lx, y, z: -lz, yaw: ry, s: sc });
+    // uzun kenar yerel x olsun (sur, kapi, kopru, cit)
+    const long = () => (dd > w ? { L: dd, T: w, ry: yaw + Math.PI / 2 } : { L: w, T: dd, ry: yaw });
+    switch (kind) {
+      case 'grass': push(`tuft:${v % 4}`, yaw, Math.min(1.8, Math.max(0.6, h / 0.7)), gy - 0.05); break;
+      case 'bush': push(`bush:${v % 4}`, yaw, Math.min(2.2, Math.max(0.6, h / 1.4)), gy - 0.1); break;
+      case 'palm': push(`palm:${v}`, yaw, Math.min(1.6, Math.max(0.5, h / 9)), gy - 0.15); break;
+      case 'pine': push(`pine:${v}`, yaw, Math.min(1.8, Math.max(0.4, h / 12)), gy - 0.15); break;
+      case 'bamboo': push(`cypress:${v}`, yaw, Math.min(1.4, Math.max(0.4, h / 9)), gy - 0.1); break;
+      case 'willow':
+      case 'tree': {
+        const nm = m[8];
+        const sp = /tropical|palm/.test(nm) ? 'palm' : /kara|pine|fir|snow/.test(nm) ? 'pine' : /cypress|longtree|poplar/.test(nm) ? 'cypress' : 'broad';
+        const base = sp === 'palm' ? 9 : sp === 'pine' ? 12 : sp === 'cypress' ? 9 : 6.5;
+        push(`${sp}:${v}`, yaw, Math.min(2.6, Math.max(0.35, h / base)), gy - 0.15);
+        break;
+      }
+      case 'rock': {
+        const size = q(Math.max(0.4, Math.max(w, dd, h) * 0.5), 0.2);
+        push(`rock:${v % 5}:${size.toFixed(1)}:0.65${culture === 'desert' || culture === 'egypt' ? ':red' : ''}`, yaw, 1, gy - size * 0.25);
+        break;
+      }
+      case 'rockmass': push(`block:rock:${q(w, 1)}:${q(dd, 1)}:${q(h, 1)}`, yaw, 1, gy - 1.5); break;
+      case 'wall': {
+        const { L, T, ry } = long();
+        push(`wall:${culture}:${q(L, 1)}:${q(Math.max(2, h), 1)}:${q(Math.min(Math.max(T, 0.6), 6), 0.5)}`, ry, 1, gy - 0.6);
+        break;
+      }
+      case 'gate': {
+        const { L, T, ry } = long();
+        if (L < 6 || h < 4) { push(`block:${culture}:${q(w, 0.5)}:${q(dd, 0.5)}:${q(h, 0.5)}`, yaw, 1, gy - 0.3); break; }
+        push(`gate:${culture}:${q(L, 1)}:${q(Math.max(3, T), 1)}:${q(h, 1)}`, ry, 1, gy - 0.6);
+        break;
+      }
+      case 'tower': push(`tower:${culture}:${q(Math.max(1.5, Math.min(w, dd) / 2), 0.5)}:${q(Math.max(4, h), 1)}`, yaw, 1, gy - 0.6); break;
+      case 'house': {
+        const floors = Math.max(1, Math.min(6, Math.round((h * 0.72) / 3.2)));
+        push(`house:${culture}:${v}:${q(w, 1)}:${q(dd, 1)}:${floors}`, yaw, 1, gy - 0.4);
+        break;
+      }
+      case 'bridge': {
+        // kopru yuksekligi orijinalden (nehri asar); guverte ust yuzeyi kutunun ust kenarina yakin
+        const { L, T, ry } = long();
+        push(`bridge:${culture}:${q(L, 1)}:${q(Math.max(3, T), 1)}`, ry, 1, Y + by1 - 1.0);
+        break;
+      }
+      case 'ship': push(`block:wood:${q(w, 1)}:${q(dd, 1)}:${q(Math.min(h, 8), 1)}`, yaw, 1, Y + by0); break;
+      case 'tent': push(`tent:${culture}:${q(w, 0.5)}:${q(dd, 0.5)}:${q(h, 0.5)}`, yaw, 1, gy - 0.1); break;
+      case 'fence': {
+        const { L, ry } = long();
+        push(`fence:${q(L, 0.5)}:${q(Math.min(Math.max(h, 0.8), 3), 0.5)}`, ry, 1, gy - 0.1);
+        break;
+      }
+      case 'lamp': push(`lamp:${culture}:${q(Math.min(Math.max(h, 1.5), 8), 0.5)}`, yaw, 1, gy - 0.1); break;
+      case 'flag': push(`flag:${culture}:${q(Math.min(Math.max(h, 3), 14), 1)}`, yaw, 1, gy - 0.1); break;
+      case 'statue': push(`statue:${culture}:${q(Math.max(w, dd), 0.5)}:${q(h, 0.5)}`, yaw, 1, gy - 0.2); break;
+      case 'stall': push(`stall:${culture}:${q(w, 0.5)}:${q(dd, 0.5)}`, yaw, 1, gy - 0.05); break;
+      case 'cart': push(`block:wood:${q(w, 0.5)}:${q(dd, 0.5)}:${q(Math.min(h, 3), 0.5)}`, yaw, 1, gy - 0.05); break;
+      default:
+        push(`block:${kind === 'well' ? 'stone' : 'wood'}:${q(w, 0.5)}:${q(dd, 0.5)}:${q(Math.min(h, 4), 0.5)}`, yaw, 1, gy - 0.1);
     }
   }
 
-  // ---- isinlanma kapilari
+  // isinlanma kapilari ve tunel (sablona baglandikca)
   for (const g of plan.portals) {
     const lx = g.x - x0, lz = g.z - z0;
     if (lx < 0 || lx >= REGION_M || lz < 0 || lz >= REGION_M) continue;
-    push(`portal:${g.culture}`, lx, lz, g.yaw, 1, 0.3);
+    out.push({ m: `portal:${g.culture}`, x: lx, y: H(lx, lz) - 0.3, z: -lz, yaw: g.yaw, s: 1 });
   }
-
-  // ---- feribot iskeleleri (kiyidan iskele ucuna, guverte su seviyesinin 1.2 m ustunde)
-  for (const f of plan.ferries) {
-    for (const dk of [f.a, f.b]) {
-      const lx = dk.sx - x0, lz = dk.sz - z0;
-      if (lx < 0 || lx >= REGION_M || lz < 0 || lz >= REGION_M) continue;
-      const L = Math.round(Math.hypot(dk.ex - dk.sx, dk.ez - dk.sz) + 2);
-      out.push({ m: `pier:${L}`, x: lx, y: dk.wl + 1.2, z: -lz, yaw: Math.atan2(dk.ez - dk.sz, dk.ex - dk.sx), s: 1 });
-    }
-  }
-
-  // ---- hava gemisi iskeleleri (rampali; ust yuzey = gemi guvertesi)
-  for (const A of plan.airships || []) {
-    for (const dk of [A.a, A.b]) {
-      const lx = dk.sx - x0, lz = dk.sz - z0;
-      if (lx < 0 || lx >= REGION_M || lz < 0 || lz >= REGION_M) continue;
-      out.push({ m: `airpier:${AIRPIER.ramp}:${AIRPIER.flat}:${AIRPIER.H}`, x: lx, y: dk.wl + 1.2, z: -lz, yaw: Math.atan2(dk.uz, dk.ux), s: 1 });
-    }
-  }
-
-  // ---- tunel ic kesiti ve agiz cepheleri
   for (const it of tunnelItems(plan, rx, rz)) out.push(it);
-
-  // ---- bitki ortusu ve kayalar (ralli parkuru boyunca temiz; etap taramasinda hic yok: ?noveg=1)
-  if (globalThis.__sroNoVeg) return out;
-  const track = tracksNear(rx, rz, 'all');
-  const n = REGION_M / CELL;
-  for (let ci = 0; ci < n; ci++) {
-    for (let cj = 0; cj < n; cj++) {
-      const gx = rx * n + cj, gz = rz * n + ci;
-      const r1 = hash2(gx, gz, 11), r2 = hash2(gx, gz, 12), r3 = hash2(gx, gz, 13), r4 = hash2(gx, gz, 14);
-      const lx = cj * CELL + r1 * CELL, lz = ci * CELL + r2 * CELL;
-      const X = x0 + lx, Z = z0 + lz;
-      // sehir ici ve cevresi (sur disi 25 m) bos
-      let inCity = false;
-      for (const c of plan.cities) if (Math.hypot(X - c.x, Z - c.z) < c.r + 25) { inCity = true; break; }
-      if (inCity) continue;
-      const h = H(lx, lz);
-      const wl = plan.waterLevel(X, Z);
-      if (wl !== null && h < wl + 0.6) continue;
-      if (roadAt(lx, lz) > 0.02) continue;
-      if (track.length && trackDist(X, Z, track) < TRACK.clear) continue;
-      const gxh = H(lx + 2, lz) - H(lx - 2, lz), gzh = H(lx, lz + 2) - H(lx, lz - 2);
-      const slope = Math.hypot(gxh, gzh) / 4;
-      const bio = plan.biome(X, Z);
-      const yaw = r3 * Math.PI * 2;
-      // agaclar
-      const pTree = bio.forest * 0.5 + bio.grass * 0.05 + bio.wet * 0.22 + (h > 110 && h < 300 ? 0.12 : 0);
-      if (slope < 0.75 && r4 < pTree) {
-        let kind;
-        const desertish = bio.sand > 0.25 || (Z < 1250 && X < 6200);
-        if (h > 130) kind = 'pine';
-        else if (desertish) kind = bio.wet > 0.15 ? 'palm' : (r3 < 0.5 ? 'bush' : null);
-        else if (X < 6000 && hash2(gx, gz, 15) < 0.35) kind = 'cypress';
-        else kind = X > 12500 && hash2(gx, gz, 16) < 0.3 ? 'pine' : 'broad';
-        if (kind) { push(`${kind}:${Math.floor(hash2(gx, gz, 17) * 6)}`, lx, lz, yaw, 0.8 + hash2(gx, gz, 18) * 0.5); continue; }
-      }
-      // kayalar
-      const pRock = slope > 0.4 ? 0.1 : h > 160 ? 0.05 : bio.mesa > 0.3 ? 0.03 : bio.sand > 0.5 ? 0.004 : 0.008;
-      if (hash2(gx, gz, 19) < pRock) {
-        const size = 0.6 + hash2(gx, gz, 20) * (slope > 0.4 ? 2.6 : 1.4);
-        const red = bio.mesa > 0.25 || bio.sand > 0.5 ? ':red' : '';
-        push(`rock:${Math.floor(hash2(gx, gz, 21) * 5)}:${size.toFixed(1)}:0.65${red}`, lx, lz, yaw, 1, size * 0.25);
-        continue;
-      }
-      // calilar ve ot tutamlari
-      const pBush = bio.steppe * 0.08 + bio.grass * 0.06 + bio.forest * 0.08;
-      if (slope < 0.6 && hash2(gx, gz, 22) < pBush) { push(`bush:${Math.floor(hash2(gx, gz, 23) * 4)}`, lx, lz, yaw, 0.8 + r1 * 0.5); continue; }
-      const pTuft = bio.grass * 0.35 + bio.steppe * 0.2;
-      if (slope < 0.5 && hash2(gx, gz, 24) < pTuft) push(`tuft:${Math.floor(hash2(gx, gz, 25) * 4)}`, lx, lz, yaw, 0.8 + r2 * 0.6, 0.05);
-    }
-  }
   return out;
+}
+
+function cityCulture(plan, X, Z) {
+  let best = null, bd = Infinity;
+  for (const c of plan.cities) { const dd = Math.hypot(X - c.x, Z - c.z); if (dd < bd) { bd = dd; best = c; } }
+  return best ? best.culture : 'desert';
 }

@@ -32,7 +32,7 @@ export async function buildGenObjects(pool, list, isCancelled, base = 'content/'
   for (const b of ['opaque', 'alpha']) {
     const c = counts[b];
     if (!c.v) continue;
-    buffers[b] = { pos: new Float32Array(c.v * 3), nor: new Float32Array(c.v * 3), uv: new Float32Array(c.v * 2), layer: new Uint16Array(c.v), idx: new Uint32Array(c.i), vo: 0, io: 0 };
+    buffers[b] = { pos: new Float32Array(c.v * 3), nor: new Float32Array(c.v * 3), uv: new Float32Array(c.v * 2), col: new Float32Array(c.v * 3).fill(1), layer: new Uint16Array(c.v), idx: new Uint32Array(c.i), vo: 0, io: 0 };
   }
   const colPos = col.v ? new Float32Array(col.v * 3) : null;
   const colIdx = col.v ? new Uint32Array(col.i) : null;
@@ -41,6 +41,8 @@ export async function buildGenObjects(pool, list, isCancelled, base = 'content/'
     const B = buffers[p.alpha ? 'alpha' : 'opaque'];
     const g = p.geo;
     const P = g.attributes.position.array, N = g.attributes.normal.array, U = g.attributes.uv ? g.attributes.uv.array : null;
+    const CO = g.attributes.color ? g.attributes.color.array : null;
+    if (CO) B.col.set(CO.subarray(0, g.attributes.position.count * 3), B.vo * 3);
     const vc = g.attributes.position.count, base0 = B.vo;
     const c = Math.cos(o.yaw), s = Math.sin(o.yaw), k = o.s || 1;
     const slot = texSlot.get(p.tex) ?? 0;
@@ -70,6 +72,7 @@ export async function buildGenObjects(pool, list, isCancelled, base = 'content/'
     geo.setAttribute('position', new THREE.BufferAttribute(B.pos, 3));
     geo.setAttribute('normal', new THREE.BufferAttribute(B.nor, 3));
     geo.setAttribute('uv', new THREE.BufferAttribute(B.uv, 2));
+    geo.setAttribute('color', new THREE.BufferAttribute(B.col, 3));
     geo.setAttribute('layer', new THREE.BufferAttribute(B.layer, 1));
     geo.setIndex(new THREE.BufferAttribute(B.idx, 1));
     geo.computeBoundingBox();

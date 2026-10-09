@@ -295,20 +295,262 @@ function tower(culture, r = 4, H = 13) {
   return parts;
 }
 
-/** Sehir kapisi: W genis aciklik (arac gecer, 8 m serbest yukseklik), iki burc + ust kemer. */
-function gate(culture, W = 16, T = 7) {
+/**
+ * Sehir kapisi: L toplam genislik (iki burc + aciklik), T derinlik, H yukseklik. Aciklik arac
+ * gecer (en az 4 m genis, 4.2 m serbest yukseklik).
+ */
+function gate(culture, L = 28, T = 7, H = 13) {
   const C = CULTURE[culture];
-  const H = 13, clear = 8.5;
-  const g = [box(6, H, T, -W / 2 - 3, 0, 0), box(6, H, T, W / 2 + 3, 0, 0), box(W + 12, H - clear, T, 0, clear, 0)];
+  const pw = Math.min(6, Math.max(1.2, L * 0.22));
+  const W = Math.max(4, L - pw * 2);
+  const clear = Math.min(8.5, Math.max(4.2, H * 0.62));
+  const g = [box(pw, H, T, -W / 2 - pw / 2, 0, 0), box(pw, H, T, W / 2 + pw / 2, 0, 0), box(W + pw * 2, Math.max(0.6, H - clear), T, 0, clear, 0)];
   const parts = [part(mergeGeos(g), C.wall, { uvScale: 3 })];
   if (culture === 'china') {
-    const rf = hipRoof(W + 14, T + 3, 4, 1.4, 0.6); rf.translate(0, H, 0);
+    const rf = hipRoof(W + pw * 2 + 2, T + 3, Math.min(4, H * 0.3), 1.4, 0.6); rf.translate(0, H, 0);
     parts.push(part(rf, C.roof, { uvScale: 2.5 }));
     const cols = [];
     for (const sx of [-1, 1]) cols.push(box(0.6, clear, 0.6, sx * (W / 2 - 0.5), 0, T / 2 + 0.4));
     parts.push(part(mergeGeos(cols), C.trim, { uvScale: 1.5, collide: false }));
   }
   return parts;
+}
+
+const MASS = { data: null, avg: {} };
+/** data: { classes, palette: [[tur, r, g, b]], models: { mi: {...} } }; avg: doku ortalama renkleri. */
+export function setMassing(data, avg = {}) { MASS.data = data; MASS.avg = avg; }
+
+// malzeme turu -> bizim dokumuzun gri tonlu kopyasi (desen dokudan, renk orijinal ortalamadan)
+function massTex(cls, culture) {
+  const C = CULTURE[culture] || CULTURE.desert;
+  const g = (k) => `gray/${k.replace('/', '_')}`;
+  switch (cls) {
+    case 'stone': return g(culture === 'china' || culture === 'byzantine' ? 'build/stone_wall' : 'build/sandstone_blocks');
+    case 'brick': return g('build/brick_red');
+    case 'wood': return g('build/wood_planks');
+    case 'roof': return g(C.roofKind === 'flat' || C.roofKind === 'dome' ? 'build/plaster_white' : 'build/roof_red');
+    case 'metal': return g('build/plaster_white');
+    case 'grass': return g('terrain/grass');
+    case 'paving': return g('terrain/paving');
+    case 'marble': return g('build/marble');
+    case 'cloth': return g('build/canvas');
+    default: return g(C.house);
+  }
+}
+const lin = (c) => Math.pow(c / 255, 2.2);
+
+/**
+ * Siluetten yapi (world/massing): model-yerel izgarada her hucre [alt, ust] dolu aralik. Ust
+ * yuzeyler kose yuksekliklerinden yumusatilir (kubbe ve cati egimli, S esiginden buyuk farklarda
+ * dik duvar); kemer/gecit altlari acik kalir. Her yuz orijinal malzeme turune gore bizim dokumuzla,
+ * orijinal ortalama renge boyanarak cizilir (kose rengi = hedef renk / dokunun ortalamasi).
+ */
+function massModel(mi, culture) {
+  const D = MASS.data, M = D && D.models[mi];
+  if (!M) return [];
+  const { res, x0, z0, nx, nz } = M;
+  const NONE = -32768, S = 1.25;
+  const n = nx * nz;
+  const b = new Float32Array(n), t = new Float32Array(n), has = new Uint8Array(n);
+  for (let k = 0; k < n; k++) {
+    if (M.top[k] === NONE) continue;
+    const lo = M.low[k] === 32767 ? null : M.low[k] / 10;
+    t[k] = M.top[k] / 10;
+    b[k] = lo !== null && lo > 2.6 && lo < t[k] - 0.3 ? lo : -3;
+    has[k] = 1;
+  }
+  // kose yukseklikleri: kosedeki hucre ustleri S esigiyle gruplanir, her grup kendi ortalamasini alir
+  const corner = new Float32Array(n * 4);       // hucre basina koseler: 0 (i,j) 1 (i+1,j) 2 (i+1,j+1) 3 (i,j+1)
+  for (let cj = 0; cj <= nz; cj++) {
+    for (let ci = 0; ci <= nx; ci++) {
+      const cells = [];
+      for (const [di, dj, slot] of [[-1, -1, 2], [0, -1, 3], [-1, 0, 1], [0, 0, 0]]) {
+        const i = ci + di, j = cj + dj;
+        if (i < 0 || j < 0 || i >= nx || j >= nz) continue;
+        const k = j * nx + i;
+        if (has[k]) cells.push([t[k], k, slot]);
+      }
+      if (!cells.length) continue;
+      cells.sort((p, q) => p[0] - q[0]);
+      let g0 = 0;
+      for (let g = 1; g <= cells.length; g++) {
+        if (g === cells.length || cells[g][0] - cells[g - 1][0] > S) {
+          let sum = 0;
+          for (let x = g0; x < g; x++) sum += cells[x][0];
+          const avg = sum / (g - g0);
+          for (let x = g0; x < g; x++) corner[cells[x][1] * 4 + cells[x][2]] = avg;
+          g0 = g;
+        }
+      }
+    }
+  }
+  const pal = D.palette, classes = D.classes;
+  const buckets = new Map();
+  const bucket = (tex) => { let B = buckets.get(tex); if (!B) buckets.set(tex, (B = { pos: [], col: [], uv: [] })); return B; };
+  const tint = (pi, tex) => {
+    const p = pal[pi] || [0, 200, 190, 170];
+    const a = MASS.avg[tex] || [180, 180, 180];
+    return [0, 1, 2].map((c) => Math.min(3, Math.max(0.05, lin(p[c + 1]) / Math.max(0.02, lin(a[c])))));
+  };
+  const tri = (B, P, col, uvs) => { for (let v = 0; v < 3; v++) { B.pos.push(P[v][0], P[v][1], P[v][2]); B.col.push(col[0], col[1], col[2]); B.uv.push(uvs[v][0], uvs[v][1]); } };
+  const X = (i) => x0 + i * res, Z = (j) => z0 + j * res;
+  const topUV = (p) => [p[0] / 3, p[2] / 3];
+  for (let j = 0; j < nz; j++) {
+    for (let i = 0; i < nx; i++) {
+      const k = j * nx + i;
+      if (!has[k]) continue;
+      const xa = X(i), xb = X(i + 1), za = Z(j), zb = Z(j + 1);
+      const c0 = corner[k * 4], c1 = corner[k * 4 + 1], c2 = corner[k * 4 + 2], c3 = corner[k * 4 + 3];
+      // ust yuz
+      const tp = pal[M.tm[k]] || [0];
+      const ttex = t[k] < 1.4 && classes[tp[0]] !== 'grass' ? 'gray/terrain_paving' : massTex(classes[tp[0]], culture);
+      const tc = tint(M.tm[k], ttex);
+      const TB = bucket(ttex);
+      const A = [xa, c0, za], Bp = [xb, c1, za], Cp = [xb, c2, zb], Dp = [xa, c3, zb];
+      tri(TB, [Dp, Cp, Bp], tc, [topUV(Dp), topUV(Cp), topUV(Bp)]);
+      tri(TB, [Dp, Bp, A], tc, [topUV(Dp), topUV(Bp), topUV(A)]);
+      // yan yuzler: komsu bu kenarda daha alcaksa (ya da yoksa) aradaki duvar; kemer altlari
+      const sp = pal[M.sm[k]] || [0];
+      const stex = massTex(classes[sp[0]], culture);
+      const sc = tint(M.sm[k], stex);
+      const SB = bucket(stex);
+      // [komsu i, j, kenar p0, p1, bizim kose h0, h1, komsunun ayni koseleri s0, s1]
+      const edges = [
+        [i + 1, j, [xb, zb], [xb, za], c2, c1, 3, 0],
+        [i - 1, j, [xa, za], [xa, zb], c0, c3, 1, 2],
+        [i, j + 1, [xa, zb], [xb, zb], c3, c2, 0, 1],
+        [i, j - 1, [xb, za], [xa, za], c1, c0, 2, 3],
+      ];
+      for (const [ni, nj, p0, p1, h0, h1, s0, s1] of edges) {
+        const inside = ni >= 0 && nj >= 0 && ni < nx && nj < nz && has[nj * nx + ni];
+        let lo0 = b[k], lo1 = b[k];
+        if (inside) {
+          const nk = nj * nx + ni;
+          const n0 = corner[nk * 4 + s0], n1 = corner[nk * 4 + s1];
+          if (n0 >= h0 - 0.02 && n1 >= h1 - 0.02) lo0 = lo1 = null;
+          else { lo0 = Math.max(b[k], Math.min(h0, n0)); lo1 = Math.max(b[k], Math.min(h1, n1)); }
+          if (b[nk] > b[k] + 0.05) {
+            const y1 = Math.min(b[nk], Math.min(h0, h1));
+            const q0 = [p0[0], b[k], p0[1]], q1 = [p1[0], b[k], p1[1]], q2 = [p1[0], y1, p1[1]], q3 = [p0[0], y1, p0[1]];
+            tri(SB, [q0, q1, q2], sc, [[0, b[k] / 3], [res / 3, b[k] / 3], [res / 3, y1 / 3]]);
+            tri(SB, [q0, q2, q3], sc, [[0, b[k] / 3], [res / 3, y1 / 3], [0, y1 / 3]]);
+          }
+        }
+        if (lo0 === null) continue;
+        if (h0 - lo0 < 0.03 && h1 - lo1 < 0.03) continue;
+        const u0 = (p0[0] + p0[1]) / 3, u1 = u0 + res / 3;
+        const q0 = [p0[0], lo0, p0[1]], q1 = [p1[0], lo1, p1[1]], q2 = [p1[0], h1, p1[1]], q3 = [p0[0], h0, p0[1]];
+        tri(SB, [q0, q1, q2], sc, [[u0, lo0 / 3], [u1, lo1 / 3], [u1, h1 / 3]]);
+        tri(SB, [q0, q2, q3], sc, [[u0, lo0 / 3], [u1, h1 / 3], [u0, h0 / 3]]);
+      }
+      if (b[k] > 0) {
+        const q = [[xa, b[k], za], [xb, b[k], za], [xb, b[k], zb], [xa, b[k], zb]];
+        tri(SB, [q[0], q[1], q[2]], sc, [topUV(q[0]), topUV(q[1]), topUV(q[2])]);
+        tri(SB, [q[0], q[2], q[3]], sc, [topUV(q[0]), topUV(q[2]), topUV(q[3])]);
+      }
+    }
+  }
+  const parts = [];
+  for (const [tex, B] of buckets) {
+    if (!B.pos.length) continue;
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(B.pos, 3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(B.uv, 2));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(B.col, 3));
+    const idx = new Uint32Array(B.pos.length / 3);
+    for (let q = 0; q < idx.length; q++) idx[q] = q;
+    g.setIndex(new THREE.BufferAttribute(idx, 1));
+    g.computeVertexNormals();
+    parts.push({ geo: g, tex, alpha: false, collide: true });
+  }
+  return parts;
+}
+
+/** Duz blok (kaya kutlesi, sandik, araba, merdiven vb.): mat = rock | wood | stone | kultur. */
+function blockModel(mat, w, d, h, rnd) {
+  if (mat === 'rock') {
+    const g = rockGeo(rnd, 1, 0.75);
+    g.scale(w / 2, h / 1.3, d / 2);
+    return [part(g, 'terrain/rock', { uvScale: 4 })];
+  }
+  const tex = mat === 'wood' ? 'build/wood_planks' : mat === 'stone' ? 'build/stone_wall' : (CULTURE[mat] || CULTURE.desert).house;
+  return [part(box(w, h, d), tex, { uvScale: 2 })];
+}
+
+/** Kopru: L boy (yerel x), W genislik; ust yuzey y = 0, korkuluk, ayaklar, uclarda rampa. */
+function bridge(culture, L, W) {
+  const C = CULTURE[culture] || CULTURE.desert;
+  const deck = box(L, 0.8, W, 0, -0.8, 0);
+  const rails = [box(L, 1.0, 0.35, 0, 0, W / 2 - 0.18), box(L, 1.0, 0.35, 0, 0, -W / 2 + 0.18)];
+  const piers = [];
+  for (let x = -L / 2 + 4; x <= L / 2 - 4; x += Math.max(6, L / 5)) piers.push(box(1.4, 9, W * 0.8, x, -9.8, 0));
+  // uclarda arazi farkini yumusatan rampalar
+  const ramps = [];
+  for (const sx of [-1, 1]) {
+    const r = new THREE.BoxGeometry(6, 0.5, W);
+    r.translate(sx * 3, -0.25, 0);
+    r.rotateZ(sx * 0.2);
+    r.translate(sx * L / 2, -0.05, 0);
+    ramps.push(r);
+  }
+  return [
+    part(mergeGeos([deck, ...ramps]), culture === 'china' ? 'build/wood_planks' : C.wall, { uvScale: 2 }),
+    part(mergeGeos(rails), C.trim, { uvScale: 1.5 }),
+    part(mergeGeos(piers), C.wall, { uvScale: 3 }),
+  ];
+}
+
+/** Cadir: kare taban, piramit tavan; kumas. */
+function tent(culture, w, d, h) {
+  const wallH = Math.max(0.8, h * 0.4);
+  const body = box(w * 0.92, wallH, d * 0.92);
+  const top = new THREE.ConeGeometry(Math.hypot(w, d) / 2, h - wallH, 4, 1);
+  top.rotateY(Math.PI / 4);
+  top.scale(w / Math.hypot(w, d) * 1.414, 1, d / Math.hypot(w, d) * 1.414);
+  top.translate(0, wallH + (h - wallH) / 2, 0);
+  const tex = culture === 'desert' || culture === 'egypt' ? 'build/canvas' : 'build/canvas_red';
+  return [part(mergeGeos([body, top]), tex, { uvScale: 2 })];
+}
+
+/** Cit: direkler ve iki yatay ray. */
+function fence(L, h) {
+  const g = [box(L, 0.12, 0.1, 0, h * 0.45, 0), box(L, 0.12, 0.1, 0, h * 0.85, 0)];
+  const n = Math.max(2, Math.round(L / 2));
+  for (let k = 0; k <= n; k++) g.push(box(0.14, h, 0.14, -L / 2 + (k * L) / n, 0, 0));
+  return [part(mergeGeos(g), 'build/wood_planks', { uvScale: 1.5 })];
+}
+
+/** Fener / sokak lambasi. */
+function lamp(culture, h) {
+  const C = CULTURE[culture] || CULTURE.desert;
+  const pole = box(0.18, h, 0.18);
+  const head = box(0.6, 0.7, 0.6, 0, h - 0.2, 0);
+  return [part(pole, C.trim, { uvScale: 1, collide: true }), part(head, culture === 'china' ? 'build/canvas_red' : 'build/plaster_white', { uvScale: 1, collide: false })];
+}
+
+/** Bayrak diregi + bez. */
+function flag(culture, h) {
+  const C = CULTURE[culture] || CULTURE.desert;
+  const pole = box(0.16, h, 0.16);
+  const cloth = box(0.05, Math.min(2.6, h * 0.3), 1.8, 0, h * 0.68, 0.95);
+  return [part(pole, C.trim, { uvScale: 1 }), part(cloth, 'build/canvas_red', { uvScale: 1, collide: false })];
+}
+
+/** Heykel: kaide + govde + bas (yer tutucu soylu siluet). */
+function statue(culture, w, h) {
+  const C = CULTURE[culture] || CULTURE.desert;
+  const ped = box(Math.max(1, w * 0.8), h * 0.3, Math.max(1, w * 0.8));
+  const body = new THREE.CylinderGeometry(w * 0.18, w * 0.26, h * 0.55, 8); body.translate(0, h * 0.3 + h * 0.275, 0);
+  const head = new THREE.SphereGeometry(w * 0.14, 8, 6); head.translate(0, h * 0.92, 0);
+  return [part(ped, C.wall, { uvScale: 2 }), part(mergeGeos([body, head]), 'build/marble', { uvScale: 1.5 })];
+}
+
+/** Pazar tezgahi: tahta masa + bez gölgelik. */
+function stall(culture, w, d) {
+  const g = [box(w, 0.9, d * 0.6, 0, 0, -d * 0.1)];
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) g.push(box(0.1, 2.2, 0.1, sx * (w / 2 - 0.1), 0, sz * (d / 2 - 0.1)));
+  const roof = box(w + 0.2, 0.08, d + 0.2, 0, 2.2, 0);
+  return [part(mergeGeos(g), 'build/wood_planks', { uvScale: 1.5 }), part(roof, culture === 'desert' || culture === 'egypt' ? 'build/canvas' : 'build/canvas_red', { uvScale: 1.5, collide: false })];
 }
 
 /** Sehir simge yapisi (meydan ortasi). */
@@ -524,9 +766,18 @@ export function model(key) {
   if (TREES[kind]) m = TREES[kind](rnd);
   else if (kind === 'rock') m = [part(rockGeo(rnd, Number(a[2] || 1.5), Number(a[3] || 0.7)), a[4] === 'red' ? 'terrain/redrock' : 'terrain/rock', { uvScale: 2.5 })];
   else if (kind === 'house') m = house(a[1], rnd, Number(a[3]), Number(a[4]), Number(a[5]));
-  else if (kind === 'wall') m = wallSeg(a[1], Number(a[2]));
-  else if (kind === 'tower') m = tower(a[1]);
-  else if (kind === 'gate') m = gate(a[1]);
+  else if (kind === 'wall') m = wallSeg(a[1], Number(a[2]), a[3] ? Number(a[3]) : 9, a[4] ? Number(a[4]) : 3.2);
+  else if (kind === 'tower') m = tower(a[1], a[2] ? Number(a[2]) : 4, a[3] ? Number(a[3]) : 13);
+  else if (kind === 'gate') m = gate(a[1], a[2] ? Number(a[2]) : 28, a[3] ? Number(a[3]) : 7, a[4] ? Number(a[4]) : 13);
+  else if (kind === 'block') m = blockModel(a[1], Number(a[2]), Number(a[3]), Number(a[4]), rnd);
+  else if (kind === 'mass') m = massModel(Number(a[1]), a[2]);
+  else if (kind === 'bridge') m = bridge(a[1], Number(a[2]), Number(a[3]));
+  else if (kind === 'tent') m = tent(a[1], Number(a[2]), Number(a[3]), Number(a[4]));
+  else if (kind === 'fence') m = fence(Number(a[1]), Number(a[2]));
+  else if (kind === 'lamp') m = lamp(a[1], Number(a[2]));
+  else if (kind === 'flag') m = flag(a[1], Number(a[2]));
+  else if (kind === 'statue') m = statue(a[1], Number(a[2]), Number(a[3]));
+  else if (kind === 'stall') m = stall(a[1], Number(a[2]), Number(a[3]));
   else if (kind === 'landmark') m = landmark(a[1], rnd);
   else if (kind === 'pier') m = pier(Number(a[1]));
   else if (kind === 'ferry') m = ferryBoat();

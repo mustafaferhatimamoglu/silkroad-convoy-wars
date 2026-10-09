@@ -1,5 +1,5 @@
 import { RALLY_STAGES } from '../../data/rally.js';
-import { REGION_M } from './plan.js';
+import { REGION_M } from './blueprint.js';
 
 // Ralli parkurlari dunyada: etap yolu (ve botlarin cizgisi) boyunca agac/kaya temizlenmis toprak
 // serit. Gercek ralli etaplari gibi orman ve tarla icinden acilmis bir yol; serbest suruste de

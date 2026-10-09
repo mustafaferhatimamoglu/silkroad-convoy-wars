@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { REGION_M, TUNNEL } from './plan.js';
+import { REGION_M } from './blueprint.js';
+import { TUNNEL } from './plan.js';
 import { boxUV } from './models.js';
 
 // Tunel: yol cizgisi boyunca ic kesit (tasli zemin, duz duvar, kemer tavan) + iki agizda tas

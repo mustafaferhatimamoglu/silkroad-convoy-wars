@@ -1,5 +1,6 @@
 import { GenMusic } from '../audio/GenMusic.js';
-import { CITIES, REGION_M } from '../world/gen/plan.js';
+import { REGION_M } from '../world/gen/blueprint.js';
+import { CITIES } from '../world/gen/features.js';
 
 // Ses sistemi: AudioContext, ana/efekt/muzik kanallari, uretken muzik (V5: ses dosyasi yok).
 // Tarayicilar sesi ilk kullanici etkilesimine kadar baslatmaz; ensure() bunu bekler.
@@ -95,12 +96,9 @@ export class AudioSystem {
 export function musicForRegion(rx, rz) {
   const x = (rx + 0.5) * REGION_M, z = (rz + 0.5) * REGION_M;
   for (const c of CITIES) if (Math.hypot(x - c.x, z - c.z) < c.r + 380) return `gen:${c.culture}:town`;
-  let style;
-  if (z < 1300 && x < 6200) style = 'egypt';
-  else if (x > 9000) style = 'china';
-  else if (x > 5600) style = 'desert';
-  else if (x > 2800) style = 'persian';
-  else style = 'byzantine';
+  // kir: en yakin sehrin kultur bolgesi
+  let style = 'desert', bd = Infinity;
+  for (const c of CITIES) { const d = Math.hypot(x - c.x, z - c.z); if (d < bd) { bd = d; style = c.culture; } }
   return `gen:${style}:field`;
 }
 

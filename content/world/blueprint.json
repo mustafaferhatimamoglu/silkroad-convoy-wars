@@ -1,0 +1,51 @@
+{
+ "format": "silkroad-v5-blueprint",
+ "version": 1,
+ "note": "Orijinal haritanin kaba ozeti (tools/gen/blueprint.py). Satir-major [z][x], z guneyden kuzeye.",
+ "regionM": 192,
+ "rx0": 30,
+ "rx1": 180,
+ "rz0": 35,
+ "rz1": 127,
+ "heights": {
+  "file": "heights.dat",
+  "res": 16,
+  "w": 1812,
+  "h": 1116,
+  "type": "int16",
+  "unit": "dm",
+  "void": -32768
+ },
+ "ground": {
+  "file": "ground.dat",
+  "res": 8,
+  "w": 3624,
+  "h": 2232,
+  "type": "uint8",
+  "classes": [
+   "void",
+   "sand",
+   "dirt",
+   "gravel",
+   "grass",
+   "steppe",
+   "forest",
+   "rock",
+   "redrock",
+   "snow",
+   "mud",
+   "paving",
+   "cobble",
+   "farmland"
+  ]
+ },
+ "water": {
+  "file": "water.dat",
+  "res": 32,
+  "w": 906,
+  "h": 558,
+  "type": "int16",
+  "unit": "dm",
+  "none": -32768
+ }
+}

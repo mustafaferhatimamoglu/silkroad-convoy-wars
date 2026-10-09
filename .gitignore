@@ -14,3 +14,6 @@ tools/rally/work/
 tools/cloudflared.exe
 dist/
 server/cloudflared.exe
+
+# orijinal haritadan turetilen ara veriler (yalniz yerel; oyuna giden kaba ozet content/world)
+tools/gen/out/

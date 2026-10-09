@@ -1,10 +1,13 @@
-import { WORLD } from '../world/gen/plan.js';
+// Buyuk dunya haritasi (M): dunya sablonunun ustten gorunumu (zemin sinifi renkleri, tepe golgesi,
+// su), sehir adlari, feribot hatlari, oyuncu oku ve (cok oyunculuda) diger oyuncular. Tekerlekle
+// yakinlastir, surukleyerek kaydir. Harita sablondan bir kez cizilir.
 
-// Buyuk dunya haritasi (M): uretilen dunyanin ustten gorunumu (tepe golgeli arazi, su, yollar),
-// sehir adlari, feribot hatlari, oyuncu oku ve (cok oyunculuda) diger oyuncular. Tekerlekle
-// yakinlastir, surukleyerek kaydir. Harita bir kez, arka planda parca parca cizilir.
-
-const MPP = 12;                           // metre / piksel (harita goruntusu)
+const MPP = 16;                           // metre / piksel (sablonun yukseklik izgarasi)
+const PAL = {
+  void: [70, 64, 58], sand: [214, 190, 138], dirt: [150, 120, 82], gravel: [150, 146, 136], grass: [96, 128, 60],
+  steppe: [168, 152, 96], forest: [62, 92, 46], rock: [126, 120, 112], redrock: [168, 98, 64], snow: [236, 240, 246],
+  mud: [100, 88, 66], paving: [206, 200, 188], cobble: [160, 152, 140], farmland: [126, 116, 58],
+};
 
 export class BigMap {
   constructor(app) {
@@ -18,10 +21,7 @@ export class BigMap {
     this.el.innerHTML = `<canvas></canvas><div class="bm-title">Dünya haritası <span>M: kapat · tekerlek: yakınlaştır · sürükle: kaydır</span></div><div class="bm-wait">Harita çiziliyor…</div>`;
     app.ui.appendChild(this.el);
     this.canvas = this.el.querySelector('canvas');
-    this.W = Math.floor(WORLD.w / MPP); this.H = Math.floor(WORLD.h / MPP);
     this.img = document.createElement('canvas');
-    this.img.width = this.W; this.img.height = this.H;
-    this.row = 0;
     this.done = false;
     this._drag = null;
     this.canvas.addEventListener('wheel', (e) => { e.preventDefault(); this.zoom = Math.min(8, Math.max(0.6, this.zoom * (e.deltaY < 0 ? 1.2 : 1 / 1.2))); });
@@ -33,54 +33,44 @@ export class BigMap {
       const base = this._drag.p || { x: v.cx, z: v.cz };
       this.pan = { x: base.x - (e.clientX - this._drag.x) / v.s, z: base.z + (e.clientY - this._drag.y) / v.s };
     });
-    // bosta parca parca ciz
-    const step = () => { if (!this.done) { this._genRows(12); setTimeout(step, this.open ? 0 : 30); } };
-    setTimeout(step, 1500);
+    setTimeout(() => this._render(), 1500);
   }
 
-  _genRows(n) {
-    const plan = this.app.world.data.plan;
-    if (!plan) return;
-    if (!this._hs) { this._hs = new Float32Array(this.W * (this.H + 1)); this._data = this.img.getContext('2d').createImageData(this.W, this.H); }
-    const s = {};
-    const W = this.W, H = this.H, hs = this._hs, data = this._data.data;
-    // yukseklikler bir satir onden (golge icin)
-    for (let k = 0; k < n && this.row < H; k++, this.row++) {
-      const py = this.row;
-      for (const yy of [py, py + 1]) {
-        if (yy > H || hs[yy * W] !== 0) continue;
-        const z = WORLD.h - (yy + 0.5) * MPP;
-        for (let px = 0; px < W; px++) { plan.sample((px + 0.5) * MPP, z, s); hs[yy * W + px] = s.h || 1e-6; }
-      }
-      const z = WORLD.h - (py + 0.5) * MPP;
-      for (let px = 0; px < W; px++) {
-        const x = (px + 0.5) * MPP;
-        const h = hs[py * W + px];
-        const hx = hs[py * W + Math.min(W - 1, px + 1)] - hs[py * W + Math.max(0, px - 1)];
-        const hz = hs[Math.max(0, py - 1) * W + px] - hs[(py + 1) * W + px];
-        const shade = Math.max(0.5, Math.min(1.35, 1 + ((-hx + hz) / (2 * MPP)) * 1.4));
-        const b = plan.biome(x, z);
-        let r = 124, g = 112, bl = 82;
-        const mix = (c, w) => { r += (c[0] - r) * w; g += (c[1] - g) * w; bl += (c[2] - bl) * w; };
-        mix([156, 140, 84], b.steppe);
-        mix([84, 116, 52], b.grass);
-        mix([56, 88, 44], b.forest * 0.6);
-        mix([214, 188, 140], b.sand);
-        mix([172, 96, 58], b.mesa * 0.4);
-        if (h > 220) mix([128, 122, 112], Math.min(1, (h - 220) / 60));
-        if (h > 330) mix([236, 238, 244], Math.min(1, (h - 330) / 40));
-        r *= shade; g *= shade; bl *= shade;
-        const wl = plan.waterLevel(x, z);
-        if (wl !== null && h < wl) { const d = Math.min(1, (wl - h) / 10); r = 46 - d * 22; g = 104 - d * 40; bl = 150 - d * 28; }
-        plan.sample(x, z, s);
-        if (s.road > 0.3) { r = 92; g = 80; bl = 64; }
-        if (plan.cityAt(x, z)) { r = r * 0.55 + 205 * 0.45; g = g * 0.55 + 190 * 0.45; bl = bl * 0.55 + 160 * 0.45; }
-        const o = (py * W + px) * 4;
-        data[o] = r; data[o + 1] = g; data[o + 2] = bl; data[o + 3] = 255;
+  /** Dunya siniri (metre): X0..X0+w, Z0..Z0+h. */
+  get bounds() {
+    const P = this.app.world && this.app.world.data && this.app.world.data.plan;
+    if (!P) return { X0: 0, Z0: 0, w: 1, h: 1 };
+    return { X0: P.X0, Z0: P.Z0, w: P.hw * MPP, h: P.hh * MPP };
+  }
+
+  _render() {
+    const P = this.app.world.data.plan;
+    if (!P || !P.H) { setTimeout(() => this._render(), 1000); return; }
+    const W = P.hw, H = P.hh;
+    this.img.width = W; this.img.height = H;
+    const ctx = this.img.getContext('2d');
+    const im = ctx.createImageData(W, H), d = im.data, hs = P.H;
+    const pal = P.classes.map((c) => PAL[c] || [128, 128, 128]);
+    for (let z = 0; z < H; z++) {
+      const py = H - 1 - z;
+      for (let x = 0; x < W; x++) {
+        const i = z * W + x;
+        const hx = hs[z * W + Math.min(W - 1, x + 1)] - hs[z * W + Math.max(0, x - 1)];
+        const hz = hs[Math.min(H - 1, z + 1) * W + x] - hs[Math.max(0, z - 1) * W + x];
+        const shade = Math.max(0.45, Math.min(1.4, 1 + ((-hx + hz) / (2 * MPP)) * 1.3));
+        const X = P.X0 + x * MPP + 8, Z = P.Z0 + z * MPP + 8;
+        let c = pal[P.groundAt(X, Z)];
+        if (P.voidDist[i] > 0) c = PAL.void;
+        let r = c[0] * shade, g = c[1] * shade, b = c[2] * shade;
+        if (P.waterLevel(X, Z) !== null) { r = 40; g = 92; b = 146; }
+        if (P.voidDist[i] > 6) { r *= 0.45; g *= 0.45; b *= 0.45; }
+        const o = (py * W + x) * 4;
+        d[o] = r; d[o + 1] = g; d[o + 2] = b; d[o + 3] = 255;
       }
     }
-    this.img.getContext('2d').putImageData(this._data, 0, 0);
-    if (this.row >= H) { this.done = true; this._hs = null; this.el.querySelector('.bm-wait').classList.add('hidden'); }
+    ctx.putImageData(im, 0, 0);
+    this.done = true;
+    this.el.querySelector('.bm-wait').classList.add('hidden');
   }
 
   toggle() {
@@ -96,16 +86,17 @@ export class BigMap {
     const cw = c.clientWidth, ch = c.clientHeight;
     if (c.width !== cw || c.height !== ch) { c.width = cw; c.height = ch; }
     const X = pos.x, Z = -pos.z;
-    const fit = Math.min(cw / WORLD.w, ch / WORLD.h) * 0.96;
+    const B = this.bounds;
+    const fit = Math.min(cw / B.w, ch / B.h) * 0.96;
     const s = fit * this.zoom;                                   // piksel / metre
-    const cx = this.pan ? this.pan.x : this.zoom > 1.01 ? X : WORLD.w / 2;
-    const cz = this.pan ? this.pan.z : this.zoom > 1.01 ? Z : WORLD.h / 2;
+    const cx = this.pan ? this.pan.x : this.zoom > 1.01 ? X : B.X0 + B.w / 2;
+    const cz = this.pan ? this.pan.z : this.zoom > 1.01 ? Z : B.Z0 + B.h / 2;
     this._view = { s, cx, cz };
     const toPx = (x, z) => [cw / 2 + (x - cx) * s, ch / 2 - (z - cz) * s];
     ctx.fillStyle = '#10161c'; ctx.fillRect(0, 0, cw, ch);
-    const [ox, oy] = toPx(0, WORLD.h);
+    const [ox, oy] = toPx(B.X0, B.Z0 + B.h);
     ctx.imageSmoothingEnabled = this.zoom < 3;
-    ctx.drawImage(this.img, ox, oy, WORLD.w * s, WORLD.h * s);
+    if (this.done) ctx.drawImage(this.img, ox, oy, B.w * s, B.h * s);
     const plan = this.app.world.data.plan;
     // yollar (vektor): tas yol koyu, toprak yol kesikli
     for (const r of plan.roads) {

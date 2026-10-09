@@ -1,0 +1,342 @@
+{
+"build/bark": [
+80,
+63,
+45
+],
+"build/bark_palm": [
+107,
+89,
+64
+],
+"build/brick_red": [
+155,
+94,
+73
+],
+"build/canvas": [
+192,
+179,
+150
+],
+"build/canvas_red": [
+153,
+53,
+45
+],
+"build/copper_patina": [
+87,
+147,
+126
+],
+"build/grass_tuft": [
+68,
+94,
+37
+],
+"build/leaf_broad": [
+73,
+107,
+41
+],
+"build/leaf_palm": [
+72,
+107,
+39
+],
+"build/leaf_pine": [
+45,
+73,
+42
+],
+"build/marble": [
+212,
+209,
+203
+],
+"build/mosaic_blue": [
+57,
+98,
+148
+],
+"build/mosaic_turquoise": [
+65,
+143,
+147
+],
+"build/plaster_adobe": [
+189,
+164,
+123
+],
+"build/plaster_ochre": [
+182,
+139,
+89
+],
+"build/plaster_white": [
+213,
+209,
+195
+],
+"build/roof_green": [
+43,
+91,
+68
+],
+"build/roof_grey": [
+72,
+73,
+78
+],
+"build/roof_red": [
+123,
+57,
+37
+],
+"build/sandstone_blocks": [
+192,
+165,
+118
+],
+"build/stone_wall": [
+142,
+134,
+121
+],
+"build/wood_lacquer": [
+114,
+28,
+25
+],
+"build/wood_planks": [
+115,
+80,
+50
+],
+"terrain/cobble": [
+123,
+116,
+105
+],
+"terrain/dirt": [
+124,
+97,
+69
+],
+"terrain/farmland": [
+96,
+99,
+50
+],
+"terrain/grass": [
+80,
+108,
+42
+],
+"terrain/gravel": [
+127,
+118,
+106
+],
+"terrain/mud": [
+73,
+57,
+39
+],
+"terrain/paving": [
+171,
+160,
+140
+],
+"terrain/redrock": [
+161,
+88,
+53
+],
+"terrain/road": [
+136,
+117,
+91
+],
+"terrain/rock": [
+119,
+115,
+107
+],
+"terrain/sand": [
+204,
+179,
+132
+],
+"terrain/snow": [
+217,
+220,
+224
+],
+"terrain/steppe": [
+147,
+134,
+76
+],
+"gray/build_bark": [
+157,
+157,
+157
+],
+"gray/build_bark_palm": [
+157,
+157,
+157
+],
+"gray/build_brick_red": [
+154,
+154,
+154
+],
+"gray/build_canvas": [
+157,
+157,
+157
+],
+"gray/build_canvas_red": [
+157,
+157,
+157
+],
+"gray/build_copper_patina": [
+157,
+157,
+157
+],
+"gray/build_marble": [
+157,
+157,
+157
+],
+"gray/build_mosaic_blue": [
+139,
+139,
+139
+],
+"gray/build_mosaic_turquoise": [
+151,
+151,
+151
+],
+"gray/build_plaster_adobe": [
+157,
+157,
+157
+],
+"gray/build_plaster_ochre": [
+157,
+157,
+157
+],
+"gray/build_plaster_white": [
+157,
+157,
+157
+],
+"gray/build_roof_green": [
+157,
+157,
+157
+],
+"gray/build_roof_grey": [
+157,
+157,
+157
+],
+"gray/build_roof_red": [
+157,
+157,
+157
+],
+"gray/build_sandstone_blocks": [
+157,
+157,
+157
+],
+"gray/build_stone_wall": [
+157,
+157,
+157
+],
+"gray/build_wood_lacquer": [
+157,
+157,
+157
+],
+"gray/build_wood_planks": [
+157,
+157,
+157
+],
+"gray/terrain_cobble": [
+154,
+154,
+154
+],
+"gray/terrain_dirt": [
+157,
+157,
+157
+],
+"gray/terrain_farmland": [
+156,
+156,
+156
+],
+"gray/terrain_grass": [
+157,
+157,
+157
+],
+"gray/terrain_gravel": [
+154,
+154,
+154
+],
+"gray/terrain_mud": [
+157,
+157,
+157
+],
+"gray/terrain_paving": [
+157,
+157,
+157
+],
+"gray/terrain_redrock": [
+157,
+157,
+157
+],
+"gray/terrain_road": [
+157,
+157,
+157
+],
+"gray/terrain_rock": [
+157,
+157,
+157
+],
+"gray/terrain_sand": [
+157,
+157,
+157
+],
+"gray/terrain_snow": [
+157,
+157,
+157
+],
+"gray/terrain_steppe": [
+157,
+157,
+157
+]
+}
