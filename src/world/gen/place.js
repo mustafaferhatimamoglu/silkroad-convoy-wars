@@ -105,7 +105,9 @@ export function placeRegionObjects(data, rx, rz, d) {
         // orijinal model cogu zaman bir koru/sira: govde konumlari ve boylari kumeden
         const cl = plan.veg && plan.veg[mi];
         if (cl) {
-          for (const [tx, tz, th] of cl) {
+          for (const [tx, tz, th, tr] of cl) {
+            // ince uzun agac (kavak, servi): boy / tac capi buyukse
+            const sp2 = sp === 'broad' && th / Math.max(1, 2 * tr) > 2.0 ? 'cypress' : sp;
             const px = X + c * tx + s * tz - x0, pz = Z - (-s * tx + c * tz) - z0;
             if (px < -40 || px > REGION_M + 40 || pz < -40 || pz > REGION_M + 40) continue;
             if (track.length && trackDist(px + x0, pz + z0, track) < TRACK.clear + th * 0.06) continue;   // ralli parkuru acik
@@ -113,13 +115,14 @@ export function placeRegionObjects(data, rx, rz, d) {
             const vv = Math.floor(hash2(Math.round(px * 7 + X), Math.round(pz * 7 + Z), 37) * 6);
             if (th < 1.6) { out.push({ m: `tuft:${vv % 4}`, x: px, y: ty - 0.05, z: -pz, yaw: yaw + vv, s: Math.max(0.6, th / 0.7) }); continue; }
             if (th < 3.2) { out.push({ m: `bush:${vv % 4}`, x: px, y: ty - 0.1, z: -pz, yaw: yaw + vv, s: Math.max(0.6, th / 1.6) }); continue; }
-            out.push({ m: `${sp}:${vv}`, x: px, y: ty - 0.15, z: -pz, yaw: yaw + vv * 1.1, s: Math.min(16, Math.max(0.35, th / base)) });
+            out.push({ m: `${sp2}:${vv}`, x: px, y: ty - 0.15, z: -pz, yaw: yaw + vv * 1.1, s: Math.min(16, Math.max(0.35, th / TREE_H[sp2])) });
           }
           break;
         }
         if (h < 1.6) { push(`tuft:${v % 4}`, yaw, Math.max(0.6, h / 0.7), gy - 0.05); break; }
         if (h < 3.2) { push(`bush:${v % 4}`, yaw, Math.max(0.6, h / 1.6), gy - 0.1); break; }
-        push(`${sp}:${v}`, yaw, Math.min(16, Math.max(0.35, h / base)), gy - 0.15);
+        const sp1 = sp === 'broad' && h / Math.max(1, Math.max(w, dd)) > 2.0 ? 'cypress' : sp;
+        push(`${sp1}:${v}`, yaw, Math.min(16, Math.max(0.35, h / TREE_H[sp1])), gy - 0.15);
         break;
       }
       case 'rock': {
