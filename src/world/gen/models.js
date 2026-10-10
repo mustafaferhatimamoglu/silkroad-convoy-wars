@@ -443,8 +443,8 @@ function massModel(mi, culture) {
   if (!M) return [];
   const { res, x0, z0, nx, nz } = M;
   const rock = culture === 'rock' || culture === 'redrock';
-  const steps = culture.endsWith('+steps'), soft = culture.endsWith('+soft');
-  if (steps || soft) culture = culture.slice(0, -5 - (steps ? 1 : 0));
+  const steps = culture.endsWith('+steps'), soft = culture.endsWith('+soft'), wallOnly = culture.endsWith('+wall');
+  if (steps || soft || wallOnly) culture = culture.slice(0, culture.lastIndexOf('+'));
   const NONE = -32768, S = rock || soft ? 3.5 : steps ? 0.08 : 1.25;
   const n = nx * nz;
   const b = new Float32Array(n), t = new Float32Array(n), has = new Uint8Array(n);
@@ -465,6 +465,12 @@ function massModel(mi, culture) {
   for (const T of towers) for (const c of T.cells) { t[c] = T.base; if (b[c] > T.base - 0.3) b[c] = -3; }
   // kose yukseklikleri: kosedeki hucre ustleri S esigiyle gruplanir, her grup kendi ortalamasini alir
   const corner = new Float32Array(n * 4);       // hucre basina koseler: 0 (i,j) 1 (i+1,j) 2 (i+1,j+1) 3 (i,j+1)
+  // kiremit cati hucreleri: dik egim de basamak degil egik yuzey (bilesik modellerdeki catilar)
+  const roofCell = new Uint8Array(n);
+  if (!rock && !steps) {
+    const RC = D.classes.indexOf('roof');
+    for (let k = 0; k < n; k++) if (has[k] && D.palette[M.tm[k]] && D.palette[M.tm[k]][0] === RC) roofCell[k] = 1;
+  }
   for (let cj = 0; cj <= nz; cj++) {
     for (let ci = 0; ci <= nx; ci++) {
       const cells = [];
@@ -478,7 +484,8 @@ function massModel(mi, culture) {
       cells.sort((p, q) => p[0] - q[0]);
       let g0 = 0;
       for (let g = 1; g <= cells.length; g++) {
-        if (g === cells.length || cells[g][0] - cells[g - 1][0] > S) {
+        const SS = g < cells.length && roofCell[cells[g][1]] && roofCell[cells[g - 1][1]] ? Math.max(S, 2.6 * res) : S;
+        if (g === cells.length || cells[g][0] - cells[g - 1][0] > SS) {
           let sum = 0;
           for (let x = g0; x < g; x++) sum += cells[x][0];
           const avg = sum / (g - g0);
@@ -543,7 +550,7 @@ function massModel(mi, culture) {
     quadOut(B, at(p0, -o2, 0, b1), at(p1, o2, 0, b1), at(p1, o2, o2, b1), at(p0, -o2, o2, b1), up, pc);
   };
   const addWin = (p0, p1, lo, hi, out, idx) => {
-    if (rock || steps || soft || idx % (res > 1 ? 2 : 3) !== 1) return;
+    if (rock || steps || soft || wallOnly || idx % (res > 1 ? 2 : 3) !== 1) return;
     const base = Math.max(lo, 0), top = hi;
     if (top - base < 3.2) return;
     const mx = (p0[0] + p1[0]) / 2 + out[0] * 0.05, mz = (p0[1] + p1[1]) / 2 + out[1] * 0.05;

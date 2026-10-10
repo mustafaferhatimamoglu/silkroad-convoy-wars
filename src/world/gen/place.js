@@ -84,7 +84,10 @@ export function placeRegionObjects(data, rx, rz, d) {
       // kucuk esya/ciftlik nesnesi (saman yigini, cit, araba...): yumusak siluet, mimari ve pencere yok
       const soft = !BUILDING.has(kind) || Math.max(w, dd) < 5 || h < 3;
       const ak = soft ? (archInfo(mi, m[8], culture) === 'rock' ? 'rock' : null) : archInfo(mi, m[8], culture);
-      const key = soft && ak !== 'rock' ? `mass:${mi}:${culture}+soft` : ak === 'rock' ? `mass:${mi}:${culture === 'desert' || culture === 'egypt' || culture === 'persian' ? 'redrock' : 'rock'}`
+      // sur/duvar benzeri (uzun ince ya da adindan): pencere yok
+      const Ms = plan.massing.models[mi], ext = [Ms.nx * Ms.res, Ms.nz * Ms.res];
+      const wallish = kind === 'wall' || kind === 'fence' || /^cj_[nesw]$|wall|rampart|_sung|fence/.test(m[8]) || (Math.max(...ext) > 60 && Math.max(...ext) / Math.max(1, Math.min(...ext)) > 4);
+      const key = soft && ak !== 'rock' ? `mass:${mi}:${culture}+soft` : !ak && wallish ? `mass:${mi}:${culture}+wall` : ak === 'rock' ? `mass:${mi}:${culture === 'desert' || culture === 'egypt' || culture === 'persian' ? 'redrock' : 'rock'}`
         : ak === 'steps' ? `mass:${mi}:${culture}+steps` : ak ? `arch:${mi}:${culture}:${ak}` : `mass:${mi}:${culture}`;
       out.push({ m: key, x: ox0, y: Y, z: -oz0, yaw, s: 1 });
       continue;
