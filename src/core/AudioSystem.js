@@ -90,6 +90,63 @@ export class AudioSystem {
     s.loopStart = Math.random(); s.loopEnd = s.loopStart + 0.9;
     return s;
   }
+
+  /**
+   * Sentezlenmis arayuz sesleri (dosya gerektirmez):
+   * hover: kristal hafif altin tisi (880-1320 Hz)
+   * click: tok oryantal arayuz tiklamasi
+   * start: derin bas ve rezonansli akor
+   */
+  uiSound(type = 'click') {
+    if (!this.ctx || this.ctx.state !== 'running') return;
+    const ctx = this.ctx;
+    const now = ctx.currentTime;
+    const vol = (this.settings ? this.settings.get('sfxVolume') : 0.8) ?? 0.8;
+    if (vol <= 0.01) return;
+    try {
+      if (type === 'hover') {
+        const osc = ctx.createOscillator();
+        const g = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(880, now);
+        osc.frequency.exponentialRampToValueAtTime(1320, now + 0.035);
+        g.gain.setValueAtTime(vol * 0.06, now);
+        g.gain.exponentialRampToValueAtTime(0.0001, now + 0.04);
+        osc.connect(g);
+        g.connect(this.master);
+        osc.start(now);
+        osc.stop(now + 0.045);
+      } else if (type === 'click') {
+        const osc = ctx.createOscillator();
+        const osc2 = ctx.createOscillator();
+        const g = ctx.createGain();
+        osc.type = 'triangle';
+        osc2.type = 'sine';
+        osc.frequency.setValueAtTime(440, now);
+        osc.frequency.exponentialRampToValueAtTime(880, now + 0.06);
+        osc2.frequency.setValueAtTime(660, now);
+        osc2.frequency.exponentialRampToValueAtTime(1320, now + 0.06);
+        g.gain.setValueAtTime(vol * 0.16, now);
+        g.gain.exponentialRampToValueAtTime(0.0001, now + 0.075);
+        osc.connect(g); osc2.connect(g);
+        g.connect(this.master);
+        osc.start(now); osc2.start(now);
+        osc.stop(now + 0.08); osc2.stop(now + 0.08);
+      } else if (type === 'start') {
+        const freqs = [220, 330, 440, 660];
+        for (const f of freqs) {
+          const osc = ctx.createOscillator();
+          const g = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(f, now);
+          g.gain.setValueAtTime(vol * 0.12, now);
+          g.gain.exponentialRampToValueAtTime(0.0001, now + 0.45);
+          osc.connect(g); g.connect(this.master);
+          osc.start(now); osc.stop(now + 0.5);
+        }
+      }
+    } catch (_) {}
+  }
 }
 
 /** Bolgeye gore uretken muzik: sehre yakinsa sehir (ritimli), degilse kultur bolgesinin kir hali. */

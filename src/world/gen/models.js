@@ -868,51 +868,324 @@ function flag(culture, h) {
   return [part(pole, C.trim, { uvScale: 1 }), part(cloth, 'build/canvas_red', { uvScale: 1, collide: false })];
 }
 
-/** Heykel: kaide + govde + bas (yer tutucu soylu siluet). */
+/** Cin Zirhli General / Imparator Heykeli (Jangan). */
+function chineseGeneralStatue(w, h, C) {
+  const parts = [];
+  const pW = Math.max(1.8, w * 0.85);
+  const base1 = box(pW * 1.1, h * 0.08, pW * 1.1, 0, 0, 0);
+  const base2 = box(pW * 0.95, h * 0.16, pW * 0.95, 0, h * 0.08, 0);
+  const baseCap = box(pW * 1.02, h * 0.05, pW * 1.02, 0, h * 0.24, 0);
+  parts.push(part(mergeGeos([base1, base2, baseCap]), C.wall, { uvScale: 2 }));
+
+  const fig = [];
+  const y0 = h * 0.29, fH = h * 0.68, sW = w * 0.38;
+  const legH = fH * 0.38;
+  for (const sx of [-sW * 0.32, sW * 0.32]) {
+    const leg = new THREE.CylinderGeometry(sW * 0.18, sW * 0.24, legH, 8);
+    placed(leg, sx, y0 + legH / 2, 0);
+    const boot = box(sW * 0.38, legH * 0.28, sW * 0.52, sx, y0, sW * 0.06);
+    fig.push(leg, boot);
+  }
+  const torsoH = fH * 0.36;
+  const torso = new THREE.CylinderGeometry(sW * 0.58, sW * 0.48, torsoH, 8);
+  placed(torso, 0, y0 + legH + torsoH / 2, 0);
+  const belt = box(sW * 1.25, torsoH * 0.18, sW * 0.95, 0, y0 + legH + torsoH * 0.2, 0);
+  const shY = y0 + legH + torsoH * 0.85;
+  for (const sx of [-sW * 0.72, sW * 0.72]) {
+    const pld = new THREE.SphereGeometry(sW * 0.26, 8, 6);
+    pld.scale(1.2, 0.9, 1.2);
+    placed(pld, sx, shY, 0);
+    const arm = new THREE.CylinderGeometry(sW * 0.15, sW * 0.17, fH * 0.34, 8);
+    arm.rotateZ(sx > 0 ? 0.3 : -0.3);
+    placed(arm, sx * 0.95, shY - fH * 0.18, 0);
+    fig.push(pld, arm);
+  }
+  const headY = y0 + legH + torsoH + fH * 0.10;
+  const head = new THREE.SphereGeometry(sW * 0.22, 10, 8);
+  head.scale(0.9, 1.05, 0.95);
+  placed(head, 0, headY, 0);
+  const helmet = new THREE.ConeGeometry(sW * 0.28, fH * 0.16, 8);
+  placed(helmet, 0, headY + fH * 0.09, 0);
+  fig.push(torso, belt, head, helmet);
+
+  const sword = [
+    box(sW * 0.10, fH * 0.55, sW * 0.06, sW * 0.45, y0, sW * 0.35),
+    box(sW * 0.32, sW * 0.08, sW * 0.12, sW * 0.45, y0 + fH * 0.45, sW * 0.35),
+    box(sW * 0.08, fH * 0.16, sW * 0.08, sW * 0.45, y0 + fH * 0.52, sW * 0.35),
+  ];
+  fig.push(...sword);
+  const cape = box(sW * 1.3, fH * 0.72, sW * 0.14, 0, y0 + fH * 0.36, -sW * 0.45);
+
+  parts.push(part(tone(mergeGeos(fig), [0.85, 0.82, 0.78]), 'build/marble', { uvScale: 1.5 }));
+  parts.push(part(tone(cape, [0.55, 0.22, 0.18]), 'build/canvas_red', { uvScale: 1.5, collide: false }));
+  return parts;
+}
+
+/** Misir Heykeli: Sfenks ya da Tahtta Firavun (Iskenderiye). */
+function egyptianStatue(w, h, C) {
+  const parts = [];
+  const pW = Math.max(1.8, w * 0.85);
+  if (w > h * 0.85 || w > 5.5) {
+    const base = box(w * 0.95, h * 0.18, w * 1.35, 0, 0, 0);
+    parts.push(part(base, 'build/sandstone_blocks', { uvScale: 2 }));
+    const sph = [];
+    const y0 = h * 0.18;
+    const body = new THREE.CylinderGeometry(h * 0.34, h * 0.38, w * 0.88, 10);
+    body.rotateX(Math.PI / 2);
+    placed(body, 0, y0 + h * 0.30, -w * 0.12);
+    const hip = new THREE.SphereGeometry(h * 0.36, 10, 8);
+    hip.scale(1.1, 1.0, 1.2);
+    placed(hip, 0, y0 + h * 0.32, -w * 0.52);
+    for (const sx of [-h * 0.26, h * 0.26]) {
+      const paw = box(h * 0.22, h * 0.18, w * 0.52, sx, y0, w * 0.24);
+      sph.push(paw);
+    }
+    const chest = box(h * 0.48, h * 0.36, h * 0.40, 0, y0 + h * 0.45, w * 0.18);
+    const head = new THREE.SphereGeometry(h * 0.22, 12, 10);
+    placed(head, 0, y0 + h * 0.70, w * 0.20);
+    const nemesL = box(h * 0.12, h * 0.30, h * 0.25, -h * 0.22, y0 + h * 0.58, w * 0.20);
+    const nemesR = box(h * 0.12, h * 0.30, h * 0.25, h * 0.22, y0 + h * 0.58, w * 0.20);
+    const beard = box(h * 0.08, h * 0.18, h * 0.08, 0, y0 + h * 0.54, w * 0.34);
+    sph.push(body, hip, chest, head, nemesL, nemesR, beard);
+    parts.push(part(tone(mergeGeos(sph), [0.84, 0.75, 0.60]), 'build/sandstone_blocks', { uvScale: 1.5 }));
+    return parts;
+  }
+
+  const base = box(pW * 1.05, h * 0.12, pW * 1.05, 0, 0, 0);
+  parts.push(part(base, 'build/sandstone_blocks', { uvScale: 2 }));
+  const fig = [];
+  const y0 = h * 0.12, fH = h * 0.82, sW = w * 0.35;
+  for (const sx of [-sW * 0.28, sW * 0.28]) {
+    const leg = box(sW * 0.32, fH * 0.45, sW * 0.38, sx, y0, 0);
+    fig.push(leg);
+  }
+  const kilt = box(sW * 1.1, fH * 0.25, sW * 0.7, 0, y0 + fH * 0.32, 0);
+  const torso = box(sW * 0.95, fH * 0.35, sW * 0.65, 0, y0 + fH * 0.45, 0);
+  const head = new THREE.SphereGeometry(sW * 0.25, 10, 8);
+  head.scale(0.9, 1.1, 0.95);
+  placed(head, 0, y0 + fH * 0.86, 0);
+  const nemes = box(sW * 0.85, fH * 0.28, sW * 0.55, 0, y0 + fH * 0.80, -sW * 0.08);
+  const beard = box(sW * 0.12, fH * 0.15, sW * 0.12, 0, y0 + fH * 0.72, sW * 0.26);
+  const pillar = box(sW * 0.6, fH * 0.95, sW * 0.25, 0, y0, -sW * 0.32);
+  fig.push(kilt, torso, head, nemes, beard, pillar);
+  parts.push(part(tone(mergeGeos(fig), [0.86, 0.76, 0.60]), 'build/sandstone_blocks', { uvScale: 1.5 }));
+  return parts;
+}
+
+/** Klasik Roma / Bizans Mermer Kahraman / Imparator Heykeli (Konstantiniyye, Semerkant). */
+function classicalStatue(w, h, C) {
+  const parts = [];
+  const pW = Math.max(1.8, w * 0.85);
+  const base1 = box(pW * 1.05, h * 0.09, pW * 1.05, 0, 0, 0);
+  const base2 = box(pW * 0.85, h * 0.18, pW * 0.85, 0, h * 0.09, 0);
+  const baseCap = box(pW * 0.98, h * 0.06, pW * 0.98, 0, h * 0.27, 0);
+  parts.push(part(mergeGeos([base1, base2, baseCap]), 'build/stone_wall', { uvScale: 2 }));
+
+  const fig = [];
+  const y0 = h * 0.33, fH = h * 0.64, sW = w * 0.36;
+  const legH = fH * 0.40;
+  const legR = new THREE.CylinderGeometry(sW * 0.16, sW * 0.22, legH, 8);
+  placed(legR, sW * 0.24, y0 + legH / 2, 0);
+  const legL = new THREE.CylinderGeometry(sW * 0.16, sW * 0.20, legH * 0.96, 8);
+  legL.rotateX(0.15);
+  placed(legL, -sW * 0.24, y0 + legH / 2, sW * 0.12);
+  const skirt = new THREE.CylinderGeometry(sW * 0.45, sW * 0.52, fH * 0.22, 8);
+  placed(skirt, 0, y0 + legH * 0.8, 0);
+  const torso = new THREE.CylinderGeometry(sW * 0.50, sW * 0.44, fH * 0.36, 8);
+  placed(torso, 0, y0 + legH + fH * 0.18, 0);
+  const head = new THREE.SphereGeometry(sW * 0.22, 10, 8);
+  head.scale(0.92, 1.08, 0.95);
+  placed(head, 0, y0 + fH * 0.90, 0);
+  const crown = new THREE.TorusGeometry(sW * 0.21, sW * 0.04, 6, 16);
+  crown.rotateX(Math.PI / 2 + 0.2);
+  placed(crown, 0, y0 + fH * 0.93, 0);
+  const armR = new THREE.CylinderGeometry(sW * 0.12, sW * 0.15, fH * 0.38, 8);
+  armR.rotateZ(0.55);
+  placed(armR, sW * 0.55, y0 + fH * 0.68, 0);
+  const spear = box(sW * 0.06, fH * 0.95, sW * 0.06, sW * 0.72, y0 + fH * 0.30, sW * 0.12);
+  const armL = new THREE.CylinderGeometry(sW * 0.12, sW * 0.14, fH * 0.34, 8);
+  armL.rotateZ(-0.25);
+  placed(armL, -sW * 0.52, y0 + fH * 0.64, 0);
+  const drape = box(sW * 0.32, fH * 0.55, sW * 0.22, -sW * 0.58, y0 + fH * 0.35, 0);
+
+  fig.push(legR, legL, skirt, torso, head, crown, armR, spear, armL, drape);
+  parts.push(part(tone(mergeGeos(fig), [0.94, 0.92, 0.88]), 'build/marble', { uvScale: 1.5 }));
+  return parts;
+}
+
+/** Heykel: kulture gore zengin model (Cin generali, Misir sfenks/firavunu, Bizans kahramani). */
 function statue(culture, w, h) {
   const C = CULTURE[culture] || CULTURE.desert;
-  const ped = box(Math.max(1, w * 0.8), h * 0.3, Math.max(1, w * 0.8));
-  const body = new THREE.CylinderGeometry(w * 0.18, w * 0.26, h * 0.55, 8); body.translate(0, h * 0.3 + h * 0.275, 0);
-  const head = new THREE.SphereGeometry(w * 0.14, 8, 6); head.translate(0, h * 0.92, 0);
-  return [part(ped, C.wall, { uvScale: 2 }), part(mergeGeos([body, head]), 'build/marble', { uvScale: 1.5 })];
+  if (culture === 'china') return chineseGeneralStatue(w, h, C);
+  if (culture === 'egypt') return egyptianStatue(w, h, C);
+  return classicalStatue(w, h, C);
+}
+
+/** Misir Dikilitasi (Obelisk): kademeli kaide, daralan monolit sutun, altin piramidiyon. */
+function obelisk(culture, h = 26) {
+  const base1 = box(5.2, 1.2, 5.2, 0, 0, 0);
+  const base2 = box(4.2, 1.0, 4.2, 0, 1.2, 0);
+  const ped = mergeGeos([base1, base2]);
+  const shaftH = Math.max(8, h - 4.8);
+  const shaft = new THREE.CylinderGeometry(1.2, 1.85, shaftH, 4);
+  shaft.rotateY(Math.PI / 4);
+  placed(shaft, 0, 2.2 + shaftH / 2, 0);
+  const pyr = new THREE.ConeGeometry(1.7, 2.6, 4);
+  pyr.rotateY(Math.PI / 4);
+  placed(pyr, 0, 2.2 + shaftH + 1.3, 0);
+  return [
+    part(mergeGeos([ped, shaft]), 'build/sandstone_blocks', { uvScale: 2 }),
+    part(tone(pyr, [1.35, 1.15, 0.45]), 'build/marble', { uvScale: 1, collide: false }),
+  ];
+}
+
+/** Sehir ici havuz ve fiskiye (Semerkant, Konstantiniyye meydanlari). */
+function fountain(culture, w = 9.8, h = 4.0) {
+  const parts = [];
+  const R = Math.max(3.2, w * 0.48);
+  const rimOuter = new THREE.CylinderGeometry(R, R * 1.04, 0.75, 16);
+  placed(rimOuter, 0, 0.38, 0);
+  const step = new THREE.CylinderGeometry(R * 1.15, R * 1.18, 0.20, 16);
+  placed(step, 0, 0.10, 0);
+  parts.push(part(mergeGeos([rimOuter, step]), 'build/marble', { uvScale: 2 }));
+
+  const waterPl = new THREE.CylinderGeometry(R * 0.86, R * 0.86, 0.06, 16);
+  placed(waterPl, 0, 0.62, 0);
+  const waterColor = culture === 'persian' ? [0.25, 0.75, 0.85] : [0.30, 0.70, 0.80];
+  parts.push(part(tone(waterPl, waterColor), 'build/mosaic_turquoise', { uvScale: 1.5, collide: false }));
+
+  const colBase = new THREE.CylinderGeometry(R * 0.25, R * 0.32, h * 0.35, 12);
+  placed(colBase, 0, 0.35 + h * 0.175, 0);
+  const bowl1 = new THREE.CylinderGeometry(R * 0.48, R * 0.20, 0.35, 16);
+  placed(bowl1, 0, 0.35 + h * 0.35, 0);
+  const colMid = new THREE.CylinderGeometry(R * 0.15, R * 0.22, h * 0.28, 10);
+  placed(colMid, 0, 0.35 + h * 0.50, 0);
+  const bowl2 = new THREE.CylinderGeometry(R * 0.26, R * 0.12, 0.25, 16);
+  placed(bowl2, 0, 0.35 + h * 0.65, 0);
+  const finial = new THREE.SphereGeometry(R * 0.10, 8, 8);
+  placed(finial, 0, 0.35 + h * 0.82, 0);
+  const fStone = mergeGeos([colBase, bowl1, colMid, bowl2, finial]);
+  parts.push(part(fStone, culture === 'persian' ? 'build/mosaic_turquoise' : 'build/marble', { uvScale: 1.5 }));
+
+  const waterSpout = new THREE.CylinderGeometry(R * 0.04, R * 0.06, h * 0.35, 8);
+  placed(waterSpout, 0, 0.35 + h * 0.85 + h * 0.175, 0);
+  const cascade1 = new THREE.ConeGeometry(R * 0.30, h * 0.28, 12, 1, true);
+  placed(cascade1, 0, 0.35 + h * 0.50, 0);
+  const cascade2 = new THREE.ConeGeometry(R * 0.52, h * 0.35, 14, 1, true);
+  placed(cascade2, 0, 0.35 + h * 0.20, 0);
+  const spray = mergeGeos([waterSpout, cascade1, cascade2]);
+  parts.push(part(tone(spray, [0.85, 1.25, 1.45]), 'build/plaster_white', { uvScale: 1, collide: false }));
+  return parts;
+}
+
+/** Selale (kayalik ve nehir dokulusu): su perdesi, kopuk tabani, islak kaya cercevesi. */
+function waterfall(w = 12, h = 18) {
+  const parts = [];
+  const W = Math.max(5, w), H = Math.max(6, h);
+  const sheets = [];
+  for (const layer of [0, 0.35]) {
+    const geo = new THREE.PlaneGeometry(W * (layer ? 0.92 : 1.0), H, 8, 12);
+    const pos = geo.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const y = pos.getY(i);
+      const t = (y + H / 2) / H;
+      const zCurve = Math.sin(t * Math.PI) * (1.2 + layer) + (1 - t) * 1.8;
+      pos.setZ(i, zCurve + layer);
+    }
+    geo.computeVertexNormals();
+    placed(geo, 0, H / 2, 0);
+    sheets.push(geo);
+  }
+  const apron = new THREE.CylinderGeometry(W * 0.65, W * 0.85, 0.8, 16);
+  apron.scale(1, 0.4, 0.6);
+  placed(apron, 0, 0.4, 1.8);
+  const rocks = [];
+  for (const sx of [-W / 2 - 1.2, W / 2 + 1.2]) {
+    const rGeo = new THREE.IcosahedronGeometry(Math.min(5, H * 0.25), 1);
+    rGeo.scale(0.8, 1.8, 1.2);
+    placed(rGeo, sx, H * 0.4, 0);
+    rocks.push(rGeo);
+  }
+  parts.push(part(tone(mergeGeos(sheets), [0.85, 1.35, 1.55]), 'build/canvas', { uvScale: 1, collide: false }));
+  parts.push(part(tone(apron, [1.1, 1.4, 1.6]), 'build/plaster_white', { uvScale: 1, collide: false }));
+  parts.push(part(tone(mergeGeos(rocks), [0.4, 0.42, 0.38]), 'terrain/rock', { uvScale: 2 }));
+  return parts;
 }
 
 /** Bekci aslan heykeli (oturan, on pencesi top uzerinde), +z yonune bakar; boy ~2.1 m. */
 function lion(rnd) {
   const g = [];
   const ell = (r, x, y, z, sx, sy, sz, w = 10, hh = 8) => { const s = new THREE.SphereGeometry(r, w, hh); s.scale(sx, sy, sz); s.translate(x, y, z); g.push(s); };
-  ell(0.55, 0, 0.5, -0.35, 1, 0.85, 1.25);           // kalca
-  ell(0.5, 0, 0.98, 0.18, 0.95, 1.25, 0.85);         // gogus
-  ell(0.46, 0, 1.68, 0.36, 1.18, 1.05, 1.0);         // yele
-  ell(0.3, 0, 1.62, 0.66, 1.0, 0.9, 1.0);            // yuz
-  ell(0.13, 0, 1.55, 0.92, 1.3, 0.8, 0.8);           // burun
-  for (let k = 0; k < 9; k++) {                       // yele bukleleri
-    const a = (k / 9) * Math.PI * 2;
-    ell(0.12, Math.cos(a) * 0.46, 1.68 + Math.sin(a) * 0.42, 0.42 + rnd() * 0.05, 1, 1, 1, 6, 5);
+  const ped = box(1.15, 0.22, 1.75, 0, 0, 0.05);
+  g.push(ped);
+  ell(0.55, 0, 0.62, -0.32, 1, 0.88, 1.25);
+  ell(0.52, 0, 1.10, 0.20, 0.98, 1.28, 0.88);
+  ell(0.48, 0, 1.78, 0.36, 1.20, 1.08, 1.02);
+  ell(0.32, 0, 1.72, 0.68, 1.02, 0.92, 1.0);
+  ell(0.14, 0, 1.66, 0.94, 1.35, 0.82, 0.82);
+  ell(0.12, 0, 1.52, 0.86, 1.1, 0.65, 0.95);
+  for (let k = 0; k < 12; k++) {
+    const a = (k / 12) * Math.PI * 2;
+    ell(0.13, Math.cos(a) * 0.48, 1.78 + Math.sin(a) * 0.44, 0.40 + (k % 2) * 0.08, 1, 1, 1, 6, 5);
   }
   for (const sx of [-1, 1]) {
-    const leg = new THREE.CylinderGeometry(0.12, 0.15, 0.95, 8);
-    leg.rotateX(-0.12); leg.translate(sx * 0.24, 0.47, 0.42);
+    const leg = new THREE.CylinderGeometry(0.13, 0.16, 1.0, 8);
+    leg.rotateX(-0.10); leg.translate(sx * 0.26, 0.56, 0.44);
     g.push(leg);
-    ell(0.17, sx * 0.24, 0.1, 0.55, 1, 0.6, 1.3);     // pence
-    ell(0.22, sx * 0.48, 0.32, -0.3, 0.6, 1.0, 1.4); // arka bacak
+    ell(0.18, sx * 0.26, 0.28, 0.58, 1, 0.62, 1.35);
+    for (const tx of [-0.07, 0, 0.07]) ell(0.04, sx * 0.26 + tx, 0.26, 0.76, 0.7, 0.7, 1.4, 5, 4);
+    ell(0.24, sx * 0.50, 0.44, -0.28, 0.62, 1.05, 1.42);
   }
-  ell(0.2, 0.38, 0.22, 0.78, 1, 1, 1, 10, 8);         // top
-  ell(0.1, 0, 0.75, -0.9, 1, 1, 1, 6, 5);             // kuyruk
-  ell(0.13, 0, 1.0, -0.98, 1.4, 1, 1, 6, 5);
-  return [part(tone(mergeGeos(g), [0.36, 0.34, 0.31]), 'build/marble', { uvScale: 0.8 })];
+  ell(0.22, 0.36, 0.34, 0.78, 1, 1, 1, 12, 10);
+  const band = new THREE.TorusGeometry(0.23, 0.025, 6, 16);
+  band.rotateX(0.4); placed(band, 0.36, 0.34, 0.78);
+  g.push(band);
+  ell(0.11, 0, 0.85, -0.88, 1, 1, 1, 6, 5);
+  ell(0.14, 0, 1.10, -0.96, 1.4, 1, 1, 6, 5);
+  return [part(tone(mergeGeos(g), [0.82, 0.78, 0.72]), 'build/marble', { uvScale: 1.0 })];
 }
 
-/** Park banki: tahta oturak ve arkalik, dokme demir ayaklar; uzunluk L (yerel x). */
-function bench(L) {
+/** Park ve bahce banki: ergonomik 5 citali oturak, 4 citali arkalik, dokme demir kivrimli ayaklar ve kolcaklar. */
+function bench(L = 2.2, culture = 'common') {
   const wood = [], iron = [];
-  for (let k = 0; k < 3; k++) wood.push(box(L, 0.05, 0.12, 0, 0.45, -0.18 + k * 0.15));
-  for (let k = 0; k < 2; k++) { const b = box(L, 0.12, 0.04, 0, 0.62 + k * 0.17, 0.26); wood.push(b); }
-  for (const sx of [-1, 1]) {
-    iron.push(box(0.07, 0.48, 0.5, sx * (L / 2 - 0.15), 0, 0));
-    iron.push(box(0.07, 0.5, 0.06, sx * (L / 2 - 0.15), 0.48, 0.27));
+  const W = Math.max(1.4, L);
+  for (let k = 0; k < 5; k++) {
+    const z = -0.20 + k * 0.095;
+    const y = 0.44 - Math.max(0, -z - 0.12) * 0.25;
+    wood.push(box(W, 0.038, 0.075, 0, y, z));
   }
-  return [part(tone(mergeGeos(wood), [0.7, 0.5, 0.36]), 'build/wood_planks', { uvScale: 1 }), part(tone(mergeGeos(iron), [0.2, 0.2, 0.22]), 'build/plaster_white', { uvScale: 1 })];
+  for (let k = 0; k < 4; k++) {
+    const y = 0.58 + k * 0.105;
+    const z = 0.22 + k * 0.035;
+    const thick = k === 3 ? 0.045 : 0.032;
+    const depth = k === 3 ? 0.085 : 0.07;
+    wood.push(box(W, depth, thick, 0, y, z));
+  }
+  const legs = [-W / 2 + 0.12, W / 2 - 0.12];
+  if (W >= 2.4) legs.push(0);
+  for (const sx of legs) {
+    const fLeg = box(0.06, 0.44, 0.07, sx, 0, -0.18);
+    const bLeg = box(0.06, 0.44, 0.07, sx, 0, 0.18);
+    const seatRail = box(0.06, 0.05, 0.46, sx, 0.40, 0);
+    const backRail = box(0.06, 0.48, 0.05, sx, 0.45, 0.26);
+    const armPost = box(0.05, 0.20, 0.05, sx, 0.44, -0.16);
+    const armTop = box(0.06, 0.04, 0.40, sx, 0.63, 0.02);
+    const armScroll = new THREE.CylinderGeometry(0.04, 0.04, 0.06, 8);
+    armScroll.rotateZ(Math.PI / 2);
+    placed(armScroll, sx, 0.62, -0.18);
+    iron.push(fLeg, bLeg, seatRail, backRail, armPost, armTop, armScroll);
+  }
+  const stretch = new THREE.CylinderGeometry(0.022, 0.022, W - 0.2, 6);
+  stretch.rotateZ(Math.PI / 2);
+  placed(stretch, 0, 0.14, 0);
+  iron.push(stretch);
+
+  const woodTone = culture === 'persian' || culture === 'china' ? [0.72, 0.48, 0.32] : [0.62, 0.44, 0.30];
+  const ironTone = culture === 'byzantine' ? [0.18, 0.20, 0.22] : [0.16, 0.16, 0.17];
+  return [
+    part(tone(mergeGeos(wood), woodTone), 'build/wood_planks', { uvScale: 1.2 }),
+    part(tone(mergeGeos(iron), ironTone), 'build/stone_wall', { uvScale: 1 }),
+  ];
 }
 
 /** Pazar tezgahi: tahta masa + bez gölgelik. */
@@ -1165,7 +1438,10 @@ export function model(key) {
   else if (kind === 'flag') m = flag(a[1], Number(a[2]));
   else if (kind === 'statue') m = statue(a[1], Number(a[2]), Number(a[3]));
   else if (kind === 'lion') m = lion(rnd);
-  else if (kind === 'bench') m = bench(Number(a[1]));
+  else if (kind === 'bench') m = a[2] !== undefined ? bench(Number(a[2]), a[1]) : bench(Number(a[1]), 'common');
+  else if (kind === 'fountain') m = fountain(a[1], Number(a[2]), Number(a[3]));
+  else if (kind === 'waterfall') m = waterfall(Number(a[1]), Number(a[2]));
+  else if (kind === 'obelisk') m = obelisk(a[1], Number(a[2]));
   else if (kind === 'stall') m = stall(a[1], Number(a[2]), Number(a[3]));
   else if (kind === 'landmark') m = landmark(a[1], rnd);
   else if (kind === 'pier') m = pier(Number(a[1]));

@@ -17,7 +17,12 @@ const q = (v, step = 0.5) => Math.max(step, Math.round(v / step) * step);
 /** Sablon modelinin bizim turumuz; adlardan ince ayar. */
 function refine(kind, name, w, d, h) {
   const n = name.toLowerCase();
-  if (/smoke|_fx|effect|particle|fire-|_fire|brazier|water_|waterfall|shadow/.test(n)) return 'skip';
+  if (/smoke|_fx|effect|particle|fire-|_fire|brazier|shadow/.test(n)) return 'skip';
+  if (/grs_water|water_big|_water\b/.test(n)) return 'skip'; // su yuzeyi nesnesi: cim degil, su sisteminde cizilir
+  if (/fountain/.test(n)) return 'fountain';
+  if (/waterfall|cascade/.test(n)) return 'waterfall';
+  if (/obelisk/.test(n)) return 'obelisk';
+  if (/statue|sculpt/.test(n)) return 'statue';
   if (kind === 'house' || kind === 'prop') {
     if (/petra|canyon|rocky|_rock|cliff|crag/.test(n)) return 'rockmass';
     if (/tree|palm/.test(n)) return 'tree';
@@ -67,7 +72,7 @@ export function placeRegionObjects(data, rx, rz, d) {
       const lx = X + c * cx + s * cz - x0, lz = Z - (-s * cx + c * cz) - z0;
       if (lx >= 0 && lx < REGION_M && lz >= 0 && lz < REGION_M) {
         const along = w >= dd;
-        out.push({ m: `bench:${q(Math.max(w, dd), 0.5)}`, x: lx, y: H(lx, lz) - 0.02, z: -lz, yaw: along ? yaw : yaw + Math.PI / 2, s: 1 });
+        out.push({ m: `bench:${culture}:${q(Math.max(w, dd), 0.5)}`, x: lx, y: H(lx, lz) - 0.02, z: -lz, yaw: along ? yaw : yaw + Math.PI / 2, s: 1 });
       }
       continue;
     }
@@ -77,8 +82,9 @@ export function placeRegionObjects(data, rx, rz, d) {
       if (ox >= 0 && ox < REGION_M && oz >= 0 && oz < REGION_M) out.push({ m: 'lion:0', x: ox, y: Y + Math.max(0, by0), z: -oz, yaw, s: Math.max(0.5, h / 2.1) });
       continue;
     }
-    // yapi siluetten: orijinal konum, yon ve yukseklik (model kendi ekseninde); lambalar bizim
-    if (!VEG.has(kind) && kind !== 'lamp' && plan.massing.models && plan.massing.models[mi]) {
+    // yapi siluetten: orijinal konum, yon ve yukseklik; ozel modellerimiz (heykel, fiskiye, obelisk, selale, lamba) siluete girmesin
+    const SPECIAL_MODELS = new Set(['lamp', 'statue', 'fountain', 'obelisk', 'waterfall']);
+    if (!VEG.has(kind) && !SPECIAL_MODELS.has(kind) && plan.massing.models && plan.massing.models[mi]) {
       const ox0 = X - x0, oz0 = Z - z0;
       if (ox0 < -60 || ox0 > REGION_M + 60 || oz0 < -60 || oz0 > REGION_M + 60) continue;
       // kucuk esya/ciftlik nesnesi (saman yigini, cit, araba...): yumusak siluet, mimari ve pencere yok
@@ -178,6 +184,9 @@ export function placeRegionObjects(data, rx, rz, d) {
       case 'lamp': push(`lamp:${culture}:${q(Math.min(Math.max(h, 1.5), 8), 0.5)}`, yaw, 1, gy - 0.1); break;
       case 'flag': push(`flag:${culture}:${q(Math.min(Math.max(h, 3), 14), 1)}`, yaw, 1, gy - 0.1); break;
       case 'statue': push(`statue:${culture}:${q(Math.max(w, dd), 0.5)}:${q(h, 0.5)}`, yaw, 1, gy - 0.2); break;
+      case 'obelisk': push(`obelisk:${culture}:${q(Math.max(12, h), 1)}`, yaw, 1, gy - 0.1); break;
+      case 'fountain': push(`fountain:${culture}:${q(Math.max(w, dd), 0.5)}:${q(Math.max(2.5, h), 0.5)}`, yaw, 1, gy - 0.05); break;
+      case 'waterfall': push(`waterfall:${q(Math.max(w, dd), 1)}:${q(Math.max(4, h), 1)}`, yaw, 1, gy); break;
       case 'stall': push(`stall:${culture}:${q(w, 0.5)}:${q(dd, 0.5)}`, yaw, 1, gy - 0.05); break;
       case 'cart': push(`block:wood:${q(w, 0.5)}:${q(dd, 0.5)}:${q(Math.min(h, 3), 0.5)}`, yaw, 1, gy - 0.05); break;
       default:

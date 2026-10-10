@@ -46,24 +46,59 @@ export class Menu {
     this.clear();
     this.game.garageCamera(false);
     const s = this.game.app.settings;
+    const last = s.get('lastCity') || 'hotan';
+    const city = CITIES.find((c) => c.id === last) || CITIES[2];
     const el = h(`<div id="menu" class="interactive"><div class="box">
+      <div class="menu-decor">✦ ═══════ ❖ ═══════ ✦</div>
       <h1>SILKROAD</h1>
-      <div class="ver">CONVOY WARS · ${VERSION}</div>
-      <button class="btn" data-a="drive">Serbest Sürüş<small>İpek Yolu dünyasında dolaş: şehirler, feribotlar, ışınlanma kapıları</small></button>
-      <button class="btn" data-a="mp">Çok Oyunculu<small>Arkadaşlarınla serbest gezinti, yarış ya da takım olup botlara karşı</small></button>
-      <button class="btn" data-a="race">Yarış: Botlara Karşı<small>8 araç · PIT manevrası, blok, kestirme; 4 zorluk seviyesi</small></button>
-      <button class="btn" data-a="rally">Ralli: Zamana Karşı<small>${Object.keys(RALLY_STAGES).length} etap · pilot notlarıyla kontrol noktalı etap</small></button>
-      <button class="btn" data-a="garage">Garaj<small>Sürüm ve renk seçimi</small></button>
-      <button class="btn secondary" data-a="explore">Dünya Gezgini<small>Serbest kamera ile haritayı gez</small></button>
-      <button class="btn secondary" data-a="settings">Ayarlar</button>
-      <div class="foot">Araç: <b>${VARIANTS[s.get('vehicleVariant')]?.name || ''}</b> · ${PAINTS[s.get('vehicleColor')]?.name || ''}<br>
-      Kumanda desteklenir. Esc: menü · F: tam ekran (fare ile bakış) · M: harita · F3: performans bilgisi</div>
+      <div class="ver">CONVOY WARS <span class="badge">v${VERSION}</span></div>
+
+      <div class="city-selector" data-a="citySelect" title="Başlangıç şehrini değiştir">
+        <span class="city-icon">🏛️</span>
+        <div class="city-meta">
+          <div class="city-sub">BAŞLANGIÇ ŞEHRİ</div>
+          <div class="city-title">${city.name} <small>· ${city.desc}</small></div>
+        </div>
+        <span class="city-caret">▾</span>
+      </div>
+
+      <div class="menu-actions">
+        <button class="btn main-cta" data-a="drive"><span class="btn-glyph">🧭</span><span class="btn-body">Serbest Sürüş<small>${city.name}'da başla · 6 antik başkent, feribotlar, ışınlanma kapıları</small></span></button>
+        <button class="btn" data-a="mp"><span class="btn-glyph">⚔️</span><span class="btn-body">Çok Oyunculu<small>Arkadaşlarınla serbest gezinti, yarış ya da takım olup botlara karşı</small></span></button>
+        <button class="btn" data-a="race"><span class="btn-glyph">🏁</span><span class="btn-body">Yarış: Botlara Karşı<small>8 araç · PIT manevrası, blok, kestirme; 4 zorluk seviyesi</small></span></button>
+        <button class="btn" data-a="rally"><span class="btn-glyph">⏱️</span><span class="btn-body">Ralli: Zamana Karşı<small>${Object.keys(RALLY_STAGES).length} etap · pilot notlarıyla kontrol noktalı etap</small></span></button>
+        <button class="btn" data-a="garage"><span class="btn-glyph">🚗</span><span class="btn-body">Garaj<small>6 araç modeli (Kartal, Hilux, F-150, RS 6, Tank) ve renk seçimi</small></span></button>
+        <div class="row" style="margin-top:4px">
+          <button class="btn secondary" data-a="explore" style="flex:1"><span class="btn-glyph">🗺️</span> Dünya Gezgini</button>
+          <button class="btn secondary" data-a="settings" style="flex:1"><span class="btn-glyph">⚙️</span> Ayarlar</button>
+        </div>
+      </div>
+
+      <div class="foot">
+        <div class="foot-car">
+          <span class="swatch-mini" style="background:${PAINTS[s.get('vehicleColor')]?.hex || '#d8b068'}"></span>
+          <span><b>${VARIANTS[s.get('vehicleVariant')]?.name || ''}</b> · ${PAINTS[s.get('vehicleColor')]?.name || ''}</span>
+        </div>
+        <div class="foot-badges">
+          <span class="pill">Esc Menü</span>
+          <span class="pill">F Tam Ekran</span>
+          <span class="pill">M Harita</span>
+          <span class="pill">F3 FPS</span>
+        </div>
+      </div>
     </div></div>`);
+
+    el.addEventListener('pointerenter', (e) => {
+      if (e.target.closest('.btn, .city-selector, .card')) this.game.app.audio.uiSound?.('hover');
+    }, true);
+
     el.addEventListener('click', (e) => {
       const a = e.target.closest('[data-a]');
       if (!a) return;
+      this.game.app.audio.uiSound?.('click');
       const act = a.dataset.a;
       if (act === 'drive') this.cityPicker('drive');
+      else if (act === 'citySelect') this.cityPicker('drive');
       else if (act === 'explore') this.cityPicker('explore');
       else if (act === 'rally') this.stagePicker();
       else if (act === 'race') this.raceSetup();
@@ -85,17 +120,36 @@ export class Menu {
       <button class="btn" data-a="go" style="width:auto">Başla →</button></div>
     </div>`);
     let sel = last;
+    el.addEventListener('pointerenter', (e) => {
+      if (e.target.closest('.card, .btn')) this.game.app.audio.uiSound?.('hover');
+    }, true);
     el.addEventListener('click', (e) => {
       const c = e.target.closest('[data-c]');
-      if (c) { sel = c.dataset.c; el.querySelectorAll('.card').forEach((x) => x.classList.toggle('sel', x === c)); return; }
+      if (c) {
+        this.game.app.audio.uiSound?.('click');
+        sel = c.dataset.c;
+        el.querySelectorAll('.card').forEach((x) => x.classList.toggle('sel', x === c));
+        return;
+      }
       const a = e.target.closest('[data-a]');
       if (!a) return;
+      this.game.app.audio.uiSound?.('click');
       if (a.dataset.a === 'back') this.main();
-      if (a.dataset.a === 'go') { this.game.app.settings.set('lastCity', sel); this.clear(); this._start(kind, sel); }
+      if (a.dataset.a === 'go') {
+        this.game.app.audio.uiSound?.('start');
+        this.game.app.settings.set('lastCity', sel);
+        this.clear();
+        this._start(kind, sel);
+      }
     });
     el.addEventListener('dblclick', (e) => {
       const c = e.target.closest('[data-c]');
-      if (c) { this.game.app.settings.set('lastCity', c.dataset.c); this.clear(); this._start(kind, c.dataset.c); }
+      if (c) {
+        this.game.app.audio.uiSound?.('start');
+        this.game.app.settings.set('lastCity', c.dataset.c);
+        this.clear();
+        this._start(kind, c.dataset.c);
+      }
     });
     this.root.appendChild(el);
     this.layer = el;

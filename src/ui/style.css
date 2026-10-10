@@ -67,14 +67,88 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #000; color:
 
 /* ---------- ana menu ---------- */
 #menu {
-  position: absolute; inset: 0; display: flex; align-items: center; padding-left: 7vw;
-  background: linear-gradient(90deg, rgba(5, 6, 10, 0.88) 0%, rgba(5, 6, 10, 0.55) 38%, rgba(5, 6, 10, 0) 70%);
+  position: absolute; inset: 0; display: flex; align-items: center; padding-left: 6.5vw;
+  background: linear-gradient(90deg, rgba(6, 7, 12, 0.92) 0%, rgba(6, 7, 12, 0.65) 42%, rgba(6, 7, 12, 0) 75%);
   z-index: 40;
 }
-#menu .box { width: 380px; }
-#menu h1 { font-family: Georgia, "Times New Roman", serif; color: var(--gold); font-size: 46px; letter-spacing: 4px; margin: 0; line-height: 1.05; text-shadow: 0 4px 20px rgba(0, 0, 0, 0.6); }
-#menu .ver { color: var(--muted); letter-spacing: 6px; font-size: 12px; margin: 8px 0 28px; }
-#menu .foot { margin-top: 18px; font-size: 12px; color: var(--muted); line-height: 1.6; }
+#menu .box {
+  width: 410px;
+  background: rgba(14, 18, 28, 0.72);
+  border: 1px solid rgba(232, 193, 112, 0.22);
+  border-radius: 14px;
+  padding: 24px 26px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(232, 193, 112, 0.2);
+  backdrop-filter: blur(10px);
+}
+.menu-decor { color: var(--gold-2); font-size: 11px; letter-spacing: 3px; text-align: center; margin-bottom: 6px; opacity: 0.85; }
+#menu h1 {
+  font-family: Georgia, "Times New Roman", serif;
+  background: linear-gradient(180deg, #fff2cc 0%, var(--gold) 60%, var(--gold-2) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  font-size: 46px;
+  letter-spacing: 5px;
+  margin: 0;
+  line-height: 1.0;
+  text-align: center;
+  filter: drop-shadow(0 3px 12px rgba(232, 193, 112, 0.3));
+}
+#menu .ver {
+  color: var(--muted);
+  letter-spacing: 5px;
+  font-size: 11px;
+  margin: 6px 0 14px;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+#menu .badge {
+  background: rgba(232, 193, 112, 0.15);
+  border: 1px solid rgba(232, 193, 112, 0.4);
+  color: var(--gold);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 10px;
+  letter-spacing: 1px;
+}
+.city-selector {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 12px;
+  margin-bottom: 12px;
+  background: linear-gradient(90deg, rgba(34, 26, 14, 0.75), rgba(20, 24, 34, 0.75));
+  border: 1px solid rgba(232, 193, 112, 0.32);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: transform 0.15s, border-color 0.15s, background 0.15s;
+}
+.city-selector:hover {
+  transform: translateY(-1px);
+  border-color: var(--gold);
+  background: linear-gradient(90deg, rgba(52, 40, 18, 0.88), rgba(28, 36, 50, 0.88));
+  box-shadow: 0 4px 16px rgba(232, 193, 112, 0.18);
+}
+.city-icon { font-size: 20px; }
+.city-meta { flex: 1; }
+.city-sub { font-size: 9px; letter-spacing: 1.5px; color: var(--gold-2); font-weight: 700; }
+.city-title { font-size: 13.5px; font-weight: 600; color: var(--text); }
+.city-title small { font-size: 11px; color: var(--muted); font-weight: 400; }
+.city-caret { color: var(--gold); font-size: 13px; }
+.btn-glyph { font-size: 16px; flex-shrink: 0; }
+.btn-body { flex: 1; }
+.btn.main-cta {
+  background: linear-gradient(180deg, rgba(96, 72, 30, 0.98), rgba(48, 34, 14, 0.98));
+  border-color: var(--gold);
+  box-shadow: 0 2px 10px rgba(232, 193, 112, 0.25);
+}
+.foot-car { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--text); margin-bottom: 8px; }
+.swatch-mini { width: 13px; height: 13px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.3); display: inline-block; }
+.foot-badges { display: flex; flex-wrap: wrap; gap: 6px; }
+.pill { display: inline-block; padding: 2px 7px; background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 4px; font-size: 10.5px; color: var(--muted); }
+#menu .foot { margin-top: 14px; font-size: 12px; color: var(--muted); line-height: 1.5; }
 
 /* alt pencereler (sehir secimi, garaj, ayarlar) */
 .dialog {
