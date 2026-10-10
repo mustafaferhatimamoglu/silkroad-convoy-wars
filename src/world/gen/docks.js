@@ -1,4 +1,4 @@
-import { DOCKS, FERRY_ROUTES, AIR_ROUTES } from './features.js';
+import { DOCKS, FERRY_ROUTES, AIR_ROUTES, PORTAL_OBJECTS } from './features.js';
 import { REGION_M } from './blueprint.js';
 
 // Ulasim noktalarinin sablona yerlesimi: feribot iskeleleri (orijinal bilet NPC'sinin yanindaki
@@ -273,7 +273,17 @@ export function setupTransport(plan) {
     }
   }
   plan.portals = plan.cities.map((c) => {
-    const p = portalSpot(plan, c);
+    // orijinal kapi nesnesi (meydandaki isinlanma yapisi) varsa tam yerinde; yoksa bos duz bir yer
+    let p = null, bd = 150;
+    const rx = Math.floor(c.x / REGION_M), rz = Math.floor(c.z / REGION_M);
+    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
+      for (const [mi, X, Z] of plan.objectsIn(rx + dx, rz + dz)) {
+        if (!PORTAL_OBJECTS.test(plan.objModels[mi][8])) continue;
+        const d = Math.hypot(X - c.x, Z - c.z);
+        if (d < bd) { bd = d; p = { x: X, z: Z }; }
+      }
+    }
+    if (!p) p = portalSpot(plan, c);
     return { city: c.id, name: c.name, culture: c.culture, x: p.x, z: p.z, yaw: 0 };
   });
 }

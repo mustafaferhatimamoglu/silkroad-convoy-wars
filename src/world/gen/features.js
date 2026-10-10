@@ -26,6 +26,9 @@ export const DOCKS = {
   SD_FERRY: P(48, 93, 1525, 1688),
 };
 
+// Orijinal sehir isinlanma nesneleri: yerlerine bizim kapimiz konur (ayni meydanda).
+export const PORTAL_OBJECTS = /^(cj_portal|w_cd_portal|oas_hot_portal|alex_portal|euro_esteuro_fountain01)$/;
+
 // Hatlar (orijinal baglantilar): feribotlar nehir/bogaz/deniz gecisi; Roc hava gemileri Karakurum
 // istasyonlarindan Roc Dagi'na. Sure feribotta rota boyundan hesaplanir.
 export const FERRY_ROUTES = [

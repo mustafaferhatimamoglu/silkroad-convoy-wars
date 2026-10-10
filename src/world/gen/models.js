@@ -834,10 +834,23 @@ function fence(L, h) {
 
 /** Fener / sokak lambasi. */
 function lamp(culture, h) {
-  const C = CULTURE[culture] || CULTURE.desert;
-  const pole = box(0.18, h, 0.18);
-  const head = box(0.6, 0.7, 0.6, 0, h - 0.2, 0);
-  return [part(pole, C.trim, { uvScale: 1, collide: true }), part(head, culture === 'china' ? 'build/canvas_red' : 'build/plaster_white', { uvScale: 1, collide: false })];
+  if (culture === 'china') {
+    // ahsap direk + kirmizi kagit fener
+    const pole = new THREE.CylinderGeometry(0.1, 0.13, h, 8); pole.translate(0, h / 2, 0);
+    const arm = box(0.9, 0.1, 0.1, 0.4, h - 0.3, 0);
+    const lan = new THREE.SphereGeometry(0.32, 10, 8); lan.scale(1, 1.3, 1); lan.translate(0.8, h - 0.85, 0);
+    const caps = [box(0.4, 0.08, 0.4, 0.8, h - 0.42, 0), box(0.4, 0.08, 0.4, 0.8, h - 1.32, 0)];
+    return [part(tone(mergeGeos([pole, arm]), [0.5, 0.32, 0.25]), 'build/wood_planks', { uvScale: 1 }),
+      part(tone(lan, [1.25, 0.6, 0.5]), 'build/canvas_red', { uvScale: 0.5, collide: false }),
+      part(tone(mergeGeos(caps), [0.35, 0.3, 0.25]), 'build/wood_planks', { uvScale: 0.5, collide: false })];
+  }
+  // dokme demir direk + camli fener (Bizans/Avrupa; digerlerinde de)
+  const pole = new THREE.CylinderGeometry(0.07, 0.12, h - 0.9, 8); pole.translate(0, (h - 0.9) / 2, 0);
+  const base = new THREE.CylinderGeometry(0.22, 0.26, 0.6, 8); base.translate(0, 0.3, 0);
+  const cage = new THREE.CylinderGeometry(0.32, 0.2, 0.75, 6); cage.translate(0, h - 0.5, 0);
+  const cap = new THREE.ConeGeometry(0.38, 0.35, 6); cap.translate(0, h + 0.05, 0);
+  const metal = tone(mergeGeos([pole, base, cap]), [0.22, 0.22, 0.24]);
+  return [part(metal, 'build/plaster_white', { uvScale: 1 }), part(tone(cage, [1.3, 1.15, 0.8]), 'build/plaster_white', { uvScale: 1, collide: false })];
 }
 
 /** Bayrak diregi + bez. */
@@ -881,6 +894,18 @@ function lion(rnd) {
   ell(0.1, 0, 0.75, -0.9, 1, 1, 1, 6, 5);             // kuyruk
   ell(0.13, 0, 1.0, -0.98, 1.4, 1, 1, 6, 5);
   return [part(tone(mergeGeos(g), [0.36, 0.34, 0.31]), 'build/marble', { uvScale: 0.8 })];
+}
+
+/** Park banki: tahta oturak ve arkalik, dokme demir ayaklar; uzunluk L (yerel x). */
+function bench(L) {
+  const wood = [], iron = [];
+  for (let k = 0; k < 3; k++) wood.push(box(L, 0.05, 0.12, 0, 0.45, -0.18 + k * 0.15));
+  for (let k = 0; k < 2; k++) { const b = box(L, 0.12, 0.04, 0, 0.62 + k * 0.17, 0.26); wood.push(b); }
+  for (const sx of [-1, 1]) {
+    iron.push(box(0.07, 0.48, 0.5, sx * (L / 2 - 0.15), 0, 0));
+    iron.push(box(0.07, 0.5, 0.06, sx * (L / 2 - 0.15), 0.48, 0.27));
+  }
+  return [part(tone(mergeGeos(wood), [0.7, 0.5, 0.36]), 'build/wood_planks', { uvScale: 1 }), part(tone(mergeGeos(iron), [0.2, 0.2, 0.22]), 'build/plaster_white', { uvScale: 1 })];
 }
 
 /** Pazar tezgahi: tahta masa + bez gölgelik. */
@@ -1084,6 +1109,22 @@ function portal(culture) {
   const parts = [part(mergeGeos(g), culture === 'china' ? C.trim : C.wall, { uvScale: 2 }), part(mergeGeos(base), 'build/marble', { uvScale: 2, collide: false })];
   if (culture === 'china') { const rf = hipRoof(4, 16, 2, 1.0, 0.4); rf.translate(0, 10.8, 0); parts.push(part(rf, C.roof, { uvScale: 2 })); }
   else if (culture === 'persian') { const dm = dome(1.6, 1.6); dm.translate(0, 10.8, 0); parts.push(part(dm, 'build/mosaic_turquoise', { uvScale: 1.5 })); }
+  else if (culture === 'egypt') {
+    // gok kuresi (armiller): kapinin ustunde capraz uc halka + ortada kure
+    const rings = [];
+    for (const [rx, rz] of [[Math.PI / 2, 0], [Math.PI / 2, Math.PI / 2], [0.4, 0.9]]) {
+      const t = new THREE.TorusGeometry(5.2, 0.3, 8, 40); t.rotateX(rx); t.rotateZ(rz); t.translate(0, 16, 0); rings.push(t);
+    }
+    const core = new THREE.SphereGeometry(1.2, 14, 10); core.translate(0, 16, 0);
+    parts.push(part(tone(mergeGeos(rings), [0.62, 0.48, 0.26]), 'build/marble', { uvScale: 1, collide: false }));
+    parts.push(part(core, 'build/marble', { uvScale: 1, collide: false }));
+  } else if (culture === 'byzantine') {
+    // Atlas'in yer kuresi: lentonun ustunde kure + meridyen halkasi
+    const globe = new THREE.SphereGeometry(2.2, 18, 12); globe.translate(0, 12.6, 0);
+    const mer = new THREE.TorusGeometry(2.45, 0.12, 6, 32); mer.translate(0, 12.6, 0);
+    parts.push(part(tone(globe, [0.55, 0.85, 0.95]), 'build/marble', { uvScale: 1, collide: false }));
+    parts.push(part(tone(mer, [0.8, 0.65, 0.3]), 'build/copper_patina', { uvScale: 1, collide: false }));
+  }
   return parts;
 }
 
@@ -1117,6 +1158,7 @@ export function model(key) {
   else if (kind === 'flag') m = flag(a[1], Number(a[2]));
   else if (kind === 'statue') m = statue(a[1], Number(a[2]), Number(a[3]));
   else if (kind === 'lion') m = lion(rnd);
+  else if (kind === 'bench') m = bench(Number(a[1]));
   else if (kind === 'stall') m = stall(a[1], Number(a[2]), Number(a[3]));
   else if (kind === 'landmark') m = landmark(a[1], rnd);
   else if (kind === 'pier') m = pier(Number(a[1]));

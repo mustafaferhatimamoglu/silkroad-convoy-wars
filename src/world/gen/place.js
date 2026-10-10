@@ -4,6 +4,7 @@ import { tunnelItems } from './tunnel.js';
 import { tracksNear, trackDist, TRACK } from './tracks.js';
 import { archInfo } from './models.js';
 import { AIRPIER } from './docks.js';
+import { PORTAL_OBJECTS } from './features.js';
 
 // Bolge objeleri: orijinal haritanin sablonundaki nesne yerlesimi (tur + konum + yon + sinir
 // kutusu) bizim modellerimize cevrilir: agac boyu, sur uzunlugu/yuksekligi, ev tabani ve kati,
@@ -57,17 +58,27 @@ export function placeRegionObjects(data, rx, rz, d) {
     const w = bx1 - bx0, dd = bz1 - bz0;
     const h = by1 - Math.max(by0, -2);
     const kind = refine(K[m[0]], m[8], w, dd, h);
-    if (kind === 'skip') continue;
+    if (kind === 'skip' || PORTAL_OBJECTS.test(m[8])) continue;      // eski kapi nesnesi: yerine bizim kapimiz
     if ((kind === 'house' || kind === 'prop') && h < 1.6 && Math.max(w, dd) > 12 && !(plan.massing.models && plan.massing.models[mi])) continue;   // zemin plakasi (meydan cizimi)
     if (VEG.has(kind) && (noVeg || (track.length && trackDist(X, Z, track) < TRACK.clear))) continue;
+    // park banklari
+    if (/bench/.test(m[8]) && Math.max(w, dd) < 6) {
+      const c = Math.cos(yaw), s = Math.sin(yaw), cx = (bx0 + bx1) / 2, cz = (bz0 + bz1) / 2;
+      const lx = X + c * cx + s * cz - x0, lz = Z - (-s * cx + c * cz) - z0;
+      if (lx >= 0 && lx < REGION_M && lz >= 0 && lz < REGION_M) {
+        const along = w >= dd;
+        out.push({ m: `bench:${q(Math.max(w, dd), 0.5)}`, x: lx, y: H(lx, lz) - 0.02, z: -lz, yaw: along ? yaw : yaw + Math.PI / 2, s: 1 });
+      }
+      continue;
+    }
     // bekci aslanlar (kaide ayri nesne): bizim heykelimiz, orijinal boyda
     if (/lion\d|lion_\d|_lion0/.test(m[8]) && !/dan/.test(m[8])) {
       const ox = X - x0, oz = Z - z0;
       if (ox >= 0 && ox < REGION_M && oz >= 0 && oz < REGION_M) out.push({ m: 'lion:0', x: ox, y: Y + Math.max(0, by0), z: -oz, yaw, s: Math.max(0.5, h / 2.1) });
       continue;
     }
-    // yapi siluetten: orijinal konum, yon ve yukseklik (model kendi ekseninde)
-    if (!VEG.has(kind) && plan.massing.models && plan.massing.models[mi]) {
+    // yapi siluetten: orijinal konum, yon ve yukseklik (model kendi ekseninde); lambalar bizim
+    if (!VEG.has(kind) && kind !== 'lamp' && plan.massing.models && plan.massing.models[mi]) {
       const ox0 = X - x0, oz0 = Z - z0;
       if (ox0 < -60 || ox0 > REGION_M + 60 || oz0 < -60 || oz0 > REGION_M + 60) continue;
       // kucuk esya/ciftlik nesnesi (saman yigini, cit, araba...): yumusak siluet, mimari ve pencere yok
@@ -215,7 +226,7 @@ export function clampUnderStructures(plan, rx, rz, heights) {
         if (!M) continue;
         const m = Mo[mi];
         const kind = refine(K[m[0]], m[8], m[5] - m[2], m[7] - m[4], m[6] - Math.max(m[3], -2));
-        if (kind === 'skip' || VEG.has(kind)) continue;
+        if (kind === 'skip' || VEG.has(kind) || kind === 'lamp' || PORTAL_OBJECTS.test(m[8])) continue;
         const c = Math.cos(yaw), s = Math.sin(yaw);
         const R = Math.hypot(Math.max(Math.abs(M.x0), Math.abs(M.x0 + M.nx * M.res)), Math.max(Math.abs(M.z0), Math.abs(M.z0 + M.nz * M.res)));
         if (X + R < x0 || X - R > x1 || Z + R < z0 || Z - R > z1) continue;
