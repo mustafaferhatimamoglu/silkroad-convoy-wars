@@ -507,6 +507,33 @@ function massModel(mi, culture) {
   const winTex = culture === 'china' ? 'build/win_china' : culture === 'byzantine' ? 'build/win_euro' : 'build/win_arch';
   const WIN = { pos: [], col: [], uv: [] };
   const WALLCLS = new Set(['plaster', 'stone', 'brick', 'marble', 'wood']);
+  // cephe kusaklari: duz damli dis duvarin ust kenarinda kornis, dibinde koyu kaide bandi
+  const quadOut = (B, a, b, c, d, nrm, col) => {
+    const nn = nrmOf(a, b, c);
+    const P = nn[0] * nrm[0] + nn[1] * nrm[1] + nn[2] * nrm[2] >= 0 ? [a, b, c, d] : [b, a, d, c];
+    const uv = (q) => [(q[0] + q[2]) / 3, q[1] / 3];
+    tri(B, [P[0], P[1], P[2]], col, [uv(P[0]), uv(P[1]), uv(P[2])]);
+    tri(B, [P[0], P[2], P[3]], col, [uv(P[0]), uv(P[2]), uv(P[3])]);
+  };
+  const addTrim = (B, sc, p0, p1, lo, h0, h1, out) => {
+    if (rock || steps || soft) return;
+    const base = Math.max(lo, 0), top = Math.min(h0, h1);
+    if (top - base < 2.6) return;
+    const tx = (p1[0] - p0[0]) / res, tz = (p1[1] - p0[1]) / res, nx = out[0], nz = out[1];
+    const at = (p, along, off, y) => [p[0] + tx * along + nx * off, y, p[1] + tz * along + nz * off];
+    const up = [0, 1, 0], dn = [0, -1, 0], fw = [nx, 0, nz];
+    if (Math.abs(h0 - h1) < 0.15) {
+      const o = 0.22, y0 = top - 0.42, y1 = top - 0.04;
+      const cc = [Math.min(3, sc[0] * 1.2), Math.min(3, sc[1] * 1.2), Math.min(3, sc[2] * 1.2)];
+      quadOut(B, at(p0, -o, o, y0), at(p1, o, o, y0), at(p1, o, o, y1), at(p0, -o, o, y1), fw, cc);
+      quadOut(B, at(p0, -o, 0, y1), at(p1, o, 0, y1), at(p1, o, o, y1), at(p0, -o, o, y1), up, cc);
+      quadOut(B, at(p0, -o, 0, y0), at(p1, o, 0, y0), at(p1, o, o, y0), at(p0, -o, o, y0), dn, [cc[0] * 0.6, cc[1] * 0.6, cc[2] * 0.6]);
+    }
+    const o2 = 0.08, b1 = base + 0.65;
+    const pc = [sc[0] * 0.68, sc[1] * 0.68, sc[2] * 0.66];
+    quadOut(B, at(p0, -o2, o2, base - 1), at(p1, o2, o2, base - 1), at(p1, o2, o2, b1), at(p0, -o2, o2, b1), fw, pc);
+    quadOut(B, at(p0, -o2, 0, b1), at(p1, o2, 0, b1), at(p1, o2, o2, b1), at(p0, -o2, o2, b1), up, pc);
+  };
   const addWin = (p0, p1, lo, hi, out, idx) => {
     if (rock || steps || soft || idx % (res > 1 ? 2 : 3) !== 1) return;
     const base = Math.max(lo, 0), top = hi;
@@ -595,7 +622,10 @@ function massModel(mi, culture) {
         }
         if (lo0 === null) continue;
         if (h0 - lo0 < 0.03 && h1 - lo1 < 0.03) continue;
-        if (wallOk && !inside) addWin(p0, p1, Math.max(lo0, lo1), Math.min(h0, h1), [ni - i, nj - j], ni !== i ? j : i);
+        if (wallOk && !inside) {
+          addWin(p0, p1, Math.max(lo0, lo1), Math.min(h0, h1), [ni - i, nj - j], ni !== i ? j : i);
+          addTrim(SB, sc, p0, p1, Math.max(lo0, lo1), h0, h1, [ni - i, nj - j]);
+        }
         const u0 = (p0[0] + p0[1]) / 3, u1 = u0 + res / 3;
         const q0 = [p0[0], lo0, p0[1]], q1 = [p1[0], lo1, p1[1]], q2 = [p1[0], h1, p1[1]], q3 = [p0[0], h0, p0[1]];
         tri(SB, [q0, q1, q2], sc, [[u0, lo0 / 3], [u1, lo1 / 3], [u1, h1 / 3]]);
@@ -712,6 +742,32 @@ function statue(culture, w, h) {
   const body = new THREE.CylinderGeometry(w * 0.18, w * 0.26, h * 0.55, 8); body.translate(0, h * 0.3 + h * 0.275, 0);
   const head = new THREE.SphereGeometry(w * 0.14, 8, 6); head.translate(0, h * 0.92, 0);
   return [part(ped, C.wall, { uvScale: 2 }), part(mergeGeos([body, head]), 'build/marble', { uvScale: 1.5 })];
+}
+
+/** Bekci aslan heykeli (oturan, on pencesi top uzerinde), +z yonune bakar; boy ~2.1 m. */
+function lion(rnd) {
+  const g = [];
+  const ell = (r, x, y, z, sx, sy, sz, w = 10, hh = 8) => { const s = new THREE.SphereGeometry(r, w, hh); s.scale(sx, sy, sz); s.translate(x, y, z); g.push(s); };
+  ell(0.55, 0, 0.5, -0.35, 1, 0.85, 1.25);           // kalca
+  ell(0.5, 0, 0.98, 0.18, 0.95, 1.25, 0.85);         // gogus
+  ell(0.46, 0, 1.68, 0.36, 1.18, 1.05, 1.0);         // yele
+  ell(0.3, 0, 1.62, 0.66, 1.0, 0.9, 1.0);            // yuz
+  ell(0.13, 0, 1.55, 0.92, 1.3, 0.8, 0.8);           // burun
+  for (let k = 0; k < 9; k++) {                       // yele bukleleri
+    const a = (k / 9) * Math.PI * 2;
+    ell(0.12, Math.cos(a) * 0.46, 1.68 + Math.sin(a) * 0.42, 0.42 + rnd() * 0.05, 1, 1, 1, 6, 5);
+  }
+  for (const sx of [-1, 1]) {
+    const leg = new THREE.CylinderGeometry(0.12, 0.15, 0.95, 8);
+    leg.rotateX(-0.12); leg.translate(sx * 0.24, 0.47, 0.42);
+    g.push(leg);
+    ell(0.17, sx * 0.24, 0.1, 0.55, 1, 0.6, 1.3);     // pence
+    ell(0.22, sx * 0.48, 0.32, -0.3, 0.6, 1.0, 1.4); // arka bacak
+  }
+  ell(0.2, 0.38, 0.22, 0.78, 1, 1, 1, 10, 8);         // top
+  ell(0.1, 0, 0.75, -0.9, 1, 1, 1, 6, 5);             // kuyruk
+  ell(0.13, 0, 1.0, -0.98, 1.4, 1, 1, 6, 5);
+  return [part(tone(mergeGeos(g), [0.62, 0.6, 0.55]), 'build/marble', { uvScale: 0.8 })];
 }
 
 /** Pazar tezgahi: tahta masa + bez gölgelik. */
@@ -947,6 +1003,7 @@ export function model(key) {
   else if (kind === 'lamp') m = lamp(a[1], Number(a[2]));
   else if (kind === 'flag') m = flag(a[1], Number(a[2]));
   else if (kind === 'statue') m = statue(a[1], Number(a[2]), Number(a[3]));
+  else if (kind === 'lion') m = lion(rnd);
   else if (kind === 'stall') m = stall(a[1], Number(a[2]), Number(a[3]));
   else if (kind === 'landmark') m = landmark(a[1], rnd);
   else if (kind === 'pier') m = pier(Number(a[1]));

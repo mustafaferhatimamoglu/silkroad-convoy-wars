@@ -4,7 +4,7 @@ import { Simplex, smoothstep } from './noise.js';
 import { placeRegionObjects, clampUnderStructures } from './place.js';
 import { setMassing } from './models.js';
 import { setPbr, nrUrl } from './build.js';
-import { tracksNear, trackDist, TRACK } from './tracks.js';
+import { tracksNear, trackDist, trackNearest, setTrackHeights, TRACK } from './tracks.js';
 import { setupTransport } from './docks.js';
 
 // V5 dunya verisi: motorun bekledigi bolge verilerini (yukseklik, zemin dokusu, su, renk haritasi,
@@ -34,6 +34,7 @@ export class GenWorldData {
     setMassing(this.plan.massing, avg);
     this.plan.cities = CITIES.map((c) => ({ ...c, h: this.plan.templateH(c.x, c.z) }));
     setupTransport(this.plan);
+    try { setTrackHeights(await (await fetch(this.base + 'world/trackh.json')).json()); } catch { /* profilsiz */ }
     this.n = new Simplex(this.plan.seed + 7);
     this.regions = new Map();
     const P = this.plan;
@@ -116,6 +117,22 @@ export class GenWorldData {
         if (s.hole) (holes || (holes = new Uint8Array(VERTS * VERTS)))[k] = 1;
         if (s.h < minH) minH = s.h;
         if (s.h > maxH) maxH = s.h;
+      }
+    }
+    // ralli parkuru: orijinal yol profiline gore greyderlenmis serit (sablonun yumusattigi ucurum
+    // kenari, kopru basi, yarma burada keskin kalir); profil yoksa sablon yuzeyi
+    const trk = tracksNear(rx, rz, 'path');
+    if (trk.length) {
+      const q = {};
+      for (let i = 0; i < VERTS; i++) {
+        for (let j = 0; j < VERTS; j++) {
+          const x = x0 + j * 2, z = z0 + i * 2;
+          trackNearest(x, z, trk, q);
+          if (q.d > 12) continue;
+          const k = i * VERTS + j, w = 1 - smoothstep(5, 12, q.d);
+          const target = q.h !== null ? q.h : plan.templateH(x, z);
+          heights[k] += (target * 10 - heights[k]) * w;
+        }
       }
     }
     clampUnderStructures(plan, rx, rz, heights);

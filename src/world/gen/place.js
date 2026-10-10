@@ -59,6 +59,12 @@ export function placeRegionObjects(data, rx, rz, d) {
     const kind = refine(K[m[0]], m[8], w, dd, h);
     if (kind === 'skip') continue;
     if (VEG.has(kind) && (noVeg || (track.length && trackDist(X, Z, track) < TRACK.clear))) continue;
+    // bekci aslanlar (kaide ayri nesne): bizim heykelimiz, orijinal boyda
+    if (/lion\d|lion_\d|_lion0/.test(m[8]) && !/dan/.test(m[8])) {
+      const ox = X - x0, oz = Z - z0;
+      if (ox >= 0 && ox < REGION_M && oz >= 0 && oz < REGION_M) out.push({ m: 'lion:0', x: ox, y: Y + Math.max(0, by0), z: -oz, yaw, s: Math.max(0.5, h / 2.1) });
+      continue;
+    }
     // yapi siluetten: orijinal konum, yon ve yukseklik (model kendi ekseninde)
     if (!VEG.has(kind) && plan.massing.models && plan.massing.models[mi]) {
       const ox0 = X - x0, oz0 = Z - z0;

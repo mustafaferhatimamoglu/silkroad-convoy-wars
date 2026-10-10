@@ -200,7 +200,11 @@ class Parts {
   }
   list(collide = true) {
     const out = [];
-    for (const [tex, m] of this.m) { const g = m.geometry(); if (g) out.push({ geo: g, tex, alpha: false, collide }); }
+    for (const [tex, m] of this.m) {
+      const g = m.geometry();
+      const win = tex.startsWith('build/win_');                 // pencere kartlari: alfa testli, carpismasiz
+      if (g) out.push({ geo: g, tex, alpha: win, collide: collide && !win });
+    }
     return out;
   }
 }
@@ -374,7 +378,7 @@ function chinaHall(parts, f, C) {
   const rr = f.roofCol ? f.roofCol.map((v) => Math.min(255, v * 1.22)) : [92, 94, 96];
   const palace = rr[0] > rr[2] * 1.35 && rr[0] > 90;            // sirli altin/kahve kiremit
   const roofTex = C.roof;
-  const rc = parts.tint(roofTex, palace ? [rr[0] * 1.08, rr[1] * 0.98, rr[2] * 0.8] : rr, 0.95);
+  const rc = parts.tint(roofTex, palace ? [rr[0] * 1.18, rr[1] * 1.02, rr[2] * 0.62] : rr, 0.95);
   const R = parts.get(roofTex);
   const ridgeC = parts.tint(roofTex, palace ? [rr[0] * 0.8, rr[1] * 0.7, rr[2] * 0.6] : [rr[0] * 0.7, rr[1] * 0.7, rr[2] * 0.72], 0.95);
   const U = { m: parts.get('build/wood_planks'), col: parts.tint('build/wood_planks', palace ? [70, 92, 96] : [92, 60, 44], 0.9) };
@@ -486,9 +490,18 @@ function openings(parts, C, b, y0, yTop, culture, wcol) {
         const yb = y0 + f * 3.4 + (door ? 0 : 1.1);
         const [px, pz] = s.at(u);
         const tx = s.n[1] !== 0 ? 1 : 0, tz = s.n[0] !== 0 ? 1 : 0;      // duvar boyunca
+        const dir = [s.n[0], 0, s.n[1]];
+        if (!door) {
+          // pencere: kulture gore dokulu kart (kemerli / kafesli / camli)
+          const wt = culture === 'china' ? 'build/win_china' : culture === 'byzantine' ? 'build/win_euro' : 'build/win_arch';
+          const W2 = wt === 'build/win_china' ? 0.6 : 0.55, H2 = wt === 'build/win_china' ? 1.2 : 1.7;
+          const yb2 = y0 + f * 3.4 + (wt === 'build/win_china' ? 1.2 : 0.9);
+          const P0 = [px - tx * W2, yb2, pz - tz * W2], P1 = [px + tx * W2, yb2, pz + tz * W2];
+          parts.get(wt).quadDir(P0, P1, [P1[0], yb2 + H2, P1[2]], [P0[0], yb2 + H2, P0[2]], dir, [1, 1, 1], [[0, 1], [1, 1], [1, 0], [0, 0]]);
+          continue;
+        }
         const a = [px - tx * ww / 2, yb, pz - tz * ww / 2], c = [px + tx * ww / 2, yb + hh, pz + tz * ww / 2];
         const A = [a[0], a[1], a[2]], B = [c[0], a[1], c[2]], Cc = [c[0], c[1], c[2]], D = [a[0], c[1], a[2]];
-        const dir = [s.n[0], 0, s.n[1]];
         // arka plan (koyu girinti)
         dark.quadDir(A, B, Cc, D, dir, shade, [[0, 0], [1, 0], [1, 1], [0, 1]]);
         // ust kemer (fars/bizans) ya da lento
