@@ -58,6 +58,7 @@ export function placeRegionObjects(data, rx, rz, d) {
     const h = by1 - Math.max(by0, -2);
     const kind = refine(K[m[0]], m[8], w, dd, h);
     if (kind === 'skip') continue;
+    if ((kind === 'house' || kind === 'prop') && h < 1.6 && Math.max(w, dd) > 12 && !(plan.massing.models && plan.massing.models[mi])) continue;   // zemin plakasi (meydan cizimi)
     if (VEG.has(kind) && (noVeg || (track.length && trackDist(X, Z, track) < TRACK.clear))) continue;
     // bekci aslanlar (kaide ayri nesne): bizim heykelimiz, orijinal boyda
     if (/lion\d|lion_\d|_lion0/.test(m[8]) && !/dan/.test(m[8])) {
@@ -230,7 +231,7 @@ export function clampUnderStructures(plan, rx, rz, heights) {
             const lid = low !== null && low > 2.6 && low < top - 0.3 ? low : top;
             const cap = (Y + lid - 0.12) * 10;
             const v = i * VERTS + j;
-            if (heights[v] > cap) heights[v] = cap;
+            if (heights[v] > cap + 6) heights[v] = cap;          // 0.6 m icindeki fark: zemin dosemeyi ortsun (orijinal zemin dokusu gorunur)
           }
         }
       }

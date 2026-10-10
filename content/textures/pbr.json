@@ -68,5 +68,7 @@
 "gray/terrain_steppe": "terrain/steppe",
 "build/lattice": true,
 "build/dougong": true,
-"build/arch_window": true
+"build/arch_window": true,
+"build/mosaic_floor": true,
+"terrain/mosaic": true
 }

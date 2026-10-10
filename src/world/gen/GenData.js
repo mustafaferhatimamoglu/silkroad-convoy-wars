@@ -161,7 +161,7 @@ export class GenWorldData {
     const W = {
       sand: word('sand'), dirt: word('dirt'), gravel: word('gravel'), grass: word('grass'), steppe: word('steppe'),
       rock: word('rock'), redrock: word('redrock'), snow: word('snow'), mud: word('mud'), cobble: word('cobble'),
-      paving: word('paving'), farmland: word('farmland'), road: word('road'), slab: word('slab'), slabDark: word('slab_dark'),
+      paving: word('paving'), farmland: word('farmland'), road: word('road'), slab: word('slab'), slabDark: word('slab_dark'), mosaic: T.mosaic ? word('mosaic') : word('paving'),
     };
     const texture = new Uint16Array(VERTS * VERTS);
     const H = (i, j) => heights[Math.min(CELLS, Math.max(0, i)) * VERTS + Math.min(CELLS, Math.max(0, j))] * 0.1;

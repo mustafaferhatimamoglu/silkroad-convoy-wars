@@ -295,6 +295,43 @@ def win_china():
     return _rgba_save('build/win_china', col, np.ones((H, W), np.float32))
 
 
+def mosaic_floor():
+    """Meydan mozaigi: sekiz kollu yildizlar (iki kare 45 derece), firuze + kiremit + krem cizgiler."""
+    H = W = 1024
+    yy, xx = np.mgrid[0:H, 0:W] / np.array([H, W], np.float32)[:, None, None]
+    col = np.zeros((H, W, 3), np.float32)
+    hgt = np.zeros((H, W), np.float32)
+    terra = np.array([170, 84, 62], np.float32)
+    teal = np.array([52, 128, 132], np.float32)
+    cream = np.array([226, 210, 176], np.float32)
+    col[:] = cream * 0.92
+    n = 4                                                    # dokuda 4x4 yildiz
+    u, v = (xx * n) % 1 - 0.5, (yy * n) % 1 - 0.5
+    sq1 = np.maximum(np.abs(u), np.abs(v))                   # eksene hizali kare
+    ru, rv = (u + v) * 0.7071, (u - v) * 0.7071
+    sq2 = np.maximum(np.abs(ru), np.abs(rv))                 # 45 derece kare
+    star = np.minimum(sq1 / 0.3, sq2 / 0.3)                  # <1 yildiz ici
+    inner = np.maximum(sq1 / 0.16, sq2 / 0.16)
+    col[star < 1] = teal
+    col[inner < 1] = terra
+    edge = (np.abs(star - 1) < 0.06) | (np.abs(inner - 1) < 0.08)
+    col[edge] = cream
+    hgt[edge] = 1.0
+    # yildizlar arasi baklava: kiremit
+    cu, cv = (xx * n + 0.5) % 1 - 0.5, (yy * n + 0.5) % 1 - 0.5
+    dia = np.abs(cu) + np.abs(cv)
+    m = (dia < 0.22) & (star >= 1.06)
+    col[m] = terra * 0.92
+    # derz izgarasi
+    joint = ((xx * n * 8) % 1 < 0.04) | ((yy * n * 8) % 1 < 0.04)
+    col[joint] *= 0.86
+    hgt[~joint] += 0.3
+    g = grain(H, W, 1.0, streak=False)
+    col *= (1 + g[..., None] * 0.07)
+    rgh = np.full((H, W), 0.55, np.float32)
+    return save('build/mosaic_floor', col, hgt, rgh)
+
+
 def main():
     avg_p, pbr_p = os.path.join(TEX, 'avg.json'), os.path.join(TEX, 'pbr.json')
     avg = json.load(open(avg_p))
@@ -303,10 +340,21 @@ def main():
     avg['build/win_euro'] = win_euro()
     avg['build/win_arch'] = win_arch()
     avg['build/win_china'] = win_china()
-    for key, fn in (('build/lattice', lattice), ('build/dougong', dougong), ('build/arch_window', arch_window)):
+    for key, fn in (('build/lattice', lattice), ('build/dougong', dougong), ('build/arch_window', arch_window), ('build/mosaic_floor', mosaic_floor)):
         avg[key] = fn()
         pbr[key] = True
         print(key, avg[key])
+    # zemin katmani olarak mozaik (Hotan meydani): terrain/mosaic + terrain.json kaydi
+    import shutil
+    for ext in ('.jpg', '_nr.webp'):
+        shutil.copy(os.path.join(TEX, 'build', 'mosaic_floor' + ext), os.path.join(TEX, 'terrain', 'mosaic' + ext))
+    pbr['terrain/mosaic'] = True
+    avg['terrain/mosaic'] = avg['build/mosaic_floor']
+    tp = os.path.join(TEX, 'terrain.json')
+    terr = json.load(open(tp))
+    if not any(t['name'] == 'mosaic' for t in terr):
+        terr.append({'id': len(terr), 'name': 'mosaic', 'file': 'terrain/mosaic.jpg', 'surface': 100, 'scale': 1, 'color': avg['build/mosaic_floor']})
+        json.dump(terr, open(tp, 'w'), indent=1)
     json.dump(pbr, open(pbr_p, 'w'), indent=0)
     json.dump(avg, open(avg_p, 'w'), indent=0)
 

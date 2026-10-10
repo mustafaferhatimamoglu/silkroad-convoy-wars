@@ -10,7 +10,7 @@ export const REGION_M = 192;
 
 const CLASS_DETAIL = {   // m: 2-8 m olcekli ayrinti puruzu (zemin sinifina gore)
   void: 3, sand: 0.55, dirt: 0.3, gravel: 0.35, grass: 0.28, steppe: 0.3, forest: 0.35, rock: 1.6, redrock: 1.8,
-  snow: 0.7, mud: 0.15, paving: 0.0, cobble: 0.03, farmland: 0.12,
+  snow: 0.7, mud: 0.15, paving: 0.0, cobble: 0.03, farmland: 0.12, mosaic: 0.0,
 };
 
 async function fetchGz(url) {
@@ -237,7 +237,7 @@ export class BlueprintPlan {
       if (d < P.r + 40) h = h + (P.h - h) * (1 - smoothstep(P.r, P.r + 40, d));
     }
     out.h = h;
-    out.road = name === 'paving' || name === 'cobble' ? 1 : 0;
+    out.road = name === 'paving' || name === 'cobble' || name === 'mosaic' ? 1 : 0;
     out.roadKind = out.road ? 'paved' : null;
     out.tunnel = false; out.hole = false;
     out.ground = g;

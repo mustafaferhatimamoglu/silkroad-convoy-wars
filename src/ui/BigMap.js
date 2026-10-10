@@ -6,7 +6,7 @@ const MPP = 16;                           // metre / piksel (sablonun yukseklik 
 const PAL = {
   void: [70, 64, 58], sand: [214, 190, 138], dirt: [150, 120, 82], gravel: [150, 146, 136], grass: [96, 128, 60],
   steppe: [168, 152, 96], forest: [62, 92, 46], rock: [126, 120, 112], redrock: [168, 98, 64], snow: [236, 240, 246],
-  mud: [100, 88, 66], paving: [206, 200, 188], cobble: [160, 152, 140], farmland: [126, 116, 58],
+  mud: [100, 88, 66], paving: [206, 200, 188], cobble: [160, 152, 140], farmland: [126, 116, 58], mosaic: [150, 120, 104],
 };
 
 export class BigMap {

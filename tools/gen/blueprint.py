@@ -35,7 +35,7 @@ GN = 192 // G_RES   # bolge basina 24
 VOID_H = -32768
 
 # zemin siniflari (oyundaki doku adlariyla ayni sira: GenData eslestirir)
-CLASSES = ['void', 'sand', 'dirt', 'gravel', 'grass', 'steppe', 'forest', 'rock', 'redrock', 'snow', 'mud', 'paving', 'cobble', 'farmland']
+CLASSES = ['void', 'sand', 'dirt', 'gravel', 'grass', 'steppe', 'forest', 'rock', 'redrock', 'snow', 'mud', 'paving', 'cobble', 'farmland', 'mosaic']
 C = {n: i for i, n in enumerate(CLASSES)}
 
 
@@ -43,6 +43,8 @@ def classify(name, flags, color):
     n = name.lower()
     r, g, b = color
     lum = 0.3 * r + 0.59 * g + 0.11 * b
+    if re.search(r'oaho_marble|mosaic', n):                     # Hotan meydaninin desenli tas dosemesi
+        return C['mosaic']
     if re.search(r'marble|tile|city|floor|brick|_road|pha_road|wood', n):
         return C['paving'] if lum > 95 else C['cobble']
     # sehir dosemeleri (Konstantiniyye, Iskenderiye, Semerkant tas meydanlari)

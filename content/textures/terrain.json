@@ -178,5 +178,17 @@
    117,
    112
   ]
+ },
+ {
+  "id": 15,
+  "name": "mosaic",
+  "file": "terrain/mosaic.jpg",
+  "surface": 100,
+  "scale": 1,
+  "color": [
+   156,
+   155,
+   135
+  ]
  }
 ]

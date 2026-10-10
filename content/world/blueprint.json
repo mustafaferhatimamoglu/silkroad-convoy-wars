@@ -36,7 +36,8 @@
    "mud",
    "paving",
    "cobble",
-   "farmland"
+   "farmland",
+   "mosaic"
   ]
  },
  "water": {

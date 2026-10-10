@@ -455,6 +455,14 @@ function massModel(mi, culture) {
     b[k] = lo !== null && lo > 2.6 && lo < t[k] - 0.3 ? lo : -3;
     has[k] = 1;
   }
+  // siluetin icindeki kuleler (minare, burc, pagoda): cevresinden en az 7 m yuksek, kompakt sutunlar
+  // basamakli hucre yerine gercek kule geometrisiyle; hucreler cevre (cati/zemin) yuksekligine iner
+  const towers = rock || steps || soft ? [] : findTowers(M, t, has);
+  // meydan mozaigi (col/Fars/Misir): alcak, genis, duz zemin modeli
+  let maxTop = 0;
+  for (let k = 0; k < n; k++) if (has[k] && t[k] > maxTop) maxTop = t[k];
+  const plaza = !rock && !steps && (culture === 'desert' || culture === 'persian' || culture === 'egypt') && maxTop < 2.5 && Math.max(nx, nz) * res >= 18;
+  for (const T of towers) for (const c of T.cells) { t[c] = T.base; if (b[c] > T.base - 0.3) b[c] = -3; }
   // kose yukseklikleri: kosedeki hucre ustleri S esigiyle gruplanir, her grup kendi ortalamasini alir
   const corner = new Float32Array(n * 4);       // hucre basina koseler: 0 (i,j) 1 (i+1,j) 2 (i+1,j+1) 3 (i,j+1)
   for (let cj = 0; cj <= nz; cj++) {
@@ -552,6 +560,7 @@ function massModel(mi, culture) {
   const tri = (B, P, col, uvs) => { for (let v = 0; v < 3; v++) { B.pos.push(P[v][0], P[v][1], P[v][2]); B.col.push(col[0], col[1], col[2]); B.uv.push(uvs[v][0], uvs[v][1]); } };
   const X = (i) => x0 + i * res, Z = (j) => z0 + j * res;
   const topUV = (p) => [p[0] / 3, p[2] / 3];
+  const mosUV = (p) => [p[0] / 8, p[2] / 8];
   for (let j = 0; j < nz; j++) {
     for (let i = 0; i < nx; i++) {
       const k = j * nx + i;
@@ -560,8 +569,11 @@ function massModel(mi, culture) {
       const c0 = corner[k * 4], c1 = corner[k * 4 + 1], c2 = corner[k * 4 + 2], c3 = corner[k * 4 + 3];
       // ust yuz
       const tp = pal[M.tm[k]] || [0];
-      const ttex = rock ? `gray/terrain_${culture}` : t[k] < 1.4 && classes[tp[0]] !== 'grass' ? 'gray/terrain_paving' : massTex(classes[tp[0]], culture);
-      const tc = tint(M.tm[k], ttex);
+      // meydan / avlu dosemesi (col, Fars): desenli mozaik
+      const flatTop = Math.max(c0, c1, c2, c3) - Math.min(c0, c1, c2, c3) < 0.1;
+      const mos = classes[tp[0]] !== 'grass' && ((plaza && t[k] < 1.6) || (flatTop && (culture === 'desert' || culture === 'persian') && !rock && !steps && !soft && (classes[tp[0]] === 'paving' || classes[tp[0]] === 'marble')));
+      const ttex = rock ? `gray/terrain_${culture}` : mos ? 'build/mosaic_floor' : t[k] < 1.4 && classes[tp[0]] !== 'grass' ? 'gray/terrain_paving' : massTex(classes[tp[0]], culture);
+      const tc = mos ? [0.95, 0.95, 0.95] : tint(M.tm[k], ttex);
       const TB = bucket(ttex);
       const A = [xa, c0, za], Bp = [xb, c1, za], Cp = [xb, c2, zb], Dp = [xa, c3, zb];
       // egimli tas/doseme hucresi: rampa yerine basamak (orijinal merdivenler 1 m izgarada rampaya doner)
@@ -589,8 +601,9 @@ function massModel(mi, culture) {
           else { tri(TB, [t1, t0, t3], tc, [topUV(t1), topUV(t0), topUV(t3)]); tri(TB, [t1, t3, t2], tc, [topUV(t1), topUV(t3), topUV(t2)]); }
         }
       } else {
-        tri(TB, [Dp, Cp, Bp], tc, [topUV(Dp), topUV(Cp), topUV(Bp)]);
-        tri(TB, [Dp, Bp, A], tc, [topUV(Dp), topUV(Bp), topUV(A)]);
+        const U = mos ? mosUV : topUV;
+        tri(TB, [Dp, Cp, Bp], tc, [U(Dp), U(Cp), U(Bp)]);
+        tri(TB, [Dp, Bp, A], tc, [U(Dp), U(Bp), U(A)]);
       }
       // yan yuzler: komsu bu kenarda daha alcaksa (ya da yoksa) aradaki duvar; kemer altlari
       const sp = pal[M.sm[k]] || [0];
@@ -639,6 +652,15 @@ function massModel(mi, culture) {
     }
   }
   const parts = [];
+  for (const T of towers) {
+    // kule: kulture gore minare / pagoda / can kulesi; renk siluetin yan ve tepe rengi
+    const sp = pal[M.sm[T.cells[0]]], tp = pal[M.tm[T.top]];
+    const f = { box: { cx: T.cx, cz: T.cz, w: T.r * 2, d: T.r * 2 }, H: T.H - T.base + 1.5, wallCol: sp ? sp.slice(1) : null, roofCol: tp ? tp.slice(1) : null };
+    for (const q of spireModel(f, culture, MASS.avg) || []) {
+      q.geo.translate(0, T.base, 0);
+      parts.push(q);
+    }
+  }
   if (WIN.pos.length) {
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(WIN.pos, 3));
@@ -663,6 +685,97 @@ function massModel(mi, culture) {
     parts.push({ geo: g, tex, alpha: false, collide: true });
   }
   return parts;
+}
+
+/** Siluette kule bilesenleri: { cells, base, H, cx, cz, r, top } (model yerel). */
+function findTowers(M, t, has) {
+  const { nx, nz, res, x0, z0 } = M;
+  const n = nx * nz;
+  let maxT = 0;
+  for (let k = 0; k < n; k++) if (has[k] && t[k] > maxT) maxT = t[k];
+  if (maxT < 10) return [];
+  const R = Math.max(2, Math.round(7 / res));
+  const med = new Float32Array(n);
+  const cand = new Uint8Array(n);
+  const v = [];
+  for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
+    const k = j * nx + i;
+    if (!has[k] || t[k] < 10) continue;
+    v.length = 0;
+    for (let bb = -R; bb <= R; bb++) for (let a = -R; a <= R; a++) {
+      if (Math.abs(a) + Math.abs(bb) < R * 0.7) continue;            // halka: cevre
+      const ii = i + a, jj = j + bb;
+      v.push(ii < 0 || jj < 0 || ii >= nx || jj >= nz || !has[jj * nx + ii] ? 0 : Math.max(0, t[jj * nx + ii]));
+    }
+    v.sort((p, q) => p - q);
+    med[k] = v[v.length >> 1];
+    if (t[k] - med[k] >= 7) cand[k] = 1;
+  }
+  const seen = new Uint8Array(n), out = [];
+  for (let k = 0; k < n; k++) {
+    if (!cand[k] || seen[k]) continue;
+    const q = [k], cells = [];
+    seen[k] = 1;
+    while (q.length) {
+      const c = q.pop();
+      cells.push(c);
+      const i = c % nx, j = (c / nx) | 0;
+      for (const [a, bb] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const ii = i + a, jj = j + bb;
+        if (ii < 0 || jj < 0 || ii >= nx || jj >= nz) continue;
+        const kk = jj * nx + ii;
+        if (cand[kk] && !seen[kk]) { seen[kk] = 1; q.push(kk); }
+      }
+    }
+    let i0 = 1e9, i1 = -1e9, j0 = 1e9, j1 = -1e9, H = 0, top = cells[0], base = 0, sx = 0, sz = 0;
+    for (const c of cells) {
+      const i = c % nx, j = (c / nx) | 0;
+      i0 = Math.min(i0, i); i1 = Math.max(i1, i); j0 = Math.min(j0, j); j1 = Math.max(j1, j);
+      if (t[c] > H) { H = t[c]; top = c; }
+      base += med[c]; sx += i; sz += j;
+    }
+    base /= cells.length;
+    const comp = (list) => {
+      let a0 = 1e9, a1 = -1e9, c0 = 1e9, c1 = -1e9, hh = 0, tp = list[0], qx = 0, qz = 0;
+      for (const c of list) {
+        const i = c % nx, j = (c / nx) | 0;
+        a0 = Math.min(a0, i); a1 = Math.max(a1, i); c0 = Math.min(c0, j); c1 = Math.max(c1, j);
+        if (t[c] > hh) { hh = t[c]; tp = c; }
+        qx += i; qz += j;
+      }
+      const w = (a1 - a0 + 1) * res, d = (c1 - c0 + 1) * res, area = list.length * res * res;
+      if (w > 14 || d > 14 || area < 6 || area / (w * d) < 0.45) return null;
+      return { cells: list, top: tp, H: hh, base, cx: x0 + (qx / list.length + 0.5) * res, cz: z0 + (qz / list.length + 0.5) * res, r: Math.max(1, Math.sqrt(area / Math.PI)) };
+    };
+    const one = comp(cells);
+    if (one) { out.push(one); continue; }
+    // birbirine bagli kuleler (kapi kemeriyle bitisik minare cifti): yuksek kisimlarina gore ayir
+    if (H - base < 15) continue;
+    void i0; void i1; void j0; void j1; void top; void sx; void sz;
+    for (const f of [0.5, 0.65, 0.8]) {
+      const thr = base + f * (H - base), inSet = new Set(cells.filter((c) => t[c] >= thr));
+      const subs = [], done = new Set();
+      for (const c0 of inSet) {
+        if (done.has(c0)) continue;
+        const qq = [c0], list = [];
+        done.add(c0);
+        while (qq.length) {
+          const c = qq.pop();
+          list.push(c);
+          const i = c % nx, j = (c / nx) | 0;
+          for (const [a, bb] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+            const kk = (j + bb) * nx + (i + a);
+            if (i + a < 0 || j + bb < 0 || i + a >= nx || j + bb >= nz) continue;
+            if (inSet.has(kk) && !done.has(kk)) { done.add(kk); qq.push(kk); }
+          }
+        }
+        subs.push(list);
+      }
+      const ok = subs.map(comp).filter(Boolean);
+      if (ok.length && ok.length === subs.filter((l) => l.length * res * res >= 6).length) { out.push(...ok); break; }
+    }
+  }
+  return out;
 }
 
 /** Duz blok (kaya kutlesi, sandik, araba, merdiven vb.): mat = rock | wood | stone | kultur. */
@@ -767,7 +880,7 @@ function lion(rnd) {
   ell(0.2, 0.38, 0.22, 0.78, 1, 1, 1, 10, 8);         // top
   ell(0.1, 0, 0.75, -0.9, 1, 1, 1, 6, 5);             // kuyruk
   ell(0.13, 0, 1.0, -0.98, 1.4, 1, 1, 6, 5);
-  return [part(tone(mergeGeos(g), [0.62, 0.6, 0.55]), 'build/marble', { uvScale: 0.8 })];
+  return [part(tone(mergeGeos(g), [0.36, 0.34, 0.31]), 'build/marble', { uvScale: 0.8 })];
 }
 
 /** Pazar tezgahi: tahta masa + bez gölgelik. */
