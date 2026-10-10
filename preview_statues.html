@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<title>Silkroad Heykel & Doku Onizleme</title>
+<style>
+  body { margin: 0; overflow: hidden; background: #121620; font-family: "Segoe UI", sans-serif; color: #e9e3d6; }
+  #canvas { width: 100vw; height: 100vh; display: block; }
+  #hud {
+    position: absolute; top: 20px; left: 24px; padding: 12px 20px;
+    background: rgba(14, 18, 28, 0.85); border: 1px solid rgba(232, 193, 112, 0.4);
+    border-radius: 8px; box-shadow: 0 8px 30px rgba(0,0,0,0.6);
+  }
+  #title { font-family: Georgia, serif; font-size: 20px; color: #e8c170; font-weight: bold; letter-spacing: 1px; }
+  #desc { font-size: 13px; color: #a99f8c; margin-top: 4px; }
+  #status { position: absolute; bottom: 20px; right: 24px; font-size: 11px; color: #6fcf7a; font-family: monospace; }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three/three.module.js"
+  }
+}
+</script>
+</head>
+<body>
+<div id="hud">
+  <div id="title">Heykel Onizleme</div>
+  <div id="desc">Doku ve cevre uyumu kontrolu</div>
+</div>
+<div id="status">HAZIR</div>
+<canvas id="canvas"></canvas>
+
+<script type="module">
+import * as THREE from 'three';
+import { model } from './src/world/gen/models.js';
+
+const urlParams = new URLSearchParams(window.location.search);
+const statueKey = urlParams.get('statue') || 'general';
+
+const SCENES = {
+  general: {
+    title: 'Çin / Jangan: Zırhlı General & İmparator Anıtı',
+    desc: 'Jangan taş meydanı ve kale suru dokusuyla uyum',
+    modelKey: 'statue:china:3.5:6.5',
+    groundTex: 'terrain/cobble.jpg',
+    wallTex: 'build/stone_wall.jpg',
+    camDist: 10.5, camHeight: 4.8, lookY: 3.2,
+  },
+  lion: {
+    title: 'Jangan: Bekçi Aslanı (Fu Dog / Çin Aslanı)',
+    desc: 'Saray mermer basamakları ve lake ahşap cepheyle uyum',
+    modelKey: 'lion:0',
+    groundTex: 'terrain/paving.jpg',
+    wallTex: 'build/wood_lacquer.jpg',
+    camDist: 4.8, camHeight: 1.8, lookY: 1.0,
+    angle: 0.65,
+  },
+  sphinx: {
+    title: 'Mısır / İskenderiye: Sfenks Anıtı (Sphinx)',
+    desc: 'İskenderiye sarı çöl kumu ve kumtaşı bloklarıyla uyum',
+    modelKey: 'statue:egypt:6.0:4.5',
+    groundTex: 'terrain/sand.jpg',
+    wallTex: 'build/sandstone_blocks.jpg',
+    camDist: 11.5, camHeight: 3.8, lookY: 1.8,
+    angle: 0.65,
+  },
+  pharaoh: {
+    title: 'Mısır / İskenderiye: Firavun Heykeli',
+    desc: 'Tapınak sütunlu avlusu ve kumtaşı duvarıyla uyum',
+    modelKey: 'statue:egypt:2.5:8.0',
+    groundTex: 'terrain/sand.jpg',
+    wallTex: 'build/sandstone_blocks.jpg',
+    camDist: 13.0, camHeight: 4.5, lookY: 3.5,
+    angle: 0.45,
+  },
+  obelisk: {
+    title: 'İskenderiye: Altın Uçlu Dikilitaş (Obelisk)',
+    desc: 'Nil kıyısı tapınak girişi ve kumtaşı bloklarıyla uyum',
+    modelKey: 'obelisk:egypt:24',
+    groundTex: 'terrain/sand.jpg',
+    wallTex: 'build/sandstone_blocks.jpg',
+    camDist: 38.0, camHeight: 13.0, lookY: 12.0,
+    angle: 0.45,
+  },
+  byzantine: {
+    title: 'Konstantiniyye: Mermer Kahraman Anıtı',
+    desc: 'Augustaion meydanı mermer döşemesi ve Bizans surlarıyla uyum',
+    modelKey: 'statue:byzantine:3.0:5.5',
+    groundTex: 'terrain/paving.jpg',
+    wallTex: 'build/stone_wall.jpg',
+    camDist: 9.5, camHeight: 3.5, lookY: 2.5,
+    angle: 0.45,
+  },
+  fountain: {
+    title: 'Semerkant: Turkuaz Çinili Saray Fıskiyesi',
+    desc: 'Registan meydanı taş zemini ve saray çinileriyle uyum',
+    modelKey: 'fountain:persian:9.5:3.5',
+    groundTex: 'terrain/cobble.jpg',
+    wallTex: 'build/mosaic_turquoise.jpg',
+    camDist: 14.0, camHeight: 5.5, lookY: 2.0,
+    angle: 0.65,
+  },
+  waterfall: {
+    title: 'Sarı Nehir & Vaha Şelalesi',
+    desc: 'Doğal kanyon kayalıkları ve su köpüğü uyumu',
+    modelKey: 'waterfall:10:16',
+    groundTex: 'terrain/rock.jpg',
+    wallTex: 'terrain/rock.jpg',
+    camDist: 26.0, camHeight: 9.0, lookY: 7.5,
+    angle: 0.45,
+  },
+  bench: {
+    title: 'Konstantiniyye / Semerkant: Park & Cadde Bankı',
+    desc: 'Arnavut kaldırımı ve şehir meydanlarıyla ergonomik uyum',
+    modelKey: 'bench:byzantine:2.5',
+    groundTex: 'terrain/cobble.jpg',
+    wallTex: 'build/plaster_white.jpg',
+    camDist: 4.0, camHeight: 1.6, lookY: 0.65,
+    angle: 2.45,
+  },
+  milestone: {
+    title: 'Tarihi İpek Yolu: Kilometre & Menzil Kitabesi',
+    desc: 'Kervan yolu taş döşemesi ve çöl menzil atmosferiyle uyum',
+    modelKey: 'milestone:desert:1.5',
+    groundTex: 'terrain/sand.jpg',
+    wallTex: 'build/sandstone_blocks.jpg',
+    camDist: 3.5, camHeight: 1.4, lookY: 0.75,
+    angle: 0.60,
+  }
+};
+
+const conf = SCENES[statueKey] || SCENES.general;
+document.getElementById('title').textContent = conf.title;
+document.getElementById('desc').textContent = conf.desc;
+
+const canvas = document.getElementById('canvas');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
+renderer.setSize(1024, 768);
+renderer.setPixelRatio(1);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x9cc3db);
+scene.fog = new THREE.FogExp2(0x9cc3db, 0.008);
+
+const camera = new THREE.PerspectiveCamera(40, 1024 / 768, 0.2, 500);
+const angle = conf.angle !== undefined ? conf.angle : 0.55;
+camera.position.set(Math.sin(angle) * conf.camDist, conf.camHeight, Math.cos(angle) * conf.camDist);
+camera.lookAt(0, conf.lookY, 0);
+
+// Işıklandırma (Güneş + Ortam + Gökyüzü)
+const hemi = new THREE.HemisphereLight(0xfff6e6, 0x556070, 0.85);
+scene.add(hemi);
+
+const sun = new THREE.DirectionalLight(0xfff1d0, 1.6);
+sun.position.set(18, 30, 22);
+sun.castShadow = true;
+sun.shadow.mapSize.width = 2048;
+sun.shadow.mapSize.height = 2048;
+sun.shadow.camera.near = 0.5;
+sun.shadow.camera.far = 120;
+const d = 25;
+sun.shadow.camera.left = -d; sun.shadow.camera.right = d;
+sun.shadow.camera.top = d; sun.shadow.camera.bottom = -d;
+sun.shadow.bias = -0.0005;
+scene.add(sun);
+
+const rimLight = new THREE.DirectionalLight(0xaad0ff, 0.5);
+rimLight.position.set(-20, 12, -15);
+scene.add(rimLight);
+
+const texLoader = new THREE.TextureLoader();
+function loadPBR(texKey, uvRepeat = [6, 6], hasVertexColors = false) {
+  const url = `./content/textures/${texKey}${texKey.endsWith('.png') ? '' : (texKey.includes('.') ? '' : '.jpg')}`;
+  const map = texLoader.load(url);
+  map.wrapS = map.wrapT = THREE.RepeatWrapping;
+  map.repeat.set(uvRepeat[0], uvRepeat[1]);
+  return new THREE.MeshStandardMaterial({
+    map,
+    roughness: 0.82,
+    metalness: 0.05,
+    vertexColors: hasVertexColors
+  });
+}
+
+// Zemin
+const groundMat = loadPBR(conf.groundTex, [12, 12]);
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), groundMat);
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+// Arkadaki Mimari Duvar (Modelin arkasinda, -Z yonunde yer alir; model +Z yonune bakar)
+const wallMat = loadPBR(conf.wallTex, [10, 4]);
+const wall = new THREE.Mesh(new THREE.BoxGeometry(32, 16, 2), wallMat);
+const wallDist = Math.max(8, conf.camDist * 0.70);
+wall.position.set(0, 8, -wallDist);
+wall.receiveShadow = true;
+wall.castShadow = true;
+scene.add(wall);
+
+// Modeli olustur
+const parts = model(conf.modelKey);
+const root = new THREE.Group();
+
+for (const p of parts) {
+  const hasVC = !!(p.geo && p.geo.attributes && p.geo.attributes.color);
+  const mat = loadPBR(p.tex, [p.uvScale || 2, p.uvScale || 2], hasVC);
+  if (p.alpha) {
+    mat.transparent = true;
+    mat.alphaTest = 0.5;
+  }
+  const mesh = new THREE.Mesh(p.geo, mat);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  root.add(mesh);
+}
+scene.add(root);
+
+// Render dongusu
+let frames = 0;
+function render() {
+  renderer.render(scene, camera);
+  frames++;
+  if (frames === 5) {
+    window.__RENDER_DONE__ = true;
+    document.getElementById('status').textContent = 'RENDER_TAMAM';
+  } else {
+    requestAnimationFrame(render);
+  }
+}
+render();
+</script>
+</body>
+</html>

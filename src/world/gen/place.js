@@ -23,6 +23,7 @@ function refine(kind, name, w, d, h) {
   if (/waterfall|cascade/.test(n)) return 'waterfall';
   if (/obelisk/.test(n)) return 'obelisk';
   if (/statue|sculpt/.test(n)) return 'statue';
+  if (/milestone|roadstone|boundary|stele|signpost/.test(n)) return 'milestone';
   if (kind === 'house' || kind === 'prop') {
     if (/petra|canyon|rocky|_rock|cliff|crag/.test(n)) return 'rockmass';
     if (/tree|palm/.test(n)) return 'tree';
@@ -82,8 +83,8 @@ export function placeRegionObjects(data, rx, rz, d) {
       if (ox >= 0 && ox < REGION_M && oz >= 0 && oz < REGION_M) out.push({ m: 'lion:0', x: ox, y: Y + Math.max(0, by0), z: -oz, yaw, s: Math.max(0.5, h / 2.1) });
       continue;
     }
-    // yapi siluetten: orijinal konum, yon ve yukseklik; ozel modellerimiz (heykel, fiskiye, obelisk, selale, lamba) siluete girmesin
-    const SPECIAL_MODELS = new Set(['lamp', 'statue', 'fountain', 'obelisk', 'waterfall']);
+    // yapi siluetten: orijinal konum, yon ve yukseklik; ozel modellerimiz (heykel, fiskiye, obelisk, selale, lamba, kilometre tasi) siluete girmesin
+    const SPECIAL_MODELS = new Set(['lamp', 'statue', 'fountain', 'obelisk', 'waterfall', 'milestone']);
     if (!VEG.has(kind) && !SPECIAL_MODELS.has(kind) && plan.massing.models && plan.massing.models[mi]) {
       const ox0 = X - x0, oz0 = Z - z0;
       if (ox0 < -60 || ox0 > REGION_M + 60 || oz0 < -60 || oz0 > REGION_M + 60) continue;
@@ -187,6 +188,7 @@ export function placeRegionObjects(data, rx, rz, d) {
       case 'obelisk': push(`obelisk:${culture}:${q(Math.max(12, h), 1)}`, yaw, 1, gy - 0.1); break;
       case 'fountain': push(`fountain:${culture}:${q(Math.max(w, dd), 0.5)}:${q(Math.max(2.5, h), 0.5)}`, yaw, 1, gy - 0.05); break;
       case 'waterfall': push(`waterfall:${q(Math.max(w, dd), 1)}:${q(Math.max(4, h), 1)}`, yaw, 1, gy); break;
+      case 'milestone': push(`milestone:${culture}:${q(Math.min(Math.max(h, 1.2), 2.2), 0.2)}`, yaw, 1, gy - 0.05); break;
       case 'stall': push(`stall:${culture}:${q(w, 0.5)}:${q(dd, 0.5)}`, yaw, 1, gy - 0.05); break;
       case 'cart': push(`block:wood:${q(w, 0.5)}:${q(dd, 0.5)}:${q(Math.min(h, 3), 0.5)}`, yaw, 1, gy - 0.05); break;
       default:

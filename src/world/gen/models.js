@@ -872,52 +872,56 @@ function flag(culture, h) {
 function chineseGeneralStatue(w, h, C) {
   const parts = [];
   const pW = Math.max(1.8, w * 0.85);
-  const base1 = box(pW * 1.1, h * 0.08, pW * 1.1, 0, 0, 0);
+  // Basamakli anitsal kaide
+  const base1 = box(pW * 1.15, h * 0.08, pW * 1.15, 0, 0, 0);
   const base2 = box(pW * 0.95, h * 0.16, pW * 0.95, 0, h * 0.08, 0);
-  const baseCap = box(pW * 1.02, h * 0.05, pW * 1.02, 0, h * 0.24, 0);
+  const baseCap = box(pW * 1.05, h * 0.05, pW * 1.05, 0, h * 0.24, 0);
   parts.push(part(mergeGeos([base1, base2, baseCap]), C.wall, { uvScale: 2 }));
 
   const fig = [];
   const y0 = h * 0.29, fH = h * 0.68, sW = w * 0.38;
   const legH = fH * 0.38;
-  for (const sx of [-sW * 0.32, sW * 0.32]) {
-    const leg = new THREE.CylinderGeometry(sW * 0.18, sW * 0.24, legH, 8);
+  for (const sx of [-sW * 0.30, sW * 0.30]) {
+    const leg = new THREE.CylinderGeometry(sW * 0.15, sW * 0.20, legH, 8);
     placed(leg, sx, y0 + legH / 2, 0);
-    const boot = box(sW * 0.38, legH * 0.28, sW * 0.52, sx, y0, sW * 0.06);
+    const boot = box(sW * 0.32, legH * 0.26, sW * 0.46, sx, y0, sW * 0.10);
     fig.push(leg, boot);
   }
   const torsoH = fH * 0.36;
-  const torso = new THREE.CylinderGeometry(sW * 0.58, sW * 0.48, torsoH, 8);
+  // Belden omuza dogru genisleyen zirh
+  const torso = new THREE.CylinderGeometry(sW * 0.52, sW * 0.38, torsoH, 8);
   placed(torso, 0, y0 + legH + torsoH / 2, 0);
-  const belt = box(sW * 1.25, torsoH * 0.18, sW * 0.95, 0, y0 + legH + torsoH * 0.2, 0);
-  const shY = y0 + legH + torsoH * 0.85;
-  for (const sx of [-sW * 0.72, sW * 0.72]) {
-    const pld = new THREE.SphereGeometry(sW * 0.26, 8, 6);
+  const belt = box(sW * 0.98, torsoH * 0.16, sW * 0.78, 0, y0 + legH + torsoH * 0.18, 0);
+  const shY = y0 + legH + torsoH * 0.88;
+  for (const sx of [-sW * 0.58, sW * 0.58]) {
+    const pld = new THREE.SphereGeometry(sW * 0.22, 8, 6);
     pld.scale(1.2, 0.9, 1.2);
     placed(pld, sx, shY, 0);
-    const arm = new THREE.CylinderGeometry(sW * 0.15, sW * 0.17, fH * 0.34, 8);
-    arm.rotateZ(sx > 0 ? 0.3 : -0.3);
-    placed(arm, sx * 0.95, shY - fH * 0.18, 0);
+    const arm = new THREE.CylinderGeometry(sW * 0.13, sW * 0.15, fH * 0.34, 8);
+    arm.rotateZ(sx > 0 ? 0.25 : -0.25);
+    placed(arm, sx * 0.95, shY - fH * 0.17, 0);
     fig.push(pld, arm);
   }
   const headY = y0 + legH + torsoH + fH * 0.10;
-  const head = new THREE.SphereGeometry(sW * 0.22, 10, 8);
+  const head = new THREE.SphereGeometry(sW * 0.20, 10, 8);
   head.scale(0.9, 1.05, 0.95);
   placed(head, 0, headY, 0);
-  const helmet = new THREE.ConeGeometry(sW * 0.28, fH * 0.16, 8);
-  placed(helmet, 0, headY + fH * 0.09, 0);
+  const helmet = new THREE.ConeGeometry(sW * 0.25, fH * 0.18, 8);
+  placed(helmet, 0, headY + fH * 0.10, 0);
   fig.push(torso, belt, head, helmet);
 
+  // Kiliç: onunde vakur bir sekilde dik durur (kabzasi onde)
   const sword = [
-    box(sW * 0.10, fH * 0.55, sW * 0.06, sW * 0.45, y0, sW * 0.35),
-    box(sW * 0.32, sW * 0.08, sW * 0.12, sW * 0.45, y0 + fH * 0.45, sW * 0.35),
-    box(sW * 0.08, fH * 0.16, sW * 0.08, sW * 0.45, y0 + fH * 0.52, sW * 0.35),
+    box(sW * 0.08, fH * 0.58, sW * 0.05, sW * 0.38, y0, sW * 0.28),
+    box(sW * 0.28, sW * 0.07, sW * 0.10, sW * 0.38, y0 + fH * 0.48, sW * 0.28),
+    box(sW * 0.07, fH * 0.15, sW * 0.07, sW * 0.38, y0 + fH * 0.56, sW * 0.28),
   ];
   fig.push(...sword);
-  const cape = box(sW * 1.3, fH * 0.72, sW * 0.14, 0, y0 + fH * 0.36, -sW * 0.45);
+  // Pelerin: arkada
+  const cape = box(sW * 1.15, fH * 0.72, sW * 0.12, 0, y0 + fH * 0.36, -sW * 0.35);
 
-  parts.push(part(tone(mergeGeos(fig), [0.85, 0.82, 0.78]), 'build/marble', { uvScale: 1.5 }));
-  parts.push(part(tone(cape, [0.55, 0.22, 0.18]), 'build/canvas_red', { uvScale: 1.5, collide: false }));
+  parts.push(part(tone(mergeGeos(fig), [0.88, 0.85, 0.80]), 'build/marble', { uvScale: 1.5 }));
+  parts.push(part(tone(cape, [0.65, 0.24, 0.20]), 'build/canvas_red', { uvScale: 1.5, collide: false }));
   return parts;
 }
 
@@ -926,49 +930,85 @@ function egyptianStatue(w, h, C) {
   const parts = [];
   const pW = Math.max(1.8, w * 0.85);
   if (w > h * 0.85 || w > 5.5) {
+    // Sfenks: kaide uzerinde ileriye (+z) uzanan aslan pencesi ve firavun basi
     const base = box(w * 0.95, h * 0.18, w * 1.35, 0, 0, 0);
     parts.push(part(base, 'build/sandstone_blocks', { uvScale: 2 }));
     const sph = [];
     const y0 = h * 0.18;
-    const body = new THREE.CylinderGeometry(h * 0.34, h * 0.38, w * 0.88, 10);
+    // Govde: boyuna silindir, arkaya dogru uzanir
+    const body = new THREE.CylinderGeometry(h * 0.32, h * 0.36, w * 0.85, 12);
     body.rotateX(Math.PI / 2);
-    placed(body, 0, y0 + h * 0.30, -w * 0.12);
-    const hip = new THREE.SphereGeometry(h * 0.36, 10, 8);
+    placed(body, 0, y0 + h * 0.28, -w * 0.08);
+    const hip = new THREE.SphereGeometry(h * 0.35, 10, 8);
     hip.scale(1.1, 1.0, 1.2);
-    placed(hip, 0, y0 + h * 0.32, -w * 0.52);
-    for (const sx of [-h * 0.26, h * 0.26]) {
-      const paw = box(h * 0.22, h * 0.18, w * 0.52, sx, y0, w * 0.24);
+    placed(hip, 0, y0 + h * 0.30, -w * 0.48);
+    // On ayaklar ileriye (+z) uzanir
+    for (const sx of [-h * 0.24, h * 0.24]) {
+      const paw = box(h * 0.18, h * 0.16, w * 0.48, sx, y0, w * 0.32);
       sph.push(paw);
     }
-    const chest = box(h * 0.48, h * 0.36, h * 0.40, 0, y0 + h * 0.45, w * 0.18);
+    const chest = box(h * 0.44, h * 0.38, h * 0.36, 0, y0 + h * 0.42, w * 0.18);
+    // Insan basi ve firavun basligi (Nemes kulaklari ve sakali)
     const head = new THREE.SphereGeometry(h * 0.22, 12, 10);
-    placed(head, 0, y0 + h * 0.70, w * 0.20);
-    const nemesL = box(h * 0.12, h * 0.30, h * 0.25, -h * 0.22, y0 + h * 0.58, w * 0.20);
-    const nemesR = box(h * 0.12, h * 0.30, h * 0.25, h * 0.22, y0 + h * 0.58, w * 0.20);
-    const beard = box(h * 0.08, h * 0.18, h * 0.08, 0, y0 + h * 0.54, w * 0.34);
+    placed(head, 0, y0 + h * 0.68, w * 0.22);
+    const nemesL = box(h * 0.11, h * 0.30, h * 0.20, -h * 0.20, y0 + h * 0.56, w * 0.20);
+    const nemesR = box(h * 0.11, h * 0.30, h * 0.20, h * 0.20, y0 + h * 0.56, w * 0.20);
+    const beard = box(h * 0.06, h * 0.18, h * 0.06, 0, y0 + h * 0.48, w * 0.32);
     sph.push(body, hip, chest, head, nemesL, nemesR, beard);
-    parts.push(part(tone(mergeGeos(sph), [0.84, 0.75, 0.60]), 'build/sandstone_blocks', { uvScale: 1.5 }));
+    // Asil col kumu ve kizil kumtasi tonu
+    parts.push(part(tone(mergeGeos(sph), [0.86, 0.74, 0.56]), 'build/sandstone_blocks', { uvScale: 1.5 }));
     return parts;
   }
 
-  const base = box(pW * 1.05, h * 0.12, pW * 1.05, 0, 0, 0);
+  // Tahtta Firavun (Enthroned Pharaoh): Abu Simbel / Luksor tarzi tahta oturmus azametli heykel
+  const base = box(pW * 1.15, h * 0.10, pW * 1.35, 0, 0, 0);
   parts.push(part(base, 'build/sandstone_blocks', { uvScale: 2 }));
   const fig = [];
-  const y0 = h * 0.12, fH = h * 0.82, sW = w * 0.35;
-  for (const sx of [-sW * 0.28, sW * 0.28]) {
-    const leg = box(sW * 0.32, fH * 0.45, sW * 0.38, sx, y0, 0);
-    fig.push(leg);
+  const y0 = h * 0.10, fH = h * 0.85, sW = w * 0.38;
+  const throneW = sW * 1.8, throneD = sW * 1.5;
+  const seatH = fH * 0.38;
+  // Tahtin yuksek arkaligi arkada (-z) durur
+  const throneBack = box(throneW, fH * 0.95, sW * 0.28, 0, y0, -sW * 0.50);
+  const throneSeat = box(throneW, seatH, throneD, 0, y0, -sW * 0.05);
+  const throneSideL = box(sW * 0.22, seatH + sW * 0.25, throneD, -throneW * 0.45, y0, -sW * 0.05);
+  const throneSideR = box(sW * 0.22, seatH + sW * 0.25, throneD, throneW * 0.45, y0, -sW * 0.05);
+
+  const seatTopY = y0 + seatH;
+  // Bacaklar ve dizler: tahtin onunde dik oturur (+z yonune bakar)
+  for (const sx of [-sW * 0.32, sW * 0.32]) {
+    // Uyluk (yatay, ileriye uzanir)
+    const thigh = box(sW * 0.28, sW * 0.22, sW * 0.65, sx, seatTopY - sW * 0.11, sW * 0.25);
+    // Baldirlar (dikey, asagi iner)
+    const calf = box(sW * 0.26, seatH, sW * 0.28, sx, y0, sW * 0.52);
+    // Ayaklar
+    const foot = box(sW * 0.26, sW * 0.12, sW * 0.32, sx, y0, sW * 0.62);
+    fig.push(thigh, calf, foot);
   }
-  const kilt = box(sW * 1.1, fH * 0.25, sW * 0.7, 0, y0 + fH * 0.32, 0);
-  const torso = box(sW * 0.95, fH * 0.35, sW * 0.65, 0, y0 + fH * 0.45, 0);
-  const head = new THREE.SphereGeometry(sW * 0.25, 10, 8);
-  head.scale(0.9, 1.1, 0.95);
-  placed(head, 0, y0 + fH * 0.86, 0);
-  const nemes = box(sW * 0.85, fH * 0.28, sW * 0.55, 0, y0 + fH * 0.80, -sW * 0.08);
-  const beard = box(sW * 0.12, fH * 0.15, sW * 0.12, 0, y0 + fH * 0.72, sW * 0.26);
-  const pillar = box(sW * 0.6, fH * 0.95, sW * 0.25, 0, y0, -sW * 0.32);
-  fig.push(kilt, torso, head, nemes, beard, pillar);
-  parts.push(part(tone(mergeGeos(fig), [0.86, 0.76, 0.60]), 'build/sandstone_blocks', { uvScale: 1.5 }));
+  // Govde: dik ve vakur
+  const torsoH = fH * 0.38;
+  const torso = box(sW * 0.95, torsoH, sW * 0.50, 0, seatTopY, -sW * 0.05);
+  // Kollar: eller dizlerin uzerinde durur
+  for (const sx of [-sW * 0.52, sW * 0.52]) {
+    const armD = box(sW * 0.16, torsoH * 0.70, sW * 0.20, sx, seatTopY + torsoH * 0.20, -sW * 0.05);
+    const hand = box(sW * 0.16, sW * 0.14, sW * 0.48, sx, seatTopY, sW * 0.22);
+    fig.push(armD, hand);
+  }
+  // Bas, Nemes basligi ve sakal
+  const headY = seatTopY + torsoH + fH * 0.08;
+  const head = new THREE.SphereGeometry(sW * 0.22, 12, 10);
+  placed(head, 0, headY, -sW * 0.02);
+  const nemesL = box(sW * 0.18, fH * 0.28, sW * 0.22, -sW * 0.26, headY - fH * 0.08, -sW * 0.02);
+  const nemesR = box(sW * 0.18, fH * 0.28, sW * 0.22, sW * 0.26, headY - fH * 0.08, -sW * 0.02);
+  const nemesTop = box(sW * 0.58, fH * 0.15, sW * 0.42, 0, headY + fH * 0.07, -sW * 0.02);
+  const beard = box(sW * 0.10, fH * 0.18, sW * 0.10, 0, headY - fH * 0.14, sW * 0.15);
+  fig.push(torso, head, nemesL, nemesR, nemesTop, beard);
+
+  // Taht kumtasi bloklari
+  const throneGeo = mergeGeos([throneBack, throneSeat, throneSideL, throneSideR]);
+  parts.push(part(throneGeo, 'build/sandstone_blocks', { uvScale: 1.8 }));
+  // Firavun figuru cilali koyu bazalt/granit dokusu
+  const figGeo = mergeGeos(fig);
+  parts.push(part(tone(figGeo, [0.34, 0.32, 0.30]), 'build/marble', { uvScale: 1.5 }));
   return parts;
 }
 
@@ -976,40 +1016,44 @@ function egyptianStatue(w, h, C) {
 function classicalStatue(w, h, C) {
   const parts = [];
   const pW = Math.max(1.8, w * 0.85);
-  const base1 = box(pW * 1.05, h * 0.09, pW * 1.05, 0, 0, 0);
-  const base2 = box(pW * 0.85, h * 0.18, pW * 0.85, 0, h * 0.09, 0);
-  const baseCap = box(pW * 0.98, h * 0.06, pW * 0.98, 0, h * 0.27, 0);
+  const base1 = box(pW * 1.10, h * 0.09, pW * 1.10, 0, 0, 0);
+  const base2 = box(pW * 0.90, h * 0.18, pW * 0.90, 0, h * 0.09, 0);
+  const baseCap = box(pW * 1.02, h * 0.06, pW * 1.02, 0, h * 0.27, 0);
   parts.push(part(mergeGeos([base1, base2, baseCap]), 'build/stone_wall', { uvScale: 2 }));
 
   const fig = [];
   const y0 = h * 0.33, fH = h * 0.64, sW = w * 0.36;
   const legH = fH * 0.40;
-  const legR = new THREE.CylinderGeometry(sW * 0.16, sW * 0.22, legH, 8);
-  placed(legR, sW * 0.24, y0 + legH / 2, 0);
-  const legL = new THREE.CylinderGeometry(sW * 0.16, sW * 0.20, legH * 0.96, 8);
-  legL.rotateX(0.15);
-  placed(legL, -sW * 0.24, y0 + legH / 2, sW * 0.12);
-  const skirt = new THREE.CylinderGeometry(sW * 0.45, sW * 0.52, fH * 0.22, 8);
+  // Kontraposto durusu
+  const legR = new THREE.CylinderGeometry(sW * 0.15, sW * 0.20, legH, 8);
+  placed(legR, sW * 0.22, y0 + legH / 2, 0);
+  const legL = new THREE.CylinderGeometry(sW * 0.15, sW * 0.18, legH * 0.96, 8);
+  legL.rotateX(0.12);
+  placed(legL, -sW * 0.22, y0 + legH / 2, sW * 0.10);
+  const skirt = new THREE.CylinderGeometry(sW * 0.42, sW * 0.48, fH * 0.22, 8);
   placed(skirt, 0, y0 + legH * 0.8, 0);
-  const torso = new THREE.CylinderGeometry(sW * 0.50, sW * 0.44, fH * 0.36, 8);
+  // Anatomik gogus ve omuzlar
+  const torso = new THREE.CylinderGeometry(sW * 0.46, sW * 0.38, fH * 0.36, 8);
   placed(torso, 0, y0 + legH + fH * 0.18, 0);
-  const head = new THREE.SphereGeometry(sW * 0.22, 10, 8);
+  const head = new THREE.SphereGeometry(sW * 0.20, 10, 8);
   head.scale(0.92, 1.08, 0.95);
   placed(head, 0, y0 + fH * 0.90, 0);
-  const crown = new THREE.TorusGeometry(sW * 0.21, sW * 0.04, 6, 16);
-  crown.rotateX(Math.PI / 2 + 0.2);
-  placed(crown, 0, y0 + fH * 0.93, 0);
-  const armR = new THREE.CylinderGeometry(sW * 0.12, sW * 0.15, fH * 0.38, 8);
-  armR.rotateZ(0.55);
-  placed(armR, sW * 0.55, y0 + fH * 0.68, 0);
-  const spear = box(sW * 0.06, fH * 0.95, sW * 0.06, sW * 0.72, y0 + fH * 0.30, sW * 0.12);
-  const armL = new THREE.CylinderGeometry(sW * 0.12, sW * 0.14, fH * 0.34, 8);
-  armL.rotateZ(-0.25);
-  placed(armL, -sW * 0.52, y0 + fH * 0.64, 0);
-  const drape = box(sW * 0.32, fH * 0.55, sW * 0.22, -sW * 0.58, y0 + fH * 0.35, 0);
+  // Defne taci (bas uzerinde yatay halka tac)
+  const crown = new THREE.TorusGeometry(sW * 0.20, sW * 0.035, 6, 16);
+  crown.rotateX(Math.PI / 2);
+  placed(crown, 0, y0 + fH * 0.94, 0);
+  // Sag kolda mizrak (omuza bagli asagiya inen kol, elinde dik mizrak)
+  const armR = new THREE.CylinderGeometry(sW * 0.11, sW * 0.14, fH * 0.36, 8);
+  placed(armR, sW * 0.44, y0 + fH * 0.54, sW * 0.06, 0, 0, 0.15);
+  const spear = box(sW * 0.05, fH * 1.05, sW * 0.05, sW * 0.52, y0 + fH * 0.28, sW * 0.15);
+  // Sol kolda toga drapesi
+  const armL = new THREE.CylinderGeometry(sW * 0.11, sW * 0.13, fH * 0.34, 8);
+  placed(armL, -sW * 0.44, y0 + fH * 0.54, 0, 0, 0, -0.15);
+  const drape = box(sW * 0.22, fH * 0.52, sW * 0.18, -sW * 0.48, y0 + fH * 0.32, 0);
 
   fig.push(legR, legL, skirt, torso, head, crown, armR, spear, armL, drape);
-  parts.push(part(tone(mergeGeos(fig), [0.94, 0.92, 0.88]), 'build/marble', { uvScale: 1.5 }));
+  const figGeo = mergeGeos(fig);
+  parts.push(part(tone(figGeo, [0.95, 0.94, 0.91]), 'build/marble', { uvScale: 1.5 }));
   return parts;
 }
 
@@ -1021,21 +1065,23 @@ function statue(culture, w, h) {
   return classicalStatue(w, h, C);
 }
 
-/** Misir Dikilitasi (Obelisk): kademeli kaide, daralan monolit sutun, altin piramidiyon. */
+/** Misir Dikilitasi (Obelisk): kademeli kaide, keskin 4 kenarli piramidiyon, altin kaplama. */
 function obelisk(culture, h = 26) {
-  const base1 = box(5.2, 1.2, 5.2, 0, 0, 0);
-  const base2 = box(4.2, 1.0, 4.2, 0, 1.2, 0);
+  const base1 = box(5.4, 1.2, 5.4, 0, 0, 0);
+  const base2 = box(4.4, 1.0, 4.4, 0, 1.2, 0);
   const ped = mergeGeos([base1, base2]);
   const shaftH = Math.max(8, h - 4.8);
-  const shaft = new THREE.CylinderGeometry(1.2, 1.85, shaftH, 4);
+  // Kare kesit (4 segmentli silindir, 45 derece dondurulmus)
+  const shaft = new THREE.CylinderGeometry(1.15, 1.85, shaftH, 4);
   shaft.rotateY(Math.PI / 4);
   placed(shaft, 0, 2.2 + shaftH / 2, 0);
-  const pyr = new THREE.ConeGeometry(1.7, 2.6, 4);
+  // Piramidiyon tepelik
+  const pyr = new THREE.ConeGeometry(1.63, 2.5, 4);
   pyr.rotateY(Math.PI / 4);
-  placed(pyr, 0, 2.2 + shaftH + 1.3, 0);
+  placed(pyr, 0, 2.2 + shaftH + 1.25, 0);
   return [
     part(mergeGeos([ped, shaft]), 'build/sandstone_blocks', { uvScale: 2 }),
-    part(tone(pyr, [1.35, 1.15, 0.45]), 'build/marble', { uvScale: 1, collide: false }),
+    part(tone(pyr, [1.45, 1.25, 0.45]), 'build/marble', { uvScale: 1, collide: false }),
   ];
 }
 
@@ -1408,6 +1454,27 @@ function portal(culture) {
   return parts;
 }
 
+/** Tarihi Ipek Yolu kilometre kitabeleri / menzil tasi (Milestone). */
+function milestone(culture = 'common', h = 1.4) {
+  const C = CULTURE[culture] || CULTURE.desert;
+  const base = box(0.72, 0.22, 0.72, 0, 0.11, 0);
+  const shaftH = Math.max(0.6, h - 0.45);
+  // Dikdortgen prizma veya silindirik kitabe govdesi
+  const shaft = new THREE.CylinderGeometry(0.24, 0.28, shaftH, 8);
+  placed(shaft, 0, 0.22 + shaftH / 2, 0);
+  // Yuvarlatilmis kitabe basligi (kemerli baslik)
+  const cap = new THREE.SphereGeometry(0.25, 8, 6);
+  cap.scale(1.0, 0.65, 0.9);
+  placed(cap, 0, 0.22 + shaftH, 0);
+  // Kitabe yazit tableti (on cephede hafif cikinti)
+  const plaque = box(0.26, shaftH * 0.55, 0.06, 0, 0.22 + shaftH * 0.52, 0.24);
+  const stone = mergeGeos([base, shaft, cap]);
+  return [
+    part(stone, culture === 'china' ? 'build/stone_wall' : C.wall, { uvScale: 1 }),
+    part(tone(plaque, [0.85, 0.78, 0.65]), 'build/marble', { uvScale: 0.6, collide: false }),
+  ];
+}
+
 // ------------------------------------------------------------------ katalog
 
 /**
@@ -1449,6 +1516,7 @@ export function model(key) {
   else if (kind === 'airship') m = airship();
   else if (kind === 'airpier') m = airPier(Number(a[1]), Number(a[2]), Number(a[3]));
   else if (kind === 'portal') m = portal(a[1]);
+  else if (kind === 'milestone') m = milestone(a[1], a[2] ? Number(a[2]) : 1.4);
   else m = [];
   CACHE.set(key, m);
   return m;

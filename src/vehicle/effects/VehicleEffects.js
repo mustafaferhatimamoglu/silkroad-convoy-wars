@@ -38,15 +38,20 @@ export class VehicleEffects {
       _p.set(w.point.x, w.point.y, w.point.z);
       _n.set(w.normal.x, w.normal.y, w.normal.z);
       const slide = w.slide;
-      // toz (kum, toprak, cimen, kar)
+      // toz (kum, toprak, cimen, kar) - col kumunda (dustAmt >= 1.0) genis savrulma ve atmosferik girdap
       if (s.dustAmt > 0 && (speed > 2 || slide > 1.5)) {
-        this.acc[i] += dt * s.dustAmt * Math.min(60, speed * 1.4 + slide * 6);
+        const isSand = s.dustAmt >= 0.95;
+        const rateMul = isSand ? 1.5 : 1.0;
+        this.acc[i] += dt * s.dustAmt * Math.min(80, (speed * 1.6 + slide * 7) * rateMul);
         while (this.acc[i] >= 1) {
           this.acc[i] -= 1;
           const r = () => (Math.random() - 0.5);
-          this.dust.emit(_p.x + r() * 0.3, _p.y + 0.1, _p.z + r() * 0.3,
-            -v.velocity.x * 0.12 + r() * 1.2, 0.4 + Math.random() * 1.1, -v.velocity.z * 0.12 + r() * 1.2,
-            { life: 1.6 + Math.random() * 1.6, size0: 0.35, size1: 2.2 + Math.random() * 2.2 + Math.min(speed, 30) * 0.05, color: s.dust, alpha: 0.16 + 0.12 * s.dustAmt, drag: 1.1, gravity: -0.05 });
+          const pSize = isSand ? 3.0 + Math.random() * 2.8 + Math.min(speed, 45) * 0.08 : 2.2 + Math.random() * 2.2 + Math.min(speed, 30) * 0.05;
+          const pLife = isSand ? 2.2 + Math.random() * 2.0 : 1.6 + Math.random() * 1.6;
+          const pAlpha = isSand ? 0.22 + 0.14 * s.dustAmt : 0.16 + 0.12 * s.dustAmt;
+          this.dust.emit(_p.x + r() * 0.35, _p.y + 0.1, _p.z + r() * 0.35,
+            -v.velocity.x * 0.14 + r() * (isSand ? 1.8 : 1.2), 0.45 + Math.random() * (isSand ? 1.6 : 1.1), -v.velocity.z * 0.14 + r() * (isSand ? 1.8 : 1.2),
+            { life: pLife, size0: 0.35, size1: pSize, color: s.dust, alpha: pAlpha, drag: isSand ? 0.9 : 1.1, gravity: isSand ? -0.08 : -0.05 });
         }
       }
       // lastik dumani (sert zeminde patinaj/kayma)

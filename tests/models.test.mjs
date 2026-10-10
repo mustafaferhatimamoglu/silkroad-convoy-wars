@@ -16,6 +16,9 @@ test('prosedurel modeller: bank, heykeller, aslan, obelisk, havuz, selale', () =
     'fountain:persian:9.5:3.5',
     'fountain:byzantine:12:4.5',
     'waterfall:10:16',
+    'milestone:desert:1.4',
+    'milestone:china:1.6',
+    'milestone:byzantine:1.2',
   ];
   for (const k of keys) {
     const parts = model(k);
