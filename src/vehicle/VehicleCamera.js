@@ -24,6 +24,11 @@ export class VehicleCamera {
     this.heading = 0;
     this.lookYaw = 0; this.lookPitch = 0; this.lookTimer = 0;
     this.shake = 0;
+    this.shakeVel = 0;
+    this.shakeOffset = new THREE.Vector2();
+    this.zoomScale = 1.0;
+    this.targetZoomScale = 1.0;
+    this.lookAheadAngle = 0;
     this.fov = 62;
     this.hit = makeHit();
     this.cineT = 0;
@@ -34,12 +39,20 @@ export class VehicleCamera {
   setMode(m) { this.mode = m; this.initialized = false; }
   next() { this.setMode(CAMERA_MODES[(CAMERA_MODES.indexOf(this.mode) + 1) % CAMERA_MODES.length]); return this.mode; }
 
-  addShake(a) { this.shake = Math.min(1.2, this.shake + a); }
+  addShake(a) { this.shake = Math.min(0.8, this.shake + a * 0.6); }
 
   update(dt, input) {
     const cam = this.app.camera, v = this.vehicle;
     const pos = v.position, fwd = v.forward;
     const speed = v.velocity.length();
+
+    // Farenin orta tekerlegi ile dinamik zoom ayari (kullanici istedigi mesafeyi ayarlayabilir)
+    if (input.mouse && input.mouse.wheel) {
+      this.targetZoomScale = THREE.MathUtils.clamp(this.targetZoomScale + input.mouse.wheel * 0.08, 0.65, 2.2);
+    }
+    const zoomLerp = 1 - Math.exp(-dt * 9);
+    this.zoomScale += (this.targetZoomScale - this.zoomScale) * zoomLerp;
+
     // fare/kumanda ile bakis
     const gp = input.gamepad;
     // tam ekranda fare kilitliyse tusa basmadan fare hareketiyle bakilir; hareket durunca ~2 sn sonra geri doner
@@ -66,27 +79,49 @@ export class VehicleCamera {
     if (speed > 4) {
       const hv = Math.atan2(-v.velocity.x, -v.velocity.z);
       let d = hv - hFwd; d = Math.atan2(Math.sin(d), Math.cos(d));
-      if (Math.abs(d) < 2.2) hFwd += d * 0.3;
+      if (Math.abs(d) < 2.2) hFwd += d * 0.35;
     }
+
+    // Donuslerde dinamik bakis (Look-ahead): direksiyon ve donus acisal hizina gore
+    // hem arac hem donus yolu kadrajda kalsin, kamera donus icine dogru hafif bakar
+    const steerAngle = (v.sim && v.sim.steer) || 0;
+    const yawRate = (v.sim && v.sim.yawRate) || 0;
+    const targetLookAhead = THREE.MathUtils.clamp(steerAngle * 0.28 + yawRate * 0.18, -0.45, 0.45);
+    this.lookAheadAngle += (targetLookAhead - this.lookAheadAngle) * (1 - Math.exp(-dt * 5.0));
+
     if (!this.initialized) { this.heading = hFwd; }
     let dh = hFwd - this.heading; dh = Math.atan2(Math.sin(dh), Math.cos(dh));
-    this.heading += dh * (1 - Math.exp(-dt * (this.mode === 'far' ? 3.5 : 5.5)));
+    this.heading += dh * (1 - Math.exp(-dt * (this.mode === 'far' ? 3.8 : 5.8)));
 
-    // sarsinti: carpisma + bozuk zemin
-    this.shake = Math.max(0, this.shake - dt * 2.5);
-    const sh = this.shake * this.shake;
-    const shx = (Math.random() - 0.5) * sh * 0.25, shy = (Math.random() - 0.5) * sh * 0.25;
+    // Sarsinti: titresimsiz yayli/harmonik filtre (rastgele beyaz gurultu yerine yumusak salinim)
+    this.shake = Math.max(0, this.shake - dt * 3.2);
+    const targetOffsetFactor = this.shake * 0.08;
+    this.shakeOffset.x += (Math.sin(performance.now() * 0.024) * targetOffsetFactor - this.shakeOffset.x) * (1 - Math.exp(-dt * 15));
+    this.shakeOffset.y += (Math.cos(performance.now() * 0.031) * targetOffsetFactor - this.shakeOffset.y) * (1 - Math.exp(-dt * 15));
+    const shx = this.shakeOffset.x, shy = this.shakeOffset.y;
 
     const kmh = speed * 3.6;
     let fovTarget = this.baseFov + Math.min(kmh / 160, 1.2) * 11;
     if (this.mode === 'chase' || this.mode === 'far') {
       const far = this.mode === 'far';
-      const sc = (v.model.cam && v.model.cam.chase) || 1;
-      const dist = ((far ? 9.5 : 5.4) + Math.min(kmh, 160) * (far ? 0.012 : 0.008)) * sc;
-      const height = ((far ? 3.2 : 1.85) + Math.min(kmh, 160) * 0.002) * sc;
+      const sc = ((v.model.cam && v.model.cam.chase) || 1) * this.zoomScale;
+      // Virajda ve yuksek hizda arabanin onu ve donus yonunu rahat gormek icin hafif geriye acilma
+      const turnBonus = Math.abs(this.lookAheadAngle) * (far ? 2.2 : 1.4);
+      const dist = ((far ? 9.5 : 5.4) + Math.min(kmh, 160) * (far ? 0.012 : 0.008) + turnBonus) * sc;
+      const height = ((far ? 3.2 : 1.85) + Math.min(kmh, 160) * 0.002 + turnBonus * 0.2) * sc;
       const yaw = this.heading + this.lookYaw;
+
       _target.set(pos.x + Math.sin(yaw) * dist, pos.y + height + this.lookPitch * dist * 0.6, pos.z + Math.cos(yaw) * dist);
-      _look.set(pos.x - Math.sin(yaw) * 2.2, pos.y + 0.9, pos.z - Math.cos(yaw) * 2.2);
+
+      // Bakis hedefi: aracin onu ile donus yolunun ortasina odaklanma (look-ahead offset)
+      const lookYaw = yaw + this.lookAheadAngle * 0.75;
+      const lookDist = 2.4 + Math.min(kmh * 0.04, 3.5);
+      _look.set(
+        pos.x - Math.sin(lookYaw) * lookDist,
+        pos.y + 0.88 + Math.min(kmh * 0.003, 0.4),
+        pos.z - Math.cos(lookYaw) * lookDist
+      );
+
       // kamera carpismasi
       _dir.subVectors(_target, _look);
       const len = _dir.length();
@@ -97,7 +132,7 @@ export class VehicleCamera {
       const h = this.app.world.heightAt(_target.x, _target.z, _target.y);
       if (h !== null && _target.y < h + 0.5) _target.y = h + 0.5;
       if (!this.initialized) this.pos.copy(_target);
-      const k = 1 - Math.exp(-dt * (far ? 6 : 10));
+      const k = 1 - Math.exp(-dt * (far ? 6.5 : 9.5));
       this.pos.lerp(_target, k);
       // kamera yerden yuksek kalsin (ara degerden sonra da)
       cam.position.copy(this.pos);

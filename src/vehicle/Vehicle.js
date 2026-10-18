@@ -95,6 +95,29 @@ export class Vehicle {
   }
 
   /**
+   * Kitalararasi portal isinlanmasi: araci (x, z, yaw) noktasina tasir ve ileri hizini korur.
+   * Hedef bolge henuz yuklenmemisse, yuklendigi ilk karede zemine tam oturtulup hizi verilir.
+   */
+  warpTo(x, z, yaw = 0, yHint = null, keepSpeed = null) {
+    const spd = keepSpeed !== null ? keepSpeed : Math.max(8, Math.min(22, this.sim.forwardSpeed || 12));
+    this.spawn(x, z, yaw, yHint, 8);
+    if (this._hist) this._hist.length = 0;
+    if (this._safe) this._safe.length = 0;
+    const applySpeed = () => {
+      const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
+      this.sim.body.vel.set(fx * spd, 0, fz * spd);
+      for (const w of this.sim.wheels) w.omega = spd / Math.max(0.2, this.params.tireRadius || 0.31);
+      this._sync(1);
+    };
+    if (this.groundReady()) {
+      applySpeed();
+      this._warpPending = null;
+    } else {
+      this._warpPending = { x, z, yaw, yHint, spd };
+    }
+  }
+
+  /**
    * R: araci kurtarir.
    *  - Devrilmis/yan yatmissa ve bulundugu yer duz, su disi ve bossa: yerinde dogrultur (yon korunur).
    *  - Dik ama sikismissa, suya ya da cukura dustuyse veya yerinde dogrultulamiyorsa: geride
@@ -252,6 +275,11 @@ export class Vehicle {
   update(dt, controls, afterStep = null) {
     // arac alti yuklenmemisse fizigi beklet (hizli surerken akis gecikirse)
     if (!this.groundReady()) { this._sync(1); return; }
+    if (this._warpPending) {
+      const wp = this._warpPending;
+      this._warpPending = null;
+      this.warpTo(wp.x, wp.z, wp.yaw, wp.yHint, wp.spd);
+    }
     this.acc += Math.min(dt, 0.1);
     let n = 0;
     while (this.acc >= STEP && n < 24) {

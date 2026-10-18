@@ -248,6 +248,7 @@ export class RaceMode extends RallyMode {
     if (this.paused && !net) { DriveMode.prototype.update.call(this, dt); return; }
     this._refreshGates();
     if (this.beamMat) this.beamMat.uniforms.uTime.value += dt;
+    if (this.portalBeamMat) this.portalBeamMat.uniforms.uTime.value += dt;
     if (net && net.isHost && this.startAt === null) {
       // herkes yukleyince (ya da 45 sn sonra; gec kalan yuklenince start zamanini alir) ortak start
       this._waitT += dt;
@@ -368,6 +369,13 @@ export class RaceMode extends RallyMode {
     }
     for (const car of this.cars) if (car.driver) this._physicalSwitch(car);
     const phys = this.cars.filter((car) => car.physical && car.vehicle.groundReady());
+    for (const car of phys) {
+      if (car.vehicle._warpPending) {
+        const wp = car.vehicle._warpPending;
+        car.vehicle._warpPending = null;
+        car.vehicle.warpTo(wp.x, wp.z, wp.yaw, wp.yHint, wp.spd);
+      }
+    }
     this.acc += Math.min(dt, 0.1);
     let n = 0;
     while (this.acc >= STEP && n < 24) {
@@ -536,15 +544,37 @@ export class RaceMode extends RallyMode {
       st.prev = st.prev || new THREE.Vector3();
       st.prev.set(pos.x, pos.y, pos.z);
       if (!passed || this.raceState !== 'run') continue;
+      if (passed.warp) this._warpCar(car, passed.warp);
       if (car === this.me) this._playerGate(passed);
       if (st.gate >= C.gates.length) this._finishCar(car);
     }
   }
 
+  _warpCar(car, warp) {
+    const w = this.app.world;
+    const ix = Math.floor(warp.rx), iz = Math.floor(warp.rz);
+    const target = w.toThree(ix, iz, (warp.rx - ix) * 1920, 0, (warp.rz - iz) * 1920, new THREE.Vector3());
+    const fx = -Math.sin(warp.yaw), fz = -Math.cos(warp.yaw);
+    const lx = fz, lz = -fx;
+    const slot = car.slot || 0;
+    const lat = car === this.me ? 0 : (((slot & 1) ? -1 : 1) * 1.1);
+    const wx = target.x + lx * lat, wz = target.z + lz * lat;
+    const h = w.heightAt(wx, wz) ?? w.data?.plan?.templateH?.(wx, -wz) ?? target.y ?? 0;
+    car.vehicle.warpTo(wx, wz, warp.yaw, h);
+    car.state.idx = warp.toIdx ?? car.state.idx;
+    car.state.progress = this.course.cum[car.state.idx];
+    if (car.state.prev) car.state.prev.copy(car.sim.body.pos);
+    if (car.driver) car.driver.resetWatch();
+    if (car === this.me || car === this.spectating) this.camera.initialized = false;
+  }
+
   _playerGate(gate) {
     this.splits.push(this.raceTime);
     const p = this.me.place ? ` · ${this.me.place}. sıradasın` : '';
-    this.hud.toast(`${gate.n}. ${gate.name} — ${fmtTime(this.raceTime)}${p}`, 2);
+    const msg = gate.warp
+      ? `✨ ${gate.warp.name || gate.name} — ${fmtTime(this.raceTime)}${p}`
+      : `${gate.n}. ${gate.name} — ${fmtTime(this.raceTime)}${p}`;
+    this.hud.toast(msg, gate.warp ? 2.6 : 2);
   }
 
   _finishCar(car) {

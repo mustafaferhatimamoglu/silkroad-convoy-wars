@@ -10,10 +10,10 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Z]:)/, '$1')), '..', '..');
-const MODELS = process.env.SRO_MODELS || 'C:/Silkroad/Silkroad_V4/assets/models';
+const MODELS = process.env.SRO_MODELS || path.join(ROOT, 'assets', 'models');
 const OUT = path.join(ROOT, 'content', 'world');
 const bp = JSON.parse(zlib.gunzipSync(fs.readFileSync(path.join(OUT, 'objects.dat'))).toString('utf8'));
-const paths = JSON.parse(fs.readFileSync('C:/Silkroad/Silkroad_V4/assets/map/objects/models.json', 'utf8'));
+const paths = JSON.parse(fs.readFileSync(path.join(ROOT, 'assets', 'map', 'objects', 'models.json'), 'utf8'));
 const byName = new Map();
 for (const [id, v] of Object.entries(paths)) byName.set(path.basename(v.path).replace(/\.bsr$/i, '').toLowerCase(), id);
 const TREEK = new Set(['tree', 'willow', 'pine', 'palm', 'bamboo', 'bush']);

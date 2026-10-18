@@ -11,7 +11,10 @@ const LEVEL_DESC = {
   zor: 'Sınırda sürer, kestirmeleri bilir, PIT atar',
   acimasiz: 'Her fırsatta PIT, fren testi, seni bariyer gibi kullanır',
 };
-const stageInfo = (st) => `${(st.length / 1000).toFixed(1)} km · ${st.cps.length} kapı`;
+const stageInfo = (st) => {
+  const portals = st.cps.filter((c) => c.warp).length;
+  return `${(st.length / 1000).toFixed(1)} km · ${st.cps.length} kapı${portals ? ` · ${portals + 1} şehir (portal)` : ''}`;
+};
 const esc = (t) => String(t ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 // Menu arayuzu: ana menu, sehir secimi, garaj, ayarlar, duraklatma.

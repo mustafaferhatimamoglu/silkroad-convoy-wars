@@ -17,9 +17,22 @@ export function regionToThree(world, rx, rz, out = new THREE.Vector3()) {
 /** Polyline yardimcilari: kumulatif mesafe ve egrilik (+ sol donus). */
 function measure(pts) {
   const n = pts.length, cum = new Float64Array(n), kap = new Float64Array(n);
-  for (let i = 1; i < n; i++) cum[i] = cum[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].z - pts[i - 1].z);
+  for (let i = 1; i < n; i++) {
+    const d = Math.hypot(pts[i].x - pts[i - 1].x, pts[i].z - pts[i - 1].z);
+    cum[i] = cum[i - 1] + (d > 100 ? 0.01 : d);
+  }
   for (let i = 0; i < n; i++) {
-    const a = pts[Math.max(0, i - 2)], b = pts[i], c = pts[Math.min(n - 1, i + 2)];
+    let ia = i, ic = i;
+    for (let k = 0; k < 2 && ia > 0; k++) {
+      if (Math.hypot(pts[ia].x - pts[ia - 1].x, pts[ia].z - pts[ia - 1].z) > 100) break;
+      ia--;
+    }
+    for (let k = 0; k < 2 && ic < n - 1; k++) {
+      if (Math.hypot(pts[ic + 1].x - pts[ic].x, pts[ic + 1].z - pts[ic].z) > 100) break;
+      ic++;
+    }
+    if (ia === i || ic === i) { kap[i] = 0; continue; }
+    const a = pts[ia], b = pts[i], c = pts[ic];
     // Three: +x dogu, -z kuzey. Kuzeyden bakisla sola donus = saat yonu tersi (x, -z duzleminde)
     const a1 = Math.atan2(-(b.z - a.z), b.x - a.x), a2 = Math.atan2(-(c.z - b.z), c.x - b.x);
     let da = a2 - a1; da = Math.atan2(Math.sin(da), Math.cos(da));
@@ -63,7 +76,9 @@ export class Track {
   /** i civarinda p'nin yol boyunca konumu (mesafe) ve yanal sapmasi (+ sol). */
   project(p, i, out = {}) {
     const pts = this.pts, n = this.n;
-    const a = pts[Math.max(0, i - 1)], b = pts[Math.min(n - 1, i + 1)];
+    const ia = (i > 0 && Math.hypot(pts[i].x - pts[i - 1].x, pts[i].z - pts[i - 1].z) <= 100) ? i - 1 : i;
+    const ib = (i < n - 1 && Math.hypot(pts[i + 1].x - pts[i].x, pts[i + 1].z - pts[i].z) <= 100) ? i + 1 : i;
+    const a = pts[ia], b = pts[ib];
     let tx = b.x - a.x, tz = b.z - a.z;
     const tl = Math.hypot(tx, tz) || 1;
     tx /= tl; tz /= tl;
@@ -83,8 +98,14 @@ export class Track {
     if (s >= this.length) { out.copy(this.pts[n - 1]); if (dir) dir.set(this.pts[n - 1].x - this.pts[n - 2].x, 0, this.pts[n - 1].z - this.pts[n - 2].z).normalize(); return out; }
     let lo = 0, hi = n - 1;
     while (hi - lo > 1) { const m = (lo + hi) >> 1; if (cum[m] <= s) lo = m; else hi = m; }
-    const t = (s - cum[lo]) / Math.max(1e-6, cum[hi] - cum[lo]);
     const a = this.pts[lo], b = this.pts[hi];
+    if (Math.hypot(b.x - a.x, b.z - a.z) > 100) {
+      out.copy(b);
+      const next = this.pts[Math.min(n - 1, hi + 1)];
+      if (dir) dir.set(next.x - b.x, 0, next.z - b.z).normalize();
+      return out;
+    }
+    const t = (s - cum[lo]) / Math.max(1e-6, cum[hi] - cum[lo]);
     out.set(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t, a.z + (b.z - a.z) * t);
     if (dir) dir.set(b.x - a.x, 0, b.z - a.z).normalize();
     return out;
@@ -110,9 +131,19 @@ export class Course {
     this.length = this.route.length;
     const n = this.pts.length;
     this.gates = stage.cps.map((c, k) => {
-      const i = c.i, a = this.pts[Math.max(0, i - 2)], b = this.pts[Math.min(n - 1, i + 2)];
+      const i = c.i;
+      let ia = i, ib = i;
+      for (let step = 0; step < 2 && ia > 0; step++) {
+        if (Math.hypot(this.pts[ia].x - this.pts[ia - 1].x, this.pts[ia].z - this.pts[ia - 1].z) > 100) break;
+        ia--;
+      }
+      for (let step = 0; step < 2 && ib < n - 1; step++) {
+        if (Math.hypot(this.pts[ib + 1].x - this.pts[ib].x, this.pts[ib + 1].z - this.pts[ib].z) > 100) break;
+        ib++;
+      }
+      const a = this.pts[ia], b = this.pts[ib];
       const dir = new THREE.Vector3(b.x - a.x, 0, b.z - a.z).normalize();
-      return { name: c.name, i, n: k + 1, idx: k, pos: this.pts[i].clone(), dir };
+      return { name: c.name, i, n: k + 1, idx: k, pos: this.pts[i].clone(), dir, warp: c.warp || null };
     });
     this.notes = stage.notes || [];
     this.gateTol = 1;    // yarista toplu kalkista itis-kakis: kapi toleransi genisletilir (RaceMode)
@@ -177,7 +208,8 @@ export class Course {
     // yanlis yere kilitlenme (rotaya donus, isinlanma): genis arama
     const q = r.pts[state.idx];
     if ((q.x - pos.x) ** 2 + (q.z - pos.z) ** 2 > 60 * 60) {
-      const lo = state.gate > 0 ? this.gates[state.gate - 1].i : 0;
+      const prevGate = state.gate > 0 ? this.gates[state.gate - 1] : null;
+      const lo = prevGate ? (prevGate.warp ? prevGate.warp.toIdx : prevGate.i) : 0;
       const hi = state.gate < this.gates.length ? this.gates[state.gate].i : r.n - 1;
       state.idx = r.nearestGlobal(pos, lo, hi);
     }
@@ -190,6 +222,10 @@ export class Course {
     if (prev && state.gate < this.gates.length && this.passed(this.gates[state.gate], prev, pos)) {
       passedGate = this.gates[state.gate];
       state.gate++;
+      if (passedGate.warp && Number.isFinite(passedGate.warp.toIdx)) {
+        state.idx = passedGate.warp.toIdx;
+        state.progress = this.cum[passedGate.warp.toIdx];
+      }
     }
     return passedGate;
   }

@@ -9,7 +9,7 @@ kendisi) pakete girmez; ayrinti (2 m arazi, dokular, modeller) oyunda bizim uret
   python tools/gen/blueprint.py            -> content/world/ (blueprint.json + *.dat gzip)
   python tools/gen/blueprint.py --preview  -> ayrica tools/gen/out/bp_*.png onizlemeleri
 
-Kaynak klasoru: SRO_MAP ortam degiskeni (varsayilan C:/Silkroad/Silkroad_V4/assets/map).
+Kaynak klasoru: SRO_MAP ortam degiskeni (varsayilan <repo>/assets/map).
 """
 import gzip
 import json
@@ -22,7 +22,7 @@ import sys
 import numpy as np
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-SRC = os.environ.get('SRO_MAP', 'C:/Silkroad/Silkroad_V4/assets/map')
+SRC = os.environ.get('SRO_MAP', os.path.join(ROOT, 'assets', 'map'))
 OUT = os.path.join(ROOT, 'content', 'world')
 PREV = os.path.join(ROOT, 'tools', 'gen', 'out')
 

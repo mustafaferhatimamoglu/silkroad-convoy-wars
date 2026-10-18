@@ -66,11 +66,25 @@ export class RallyMode extends DriveMode {
     // rota noktalari (Three.js)
     this.pts = st.path.map(([rx, rz]) => regionToThree(app.world, rx, rz));
     this.cum = [0];
-    for (let i = 1; i < this.pts.length; i++) this.cum.push(this.cum[i - 1] + Math.hypot(this.pts[i].x - this.pts[i - 1].x, this.pts[i].z - this.pts[i - 1].z));
+    for (let i = 1; i < this.pts.length; i++) {
+      const d = Math.hypot(this.pts[i].x - this.pts[i - 1].x, this.pts[i].z - this.pts[i - 1].z);
+      this.cum.push(this.cum[i - 1] + (d > 100 ? 0.01 : d));
+    }
     this.routeIdx = 0;
     this.notes = st.notes || [];
+    const nPts = this.pts.length;
     this.cps = st.cps.map((c) => {
-      const i = c.i, a = this.pts[Math.max(0, i - 2)], b = this.pts[Math.min(this.pts.length - 1, i + 2)];
+      const i = c.i;
+      let ia = i, ib = i;
+      for (let step = 0; step < 2 && ia > 0; step++) {
+        if (Math.hypot(this.pts[ia].x - this.pts[ia - 1].x, this.pts[ia].z - this.pts[ia - 1].z) > 100) break;
+        ia--;
+      }
+      for (let step = 0; step < 2 && ib < nPts - 1; step++) {
+        if (Math.hypot(this.pts[ib + 1].x - this.pts[ib].x, this.pts[ib + 1].z - this.pts[ib].z) > 100) break;
+        ib++;
+      }
+      const a = this.pts[ia], b = this.pts[ib];
       const dir = new THREE.Vector3(b.x - a.x, 0, b.z - a.z).normalize();
       return { ...c, pos: this.pts[i].clone(), dir, placed: false, group: null };
     });
@@ -94,22 +108,35 @@ export class RallyMode extends DriveMode {
   }
 
   _buildGateAssets() {
-    const beamMat = new THREE.ShaderMaterial({
+    const vtx = 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }';
+    const frg = 'uniform vec3 uColor; uniform float uTime; varying vec2 vUv; void main(){ float a = (1.0 - vUv.y) * 0.8 * (0.8 + 0.2 * sin(uTime * 3.0 + vUv.y * 12.0)); a *= smoothstep(0.0, 0.25, min(vUv.x, 1.0 - vUv.x) * 4.0); gl_FragColor = vec4(uColor * a, a); }';
+    this.beamMat = new THREE.ShaderMaterial({
       transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
       uniforms: { uColor: { value: new THREE.Color(1.6, 1.05, 0.35) }, uTime: { value: 0 } },
-      vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
-      fragmentShader: 'uniform vec3 uColor; uniform float uTime; varying vec2 vUv; void main(){ float a = (1.0 - vUv.y) * 0.8 * (0.8 + 0.2 * sin(uTime * 3.0 + vUv.y * 12.0)); a *= smoothstep(0.0, 0.25, min(vUv.x, 1.0 - vUv.x) * 4.0); gl_FragColor = vec4(uColor * a, a); }',
+      vertexShader: vtx, fragmentShader: frg,
     });
-    this.beamMat = beamMat;
+    this.portalBeamMat = new THREE.ShaderMaterial({
+      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+      uniforms: { uColor: { value: new THREE.Color(0.35, 1.35, 2.2) }, uTime: { value: 0 } },
+      vertexShader: vtx, fragmentShader: frg,
+    });
     this.beamGeo = new THREE.CylinderGeometry(GATE_W * 0.5, GATE_W * 0.5, 120, 32, 1, true);
     this.beamGeo.translate(0, 60, 0);
     this.poleGeo = new THREE.CylinderGeometry(0.13, 0.17, 6.2, 10);
     this.poleGeo.translate(0, 3.1, 0);
     this.poleMat = new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.6, metalness: 0.4 });
-    this.bannerTex = (text, check = false) => canvasTexture(512, 96, (ctx, w, h) => {
+    this.portalRingGeo = new THREE.TorusGeometry(4.4, 0.28, 10, 48);
+    this.portalRingMat = new THREE.MeshBasicMaterial({ color: 0x7ae2ff, transparent: true, opacity: 0.88, blending: THREE.AdditiveBlending, depthWrite: false });
+    this.portalDiscGeo = new THREE.CircleGeometry(4.2, 48);
+    this.portalDiscMat = new THREE.MeshBasicMaterial({ color: 0x2e9aff, transparent: true, opacity: 0.24, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+    this.bannerTex = (text, check = false, portal = false) => canvasTexture(512, 96, (ctx, w, h) => {
       if (check) {
         for (let y = 0; y < 2; y++) for (let x = 0; x < 16; x++) { ctx.fillStyle = (x + y) % 2 ? '#111' : '#f4f4f4'; ctx.fillRect(x * 32, y * 48, 32, 48); }
         ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(140, 14, 232, 68);
+      } else if (portal) {
+        const g = ctx.createLinearGradient(0, 0, 0, h); g.addColorStop(0, '#0f5c8c'); g.addColorStop(1, '#082d4a');
+        ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+        ctx.fillStyle = '#6fe3ff'; ctx.fillRect(0, 0, w, 6); ctx.fillRect(0, h - 6, w, 6);
       } else {
         const g = ctx.createLinearGradient(0, 0, 0, h); g.addColorStop(0, '#b8262a'); g.addColorStop(1, '#7c1418');
         ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
@@ -149,13 +176,20 @@ export class RallyMode extends DriveMode {
     const mid = posts[0].clone().add(posts[1]).multiplyScalar(0.5);
     const len = posts[0].distanceTo(posts[1]);
     const text = label || `${cp.n}. ${cp.name}`;
-    const mat = new THREE.MeshStandardMaterial({ map: this.bannerTex(text, label === 'FİNİŞ'), roughness: 0.8, side: THREE.DoubleSide, transparent: dim, opacity: dim ? 0.55 : 1 });
+    const mat = new THREE.MeshStandardMaterial({ map: this.bannerTex(text, label === 'FİNİŞ', !!cp.warp), roughness: 0.8, side: THREE.DoubleSide, transparent: dim, opacity: dim ? 0.55 : 1 });
     const banner = new THREE.Mesh(new THREE.PlaneGeometry(len, 1.25), mat);
     banner.position.set(mid.x, Math.max(posts[0].y, posts[1].y) + 5.3, mid.z);
     banner.rotation.y = Math.atan2(cp.dir.x, cp.dir.z);
     g.add(banner);
+    if (cp.warp) {
+      const pGrp = new THREE.Group();
+      pGrp.add(new THREE.Mesh(this.portalRingGeo, this.portalRingMat), new THREE.Mesh(this.portalDiscGeo, this.portalDiscMat));
+      pGrp.position.set(mid.x, Math.max(posts[0].y, posts[1].y) + 2.6, mid.z);
+      pGrp.rotation.y = Math.atan2(cp.dir.x, cp.dir.z);
+      g.add(pGrp);
+    }
     if (beam) {
-      const b = new THREE.Mesh(this.beamGeo, this.beamMat);
+      const b = new THREE.Mesh(this.beamGeo, cp.warp ? this.portalBeamMat : this.beamMat);
       b.renderOrder = 9;
       g.add(b);
     }
@@ -185,6 +219,7 @@ export class RallyMode extends DriveMode {
     if (this.paused) { super.update(dt); return; }
     this._refreshGates();
     if (this.beamMat) this.beamMat.uniforms.uTime.value += dt;
+    if (this.portalBeamMat) this.portalBeamMat.uniforms.uTime.value += dt;
     const cp = this.cps[this.cpIndex];
 
     if (this.state === 'countdown') {
@@ -201,12 +236,21 @@ export class RallyMode extends DriveMode {
     super.update(dt);
     this._trackRoute();
     if (this.state === 'run') {
-      this.time += dt;
+      if (v.groundReady()) this.time += dt;
       if (cp && this._passed(cp, prev, v.position)) {
         this.splits.push(this.time);
-        this.hud.toast(`${this.cpIndex + 1}. ${cp.name} — ${fmt(this.time)}`, 2);
         this.cpIndex++;
         this.hud.route.next = this.cpIndex;
+        if (cp.warp) {
+          const target = regionToThree(this.app.world, cp.warp.rx, cp.warp.rz);
+          const h = this.app.world.heightAt(target.x, target.z) ?? this.app.world.data?.plan?.templateH?.(target.x, -target.z) ?? target.y ?? 0;
+          v.warpTo(target.x, target.z, cp.warp.yaw, h);
+          this.routeIdx = cp.warp.toIdx ?? this.routeIdx;
+          this.camera.initialized = false;
+          this.hud.toast(`✨ ${cp.warp.name || cp.name} — ${fmt(this.time)}`, 2.6);
+        } else {
+          this.hud.toast(`${this.cpIndex}. ${cp.name} — ${fmt(this.time)}`, 2);
+        }
         if (this.cpIndex >= this.cps.length) this._finish();
       }
     }
@@ -304,7 +348,8 @@ export class RallyMode extends DriveMode {
   _afterTeleport() {
     this._prevPos = null;
     const p = this.vehicle.position, pts = this.pts;
-    const lo = this.cpIndex > 0 ? this.cps[this.cpIndex - 1].i : 0;
+    const prevCp = this.cpIndex > 0 ? this.cps[this.cpIndex - 1] : null;
+    const lo = prevCp ? (prevCp.warp ? prevCp.warp.toIdx : prevCp.i) : 0;
     const hi = this.cpIndex < this.cps.length ? this.cps[this.cpIndex].i : pts.length - 1;
     let best = Infinity;
     for (let i = lo; i <= hi; i++) {
@@ -316,7 +361,8 @@ export class RallyMode extends DriveMode {
   /** Araci rota cizgisine koyar: gecilen son kapi ile siradaki kapi arasindaki en yakin nokta. */
   toRoute() {
     const v = this.vehicle, p = v.position, pts = this.pts, w = this.app.world;
-    const lo = this.cpIndex > 0 ? this.cps[this.cpIndex - 1].i : 0;
+    const prevCp = this.cpIndex > 0 ? this.cps[this.cpIndex - 1] : null;
+    const lo = prevCp ? (prevCp.warp ? prevCp.warp.toIdx : prevCp.i) : 0;
     const hi = this.cpIndex < this.cps.length ? this.cps[this.cpIndex].i : pts.length - 1;
     let best = Infinity, bi = lo;
     for (let i = lo; i <= hi; i++) {
@@ -324,8 +370,13 @@ export class RallyMode extends DriveMode {
       if (d < best) { best = d; bi = i; }
     }
     bi = Math.min(bi, pts.length - 3);
-    const a = pts[bi], b = pts[bi + 2];
-    const yaw = Math.atan2(-(b.x - a.x), -(b.z - a.z));
+    let ib = bi;
+    for (let step = 0; step < 2 && ib < pts.length - 1; step++) {
+      if (Math.hypot(pts[ib + 1].x - pts[ib].x, pts[ib + 1].z - pts[ib].z) > 100) break;
+      ib++;
+    }
+    const a = pts[bi], b = pts[ib > bi ? ib : Math.max(0, bi - 1)];
+    const yaw = ib > bi ? Math.atan2(-(b.x - a.x), -(b.z - a.z)) : Math.atan2(-(a.x - b.x), -(a.z - b.z));
     // zemin: yukaridan isin; agac tepesi gibi egik bir yuzeye denk gelirse daha alcaktan tekrar
     const h = w.heightAt(a.x, a.z) ?? a.y ?? 0;
     const hit = { distance: 0, point: new THREE.Vector3(), normal: new THREE.Vector3(), object: false, surface: 0 };

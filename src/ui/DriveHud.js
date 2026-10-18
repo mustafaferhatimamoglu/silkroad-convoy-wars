@@ -112,10 +112,12 @@ export class DriveHud {
       ctx.lineWidth = 6; ctx.strokeStyle = 'rgba(0,0,0,0.45)'; ctx.lineJoin = 'round';
       const trace = () => {
         ctx.beginPath();
-        let first = true;
+        let prev = null;
         for (const q of R.pts) {
           const x = (q.x - pos.x) * S, y = (q.z - pos.z) * S;
-          if (first) { ctx.moveTo(x, y); first = false; } else ctx.lineTo(x, y);
+          if (!prev || Math.hypot(q.x - prev.x, q.z - prev.z) > 100) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+          prev = q;
         }
         ctx.stroke();
       };
@@ -124,7 +126,7 @@ export class DriveHud {
       R.cps.forEach((cp, k) => {
         if (k < R.next) return;
         const x = (cp.pos.x - pos.x) * S, y = (cp.pos.z - pos.z) * S;
-        ctx.fillStyle = k === R.next ? '#ff5a3a' : 'rgba(255,255,255,0.85)';
+        ctx.fillStyle = k === R.next ? (cp.warp ? '#4dd2ff' : '#ff5a3a') : (cp.warp ? 'rgba(77,210,255,0.9)' : 'rgba(255,255,255,0.85)');
         ctx.strokeStyle = '#000'; ctx.lineWidth = 2;
         ctx.beginPath(); ctx.arc(x, y, k === R.next ? 8 : 5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
       });

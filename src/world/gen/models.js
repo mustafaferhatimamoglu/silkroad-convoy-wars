@@ -297,22 +297,39 @@ function dome(r, h, segs = 14) {
   return g;
 }
 
-/** Ev: govde + cati; kultur ve boyuta gore. */
+/** Ev / Konak: govde + giris portali/avlu revagi + cati; kultur ve boyuta gore. */
 function house(culture, rnd, w, d, floors) {
-  const C = CULTURE[culture];
+  const C = CULTURE[culture] || CULTURE.desert;
   const H = 3.2 * floors;
   const parts = [];
   const body = box(w, H, d);
   parts.push(part(body, C.house, { uvScale: 3 }));
-  // kapi/pencere izlenimi: koyu girintiler (cerceve)
+
+  // Kapi girintisi ve rustik pencere cerceveleri (bina cephesine gomulu, disari tasma yapmaz)
+  const entryW = Math.min(2.0, w * 0.35);
   const trim = [];
-  trim.push(box(1.4, 2.3, 0.25, 0, 0, d / 2 + 0.05));
-  for (let f = 0; f < floors; f++) for (const sx of [-w / 3, w / 3]) trim.push(box(0.9, 1.1, 0.2, sx, 1.2 + f * 3.2, d / 2 + 0.05));
+  trim.push(box(entryW, 2.3, 0.15, 0, 0, d / 2 + 0.02));
+  for (let f = 0; f < floors; f++) {
+    for (const sx of [-w / 3, w / 3]) {
+      trim.push(box(0.85, 1.15, 0.12, sx, 1.1 + f * 3.2, d / 2 + 0.02));
+      trim.push(box(0.85, 1.15, 0.12, sx, 1.1 + f * 3.2, -d / 2 - 0.02));
+    }
+  }
   parts.push(part(mergeGeos(trim), C.trim, { collide: false, uvScale: 1.5 }));
+
+  // Hotan / Col / Misir mimarisine ozgu ahsap tavan mertekleri (vigas)
+  if (culture === 'desert' || culture === 'egypt') {
+    const beams = [];
+    for (let x = -w / 2 + 0.8; x <= w / 2 - 0.8; x += 1.4) {
+      beams.push(box(0.18, 0.18, d + 0.3, x, H - 0.35, 0));
+    }
+    if (beams.length) parts.push(part(mergeGeos(beams), 'build/wood_planks', { uvScale: 1.2, collide: false }));
+  }
+
   if (C.roofKind === 'flat') {
     const p = [box(w + 0.3, 0.5, d + 0.3, 0, H, 0)];
-    // korkuluk
-    p.push(box(w, 0.7, 0.3, 0, H + 0.5, d / 2), box(w, 0.7, 0.3, 0, H + 0.5, -d / 2), box(0.3, 0.7, d, w / 2, H + 0.5, 0), box(0.3, 0.7, d, -w / 2, H + 0.5, 0));
+    // korkuluk (parapet)
+    p.push(box(w, 0.75, 0.35, 0, H + 0.5, d / 2), box(w, 0.75, 0.35, 0, H + 0.5, -d / 2), box(0.35, 0.75, d, w / 2, H + 0.5, 0), box(0.35, 0.75, d, -w / 2, H + 0.5, 0));
     parts.push(part(mergeGeos(p), C.roof, { uvScale: 3 }));
   } else if (C.roofKind === 'hip') {
     const r = hipRoof(w, d, Math.min(w, d) * 0.45, 1.0, 0.45);
@@ -385,6 +402,7 @@ const MASS = { data: null, avg: {}, info: new Map() };
 /** Yapinin mimari turu (bir kez hesaplanir): 'rock' | 'pitched' | 'flat' | 'dome' | 'spire' | 'wall' | null. */
 export function archInfo(mi, name, culture) {
   const key = `${mi}:${culture}`;
+  if (name) { if (!MASS.names) MASS.names = {}; MASS.names[mi] = String(name).toLowerCase(); }
   let r = MASS.info.get(key);
   if (r !== undefined) return r.kind;
   const M = MASS.data && MASS.data.models[mi];
@@ -406,7 +424,16 @@ function archModel(mi, culture, kind) {
   return parts && parts.length ? parts : massModel(mi, culture);
 }
 /** data: { classes, palette: [[tur, r, g, b]], models: { mi: {...} } }; avg: doku ortalama renkleri. */
-export function setMassing(data, avg = {}) { MASS.data = data; MASS.avg = avg; }
+export function setMassing(data, avg = {}, names = null) {
+  CACHE.clear();
+  MASS.data = data;
+  MASS.avg = avg;
+  if (names) {
+    if (!MASS.names) MASS.names = {};
+    if (Array.isArray(names)) names.forEach((nm, idx) => { if (nm) MASS.names[idx] = String(nm).toLowerCase(); });
+    else Object.assign(MASS.names, names);
+  }
+}
 
 // malzeme turu -> bizim dokumuzun gri tonlu kopyasi (desen dokudan, renk orijinal ortalamadan)
 function massTex(cls, culture) {
@@ -445,19 +472,95 @@ function massModel(mi, culture) {
   const rock = culture === 'rock' || culture === 'redrock';
   const steps = culture.endsWith('+steps'), soft = culture.endsWith('+soft'), wallOnly = culture.endsWith('+wall');
   if (steps || soft || wallOnly) culture = culture.slice(0, culture.lastIndexOf('+'));
-  const NONE = -32768, S = rock || soft ? 3.5 : steps ? 0.08 : 1.25;
+  const NONE = -32768, S = rock || soft ? 3.5 : steps ? 0.08 : Math.max(1.25, res * 1.05);
   const n = nx * nz;
-  const b = new Float32Array(n), t = new Float32Array(n), has = new Uint8Array(n);
+  const b = new Float32Array(n), t = new Float32Array(n), has = new Uint8Array(n), archFloor = new Float32Array(n);
   for (let k = 0; k < n; k++) {
     if (M.top[k] === NONE) continue;
     const lo = M.low[k] === 32767 ? null : M.low[k] / 10;
     t[k] = M.top[k] / 10;
-    b[k] = lo !== null && lo > 2.6 && lo < t[k] - 0.3 ? lo : -3;
+    // Kemer/gecit: aciklik en az 3.0 m temiz yukseklik olmali; rampa ve setlerdeki kucuk farklar basamak ve yol olarak kalir
+    b[k] = lo !== null && lo > 2.6 && (t[k] - lo) >= 3.0 ? lo : -3;
     has[k] = 1;
   }
-  // siluetin icindeki kuleler (minare, burc, pagoda): cevresinden en az 7 m yuksek, kompakt sutunlar
-  // basamakli hucre yerine gercek kule geometrisiyle; hucreler cevre (cati/zemin) yuksekligine iner
-  const towers = rock || steps || soft ? [] : findTowers(M, t, has);
+  const modelName = (MASS.names && MASS.names[mi]) || (M && M.name ? String(M.name).toLowerCase() : '');
+  // Kale kapilarinda kemer altini ac: Hotan kalesi vb. kapilarinda gecit tavanini 43.5m'ye kaldirarak arac gecisini sagla
+  if (mi === 1105 || /oas_hot_c1_castle/i.test(modelName)) {
+    for (const [i0, i1, j0, j1] of [[81, 89, 128, 136], [81, 89, 10, 18], [138, 148, 68, 76], [20, 34, 73, 81]]) {
+      for (let j = j0; j <= j1; j++) {
+        for (let i = i0; i <= i1; i++) {
+          const k = j * nx + i;
+          if (has[k] && t[k] > 25) {
+            t[k] = Math.max(t[k], 44.0);
+            b[k] = 43.5;
+          }
+        }
+      }
+    }
+  }
+  // Jangan Saray Kapisi (1367 cj_jang_gate_dragon, 1368 cj_jang_gate) ve Guney Sur Kapisi (1302 cj_s): kemer altini ac
+  if (mi === 1367 || mi === 1368 || /cj_jang_gate/i.test(modelName)) {
+    for (let j = 0; j < nz; j++) {
+      for (let i = 0; i < nx; i++) {
+        const k = j * nx + i;
+        const xVal = x0 + i * res;
+        if (Math.abs(xVal) < 4.5 && has[k] && t[k] > 3.0) {
+          b[k] = Math.max(b[k], 7.5);
+        }
+      }
+    }
+  }
+  if (mi === 1302 || /^cj_s$/i.test(modelName)) {
+    for (let j = 0; j < nz; j++) {
+      for (let i = 141; i <= 148; i++) {
+        const k = j * nx + i;
+        if (has[k] && t[k] > 15) {
+          b[k] = Math.max(b[k], 14.0);
+        }
+      }
+    }
+  }
+  // Iskenderiye sur kapilari (854 alex_castlewall_01, 1004 alex_castlewall): kemer altini ve esik basamaklarini ac
+  if (mi === 854 || /alex_castlewall_01/i.test(modelName)) {
+    for (const [i0, i1, j0, j1] of [[93, 109, 0, 13], [93, 109, 76, 88], [0, 14, 76, 88]]) {
+      for (let j = j0; j <= j1; j++) {
+        for (let i = i0; i <= i1; i++) {
+          const k = j * nx + i;
+          if (!has[k]) continue;
+          if (t[k] > 20) {
+            t[k] = Math.max(t[k], 46.0);
+            b[k] = 45.0;
+          } else {
+            has[k] = 0;
+            t[k] = NONE;
+          }
+        }
+      }
+    }
+  }
+  if (mi === 1004 || /^alex_castlewall$/i.test(modelName)) {
+    for (const [i0, i1, j0, j1] of [[52, 68, 283, 294], [52, 68, 325, 336]]) {
+      for (let j = j0; j <= j1; j++) {
+        for (let i = i0; i <= i1; i++) {
+          const k = j * nx + i;
+          if (!has[k]) continue;
+          if (t[k] > 20) {
+            t[k] = Math.max(t[k], 46.0);
+            b[k] = 45.0;
+          } else {
+            has[k] = 0;
+            t[k] = NONE;
+          }
+        }
+      }
+    }
+  }
+  // siluetin icindeki kuleler (minare, burc, pagoda): kale suru ve buyuk komplekslerde (1105 vb.)
+  // rastgele minare/sutun basmasini onle; yalnizca gercek kule, cami, kilise veya pagodalarda kule ara
+  const isGiantWall = Math.max(nx, nz) * res > 140 || /castle|wall|rampart|_sung/i.test(modelName);
+  const isNormalBuilding = /house|shop|armo|weapon|etc|luxury|market|stall|inn|tavern|bank|stable|res\b|bldg|plaza|court/i.test(modelName);
+  const isLegitTower = /tower|spire|minaret|pagoda|camii|mosque|church|temple|monastery/i.test(modelName);
+  const towers = rock || steps || soft || isGiantWall || isNormalBuilding || !isLegitTower ? [] : findTowers(M, t, has);
   // meydan mozaigi (col/Fars/Misir): alcak, genis, duz zemin modeli
   let maxTop = 0;
   for (let k = 0; k < n; k++) if (has[k] && t[k] > maxTop) maxTop = t[k];
@@ -655,6 +758,12 @@ function massModel(mi, culture) {
         const q = [[xa, b[k], za], [xb, b[k], za], [xb, b[k], zb], [xa, b[k], zb]];
         tri(SB, [q[0], q[1], q[2]], sc, [topUV(q[0]), topUV(q[1]), topUV(q[2])]);
         tri(SB, [q[0], q[2], q[3]], sc, [topUV(q[0]), topUV(q[2]), topUV(q[3])]);
+        if (archFloor && archFloor[k] > 0) {
+          const fy = archFloor[k];
+          const f0 = [xa, fy, za], f1 = [xb, fy, za], f2 = [xb, fy, zb], f3 = [xa, fy, zb];
+          tri(TB, [f0, f2, f1], tc, [topUV(f0), topUV(f2), topUV(f1)]);
+          tri(TB, [f0, f3, f2], tc, [topUV(f0), topUV(f3), topUV(f2)]);
+        }
       }
     }
   }

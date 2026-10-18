@@ -66,7 +66,11 @@ export function placeRegionObjects(data, rx, rz, d) {
     const kind = refine(K[m[0]], m[8], w, dd, h);
     if (kind === 'skip' || PORTAL_OBJECTS.test(m[8])) continue;      // eski kapi nesnesi: yerine bizim kapimiz
     if ((kind === 'house' || kind === 'prop') && h < 1.6 && Math.max(w, dd) > 12 && !(plan.massing.models && plan.massing.models[mi])) continue;   // zemin plakasi (meydan cizimi)
-    if (VEG.has(kind) && (noVeg || (track.length && trackDist(X, Z, track) < TRACK.clear))) continue;
+    const isPaved = plan.groundAt(X, Z) === plan.cls.paving || plan.groundAt(X, Z) === plan.cls.cobble || plan.groundAt(X, Z) === plan.cls.mosaic;
+    const isCastleCourtyard = (Math.abs(X - 26033.1) < 160 && Math.abs(Z - 17711.8) < 145);
+    const isJanganBoulevard = (Math.abs(X - 32352) < 22 && Z > 18580 && Z < 18765);
+    const isHotanGateCorridor = (Math.abs(X - 26033.1) < 22 && Z > 17550 && Z < 17940);
+    if (VEG.has(kind) && (noVeg || isPaved || isCastleCourtyard || isJanganBoulevard || isHotanGateCorridor || (track.length && trackDist(X, Z, track) < TRACK.clear))) continue;
     // park banklari
     if (/bench/.test(m[8]) && Math.max(w, dd) < 6) {
       const c = Math.cos(yaw), s = Math.sin(yaw), cx = (bx0 + bx1) / 2, cz = (bz0 + bz1) / 2;
@@ -94,7 +98,7 @@ export function placeRegionObjects(data, rx, rz, d) {
       // sur/duvar benzeri (uzun ince ya da adindan): pencere yok
       const Ms = plan.massing.models[mi], ext = [Ms.nx * Ms.res, Ms.nz * Ms.res];
       const wallish = kind === 'wall' || kind === 'fence' || /^cj_[nesw]$|wall|rampart|_sung|fence/.test(m[8]) || (Math.max(...ext) > 60 && Math.max(...ext) / Math.max(1, Math.min(...ext)) > 4);
-      const key = soft && ak !== 'rock' ? `mass:${mi}:${culture}+soft` : !ak && wallish ? `mass:${mi}:${culture}+wall` : ak === 'rock' ? `mass:${mi}:${culture === 'desert' || culture === 'egypt' || culture === 'persian' ? 'redrock' : 'rock'}`
+      const key = soft && ak !== 'rock' ? `mass:${mi}:${culture}+soft` : wallish ? `mass:${mi}:${culture}+wall` : ak === 'rock' ? `mass:${mi}:${culture === 'desert' || culture === 'egypt' || culture === 'persian' ? 'redrock' : 'rock'}`
         : ak === 'steps' ? `mass:${mi}:${culture}+steps` : ak ? `arch:${mi}:${culture}:${ak}` : `mass:${mi}:${culture}`;
       out.push({ m: key, x: ox0, y: Y, z: -oz0, yaw, s: 1 });
       continue;
@@ -107,6 +111,8 @@ export function placeRegionObjects(data, rx, rz, d) {
     if (lx < -40 || lx > REGION_M + 40 || lz < -40 || lz > REGION_M + 40) continue;
     const gy = H(Math.min(Math.max(lx, 0), 191.9), Math.min(Math.max(lz, 0), 191.9));
     const v = Math.floor(hash2(Math.round(X * 7), Math.round(Z * 7), 31) * 6);
+    // Tek duze tek-aci hissini kirmak icin nesneye ozel hafif organik sapma
+    const yawJitter = (hash2(Math.round(X * 13), Math.round(Z * 13), 43) - 0.5) * 0.14;
     const push = (key, ry = yaw, sc = 1, y = gy) => out.push({ m: key, x: lx, y, z: -lz, yaw: ry, s: sc });
     // uzun kenar yerel x olsun (sur, kapi, kopru, cit)
     const long = () => (dd > w ? { L: dd, T: w, ry: yaw + Math.PI / 2 } : { L: w, T: dd, ry: yaw });
@@ -176,7 +182,7 @@ export function placeRegionObjects(data, rx, rz, d) {
         break;
       }
       case 'ship': push(`block:wood:${q(w, 1)}:${q(dd, 1)}:${q(Math.min(h, 8), 1)}`, yaw, 1, Y + by0); break;
-      case 'tent': push(`tent:${culture}:${q(w, 0.5)}:${q(dd, 0.5)}:${q(h, 0.5)}`, yaw, 1, gy - 0.1); break;
+      case 'tent': push(`tent:${culture}:${q(w, 0.5)}:${q(dd, 0.5)}:${q(h, 0.5)}`, yaw + yawJitter, 1, gy - 0.1); break;
       case 'fence': {
         const { L, ry } = long();
         push(`fence:${q(L, 0.5)}:${q(Math.min(Math.max(h, 0.8), 3), 0.5)}`, ry, 1, gy - 0.1);
@@ -184,24 +190,25 @@ export function placeRegionObjects(data, rx, rz, d) {
       }
       case 'lamp': push(`lamp:${culture}:${q(Math.min(Math.max(h, 1.5), 8), 0.5)}`, yaw, 1, gy - 0.1); break;
       case 'flag': push(`flag:${culture}:${q(Math.min(Math.max(h, 3), 14), 1)}`, yaw, 1, gy - 0.1); break;
-      case 'statue': push(`statue:${culture}:${q(Math.max(w, dd), 0.5)}:${q(h, 0.5)}`, yaw, 1, gy - 0.2); break;
+      case 'statue': push(`statue:${culture}:${q(Math.max(w, dd), 0.5)}:${q(h, 0.5)}`, yaw + yawJitter * 0.4, 1, gy - 0.2); break;
       case 'obelisk': push(`obelisk:${culture}:${q(Math.max(12, h), 1)}`, yaw, 1, gy - 0.1); break;
       case 'fountain': push(`fountain:${culture}:${q(Math.max(w, dd), 0.5)}:${q(Math.max(2.5, h), 0.5)}`, yaw, 1, gy - 0.05); break;
       case 'waterfall': push(`waterfall:${q(Math.max(w, dd), 1)}:${q(Math.max(4, h), 1)}`, yaw, 1, gy); break;
-      case 'milestone': push(`milestone:${culture}:${q(Math.min(Math.max(h, 1.2), 2.2), 0.2)}`, yaw, 1, gy - 0.05); break;
-      case 'stall': push(`stall:${culture}:${q(w, 0.5)}:${q(dd, 0.5)}`, yaw, 1, gy - 0.05); break;
-      case 'cart': push(`block:wood:${q(w, 0.5)}:${q(dd, 0.5)}:${q(Math.min(h, 3), 0.5)}`, yaw, 1, gy - 0.05); break;
+      case 'milestone': push(`milestone:${culture}:${q(Math.min(Math.max(h, 1.2), 2.2), 0.2)}`, yaw + yawJitter * 0.8, 1, gy - 0.05); break;
+      case 'stall': push(`stall:${culture}:${q(w, 0.5)}:${q(dd, 0.5)}`, yaw + yawJitter * 0.6, 1, gy - 0.05); break;
+      case 'cart': push(`block:wood:${q(w, 0.5)}:${q(dd, 0.5)}:${q(Math.min(h, 3), 0.5)}`, yaw + yawJitter * 1.5, 1, gy - 0.05); break;
       default:
-        push(`block:${kind === 'well' ? 'stone' : 'wood'}:${q(w, 0.5)}:${q(dd, 0.5)}:${q(Math.min(h, 4), 0.5)}`, yaw, 1, gy - 0.1);
+        push(`block:${kind === 'well' ? 'stone' : 'wood'}:${q(w, 0.5)}:${q(dd, 0.5)}:${q(Math.min(h, 4), 0.5)}`, yaw + yawJitter * 0.5, 1, gy - 0.1);
     }
   }
 
-  // isinlanma kapilari ve tunel (sablona baglandikca)
+  // isinlanma kapilari, sehir meydan heykelleri ve tunel (sablona baglandikca)
   for (const g of plan.portals) {
     const lx = g.x - x0, lz = g.z - z0;
     if (lx < 0 || lx >= REGION_M || lz < 0 || lz >= REGION_M) continue;
     out.push({ m: `portal:${g.culture}`, x: lx, y: H(lx, lz) - 0.3, z: -lz, yaw: g.yaw, s: 1 });
   }
+
   // feribot iskeleleri (kiyidan iskele ucuna, guverte su seviyesinin 1.2 m ustunde)
   for (const f of plan.ferries) {
     for (const dk of [f.a, f.b]) {
@@ -256,10 +263,13 @@ export function clampUnderStructures(plan, rx, rz, heights) {
             const k = cj * M.nx + ci;
             if (M.top[k] === -32768) continue;
             const top = M.top[k] / 10, low = M.low[k] === 32767 ? null : M.low[k] / 10;
-            const lid = low !== null && low > 2.6 && low < top - 0.3 ? low : top;
+            const lid = low !== null && low > 2.6 && (top - low) >= 3.0 ? low : top;
             const cap = (Y + lid - 0.12) * 10;
             const v = i * VERTS + j;
-            if (heights[v] > cap + 6) heights[v] = cap;          // 0.6 m icindeki fark: zemin dosemeyi ortsun (orijinal zemin dokusu gorunur)
+            // Sehir ici kale, sur ve binalarda araziyi ucuruma donusturmeyecek guvenli taban esigi (en fazla 2.8 m indirme)
+            const safeFloor = heights[v] - 28;
+            const targetCap = Math.max(cap, safeFloor);
+            if (heights[v] > targetCap + 6) heights[v] = targetCap;          // 0.6 m icindeki fark: zemin dosemeyi ortsun (orijinal zemin dokusu gorunur)
           }
         }
       }

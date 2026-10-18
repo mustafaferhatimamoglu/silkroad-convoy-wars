@@ -31,7 +31,7 @@ export class GenWorldData {
     try { setPbr(await (await fetch(this.base + 'textures/pbr.json')).json()); } catch { /* normalsiz */ }
     let avg = {};
     try { avg = await (await fetch(this.base + 'textures/avg.json')).json(); } catch { /* renk tonu olmadan */ }
-    setMassing(this.plan.massing, avg);
+    setMassing(this.plan.massing, avg, this.plan.objModels ? this.plan.objModels.map((m) => m[8]) : null);
     this.plan.cities = CITIES.map((c) => ({ ...c, h: this.plan.templateH(c.x, c.z) }));
     setupTransport(this.plan);
     try { setTrackHeights(await (await fetch(this.base + 'world/trackh.json')).json()); } catch { /* profilsiz */ }

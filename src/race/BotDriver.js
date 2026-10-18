@@ -155,6 +155,7 @@ export class BotDriver {
     const jumpAhead = this.jumps.find((j) => j > sR + 2 && j < sR + 170);
     const hS = prof.heightAt(k);
     for (let i = i0; i < path.n && path.cum[i] - s < 170; i++) {
+      if (i > i0 && Math.hypot(path.pts[i].x - path.pts[i - 1].x, path.pts[i].z - path.pts[i - 1].z) > 100) break;
       while (k < prof.M - 1 && prof.ss[k] < path.cum[i]) k++;
       let a = (this.aLat * prof.muAt(k)) / 0.78;
       if (path.cum[i] <= leanUntil) a *= 1.55;   // yanindaki araca yaslanarak donuyor
@@ -163,12 +164,14 @@ export class BotDriver {
       // v^2 kap <= a (1 - v^2 |kv| / g)  ->  tepeye denk gelen viraj belirgin yavas alinir
       // (asagidaki tepe denetimi gibi -0.004'ten hafif egrilik zemin puruzu sayilir)
       const hk0 = prof.heightAt(k - 3), hk1 = prof.heightAt(k), hk2 = prof.heightAt(k + 3);
-      const kvHere = Number.isNaN(hk0) || Number.isNaN(hk1) || Number.isNaN(hk2) ? 0 : Math.min(0, (hk2 - 2 * hk1 + hk0) / 36 + 0.004);
+      const validKv = !Number.isNaN(hk0) && !Number.isNaN(hk1) && !Number.isNaN(hk2) && Math.abs(hk2 - hk0) < 12;
+      const kvHere = validKv ? Math.min(0, (hk2 - 2 * hk1 + hk0) / 36 + 0.004) : 0;
       const vk = Math.sqrt(a / (Math.max(Math.abs(path.kap[i]), 1e-4) + (a * -kvHere) / G));
       let d = Math.max(0, path.cum[i] - s);
       if (jumpAhead !== undefined && sR + d > jumpAhead) d = Math.max(0, d - 25);
       // yokus asagi frenleme uzar (inilen yukseklik kadar enerji), yokus yukari yercekimi yarim pay
       let dh = Number.isNaN(hS) || Number.isNaN(hk1) ? 0 : hS - hk1;
+      if (Math.abs(dh) > 25) dh = 0;
       if (dh < 0) dh *= 0.5;
       vt = Math.min(vt, Math.sqrt(Math.max(vk * vk, vk * vk + 2 * this.aBrk * d - 2 * G * dh)));
     }
@@ -180,6 +183,7 @@ export class BotDriver {
     const C = this.course, onRoute = path === C.route;
     // dar gecit (kaya sutunlari, agaclar arasi): koridor genisligine gore hiz siniri
     for (let i = i0; i < path.n && path.cum[i] - s < 120; i += 1) {
+      if (i > i0 && Math.hypot(path.pts[i].x - path.pts[i - 1].x, path.pts[i].z - path.pts[i - 1].z) > 100) break;
       const ri = onRoute ? i : C.lineToRoute[i];
       const wsum = C.wl[ri] + C.wr[ri];
       if (wsum >= 14) continue;
@@ -189,8 +193,9 @@ export class BotDriver {
     // tumsek / cukur (bilinen sicramalarda havalanma payi dar: inis kum/virajsa takla riski)
     const k0 = prof.sampleAt(s);
     for (let q = k0 + 3; q < prof.M - 3 && prof.ss[q] - s < 140; q += 1) {
+      if (Math.hypot(prof.sx[q] - prof.sx[q - 3], prof.sz[q] - prof.sz[q - 3]) > 100) break;
       const h0 = prof.heightAt(q - 3), h1 = prof.heightAt(q), h2 = prof.heightAt(q + 3);
-      if (Number.isNaN(h0) || Number.isNaN(h1) || Number.isNaN(h2)) continue;
+      if (Number.isNaN(h0) || Number.isNaN(h1) || Number.isNaN(h2) || Math.abs(h2 - h0) > 12) continue;
       const kv = (h2 - 2 * h1 + h0) / 36;
       let vl = 75;
       let crest = this.crest;
@@ -503,9 +508,11 @@ export class BotDriver {
 
     // --- direksiyon: ofsetli ileri bakis noktasi (model tabanli pure pursuit)
     const Ld = clamp(6 + 0.7 * Math.abs(sp), 8, 32);
-    path.pointAt(s + Ld, _p, _d);
-    const R = this._room(path, s + Ld);
-    const off = clamp(this.off + offAdd, R.lo - 0.8, R.hi + 0.8);
+    const nextG = st.gate < Gs.length ? Gs[st.gate] : null;
+    const sAim = (nextG && nextG.warp && path === this.course.route) ? Math.min(s + Ld, this.course.cum[nextG.i]) : s + Ld;
+    path.pointAt(sAim, _p, _d);
+    const R = this._room(path, sAim);
+    const off = (nextG && nextG.warp && s + Ld >= this.course.cum[nextG.i]) ? 0 : clamp(this.off + offAdd, R.lo - 0.8, R.hi + 0.8);
     _p.x += _d.z * off; _p.z += -_d.x * off;
     const dx = _p.x - b.pos.x, dz = _p.z - b.pos.z;
     const yT = fwd.x * dz - fwd.z * dx, xT = fwd.x * dx + fwd.z * dz;   // yT + = sag

@@ -12,7 +12,7 @@ import re
 
 from PIL import Image
 
-MODELS = os.environ.get('SRO_MODELS', 'C:/Silkroad/Silkroad_V4/assets/models')
+MODELS = os.environ.get('SRO_MODELS', os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'assets', 'models'))
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'out', 'tex_info.json')
 CLASSES = ['plaster', 'stone', 'brick', 'wood', 'roof', 'metal', 'grass', 'paving', 'marble', 'cloth', 'water', 'glass']
 

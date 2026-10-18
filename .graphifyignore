@@ -1,0 +1,8 @@
+# Graphify'in taramayacagi klasorler (ucuncu parti kod, arsiv, oyun varliklari, ciktilar)
+vendor/
+node_modules/
+dist/
+arşiv/
+content/
+graphify-out/
+assets/

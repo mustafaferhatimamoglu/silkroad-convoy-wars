@@ -164,9 +164,9 @@ export class DriveMode {
       v.damage.events.length = 0;
     }
     v.updateDirt(dt);
-    // bozuk zeminde hafif sarsinti
+    // bozuk zeminde yumusak sarsinti (asiri titremeyi onlemek icin sonumlenmis esik)
     const rough = v.sim.wheels.reduce((a, w) => a + (w.contact ? Math.abs(w.x - w.xPrev) : 0), 0);
-    if (rough > 0.004) this.camera.addShake(Math.min(0.15, rough * 3));
+    if (rough > 0.012) this.camera.addShake(Math.min(0.06, (rough - 0.012) * 1.2));
     this.camera.update(dt, input);
     this.sound.setView(this.camera.mode);
     this.sound.update(dt);
