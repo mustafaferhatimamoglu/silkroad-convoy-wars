@@ -307,7 +307,13 @@ export class RallyMode extends DriveMode {
     const n1 = this.ui.querySelector('.n1'), n2 = this.ui.querySelector('.n2');
     const t1 = up[0] ? `${noteText(up[0].n)} <span>${Math.max(0, Math.round(up[0].d / 10) * 10)} m</span>` : '';
     if (n1.innerHTML !== t1) n1.innerHTML = t1;
-    n1.classList.toggle('near', !!up[0] && up[0].d < 60);
+    const isNear = !!up[0] && up[0].d < 65;
+    n1.classList.toggle('near', isNear);
+    if (isNear && up[0] && up[0].n !== this._lastBeepNote) {
+      this._lastBeepNote = up[0].n;
+      const aud = this.sound || this.audio;
+      if (aud && aud.coDriverBeep) aud.coDriverBeep(up[0].n.g);
+    }
     const t2 = up[1] ? `sonra ${noteText(up[1].n)}` : '';
     if (n2.textContent !== t2) n2.textContent = t2;
   }

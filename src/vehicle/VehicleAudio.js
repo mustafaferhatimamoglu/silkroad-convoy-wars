@@ -162,10 +162,126 @@ export class VehicleAudio {
     this.rumble.g.gain.setTargetAtTime(air ? 0 : sp * (0.06 + rough * 6), t, 0.08);
     // vites gecisi
     const g = sim.gearLabel;
-    if (this.lastGear !== null && g !== this.lastGear) this.click(0.18);
+    if (this.lastGear !== null && g !== this.lastGear) {
+      this.click(0.18);
+      if (sim.rpm > 3800 && (sim.shiftDown || g < this.lastGear || sim.gear < this.lastGear)) {
+        this.backfire(0.7);
+        if (v.effects?.backfire) v.effects.backfire(0.7);
+      }
+    }
     this.lastGear = g;
+
+    // egzoz patlamasi (backfire / anti-lag) ve turbo blow-off
+    if (sim.backfirePending > 0) {
+      const lvl = sim.backfirePending;
+      sim.backfirePending = 0;
+      this.backfire(lvl);
+      if (v.effects?.backfire) v.effects.backfire(lvl);
+      if (sim.boost > 0.35) this.blowoff(sim.boost);
+    }
+
+    // gevsek zeminde sasiye seken cakil taslari
+    if (looseN > 0 && speed > 8 && Math.random() < Math.min(0.35, (speed / 30) * 0.3)) {
+      this.stonePing();
+    }
+
     // carpismalar
     for (const im of v.lastImpacts || []) this.impact(im.speed, im.object);
+  }
+
+  /** Egzoz patlamasi ve anti-lag catirtisi (derin bas + metalik catlama). */
+  backfire(level = 0.8) {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    // 1. Derin bas patlama (sub-bass thud 85 Hz -> 38 Hz)
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(85 + Math.random() * 25, t);
+    osc.frequency.exponentialRampToValueAtTime(38, t + 0.18);
+    const og = ctx.createGain();
+    og.gain.setValueAtTime(0.7 * level, t);
+    og.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+    osc.connect(og).connect(this.out);
+    osc.start(t);
+    osc.stop(t + 0.25);
+
+    // 2. Keskin egzoz catirtisi
+    const n = this.audio.noiseSource();
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = 1600 + Math.random() * 800;
+    bp.Q.value = 3.5;
+    const ng = ctx.createGain();
+    ng.gain.setValueAtTime(0.85 * level, t);
+    ng.gain.exponentialRampToValueAtTime(0.001, t + 0.09);
+    n.connect(bp).connect(ng).connect(this.out);
+    n.start(t);
+    n.stop(t + 0.12);
+
+    // 3. Ikincil kucuk artci patlamalar
+    const pops = 1 + Math.floor(Math.random() * 3);
+    for (let i = 1; i <= pops; i++) {
+      const tPop = t + i * (0.05 + Math.random() * 0.04);
+      const sPop = this.audio.noiseSource();
+      const fPop = ctx.createBiquadFilter();
+      fPop.type = 'bandpass';
+      fPop.frequency.value = 1200 + Math.random() * 1200;
+      fPop.Q.value = 4.0;
+      const gPop = ctx.createGain();
+      gPop.gain.setValueAtTime(0, tPop);
+      gPop.gain.linearRampToValueAtTime(0.35 * level * (1 - i * 0.25), tPop + 0.002);
+      gPop.gain.exponentialRampToValueAtTime(0.001, tPop + 0.05);
+      sPop.connect(fPop).connect(gPop).connect(this.out);
+      sPop.start(tPop);
+      sPop.stop(tPop + 0.07);
+    }
+  }
+
+  /** Turbo tahliye ve blow-off valfi fisi (wastegate flutter). */
+  blowoff(boost = 1.0) {
+    const ctx = this.ctx;
+    if (!ctx || boost < 0.3) return;
+    const t = ctx.currentTime;
+    const s = this.audio.noiseSource();
+    const hp = ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = 2800;
+    const g = ctx.createGain();
+    const lvl = Math.min(0.5, boost * 0.35);
+    g.gain.setValueAtTime(lvl, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.28);
+    s.connect(hp).connect(g).connect(this.out);
+    s.start(t);
+    s.stop(t + 0.32);
+
+    // Islik cirpinmasi
+    const osc = ctx.createOscillator();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(3200, t);
+    osc.frequency.exponentialRampToValueAtTime(1400, t + 0.2);
+    const og = ctx.createGain();
+    og.gain.setValueAtTime(lvl * 0.25, t);
+    og.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+    osc.connect(og).connect(this.out);
+    osc.start(t);
+    osc.stop(t + 0.24);
+  }
+
+  /** Govde altina seken kucuk cakil tasi "ping" sesi. */
+  stonePing() {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.value = 2800 + Math.random() * 3200;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.12 + Math.random() * 0.15, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.035);
+    osc.connect(g).connect(this.out);
+    osc.start(t);
+    osc.stop(t + 0.04);
   }
 
   click(level = 0.2) {
@@ -244,6 +360,22 @@ export class VehicleAudio {
       o1.stop(t + 0.06); o2.stop(t + 0.06);
       this._horn = null;
     }
+  /** Ralli kopilot radyo bildirimi (viraj yaklasma uyarisi / telsiz bip). */
+  coDriverBeep(severity = 1) {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    const freq = severity === 0 ? 1150 : 880;
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(freq, t);
+    osc.frequency.exponentialRampToValueAtTime(freq * 1.25, t + 0.08);
+    g.gain.setValueAtTime(0.08, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+    osc.connect(g).connect(this.out);
+    osc.start(t);
+    osc.stop(t + 0.14);
   }
 
   dispose() {

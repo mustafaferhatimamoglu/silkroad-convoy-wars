@@ -190,8 +190,12 @@ export class DriveHud {
       ctx.fillStyle = '#26282c'; ctx.beginPath(); ctx.arc(0, 0, 11, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
     };
-    dial(185, 150, 140, kmh, 180, 20, 4, (v) => String(v), 0);
-    dial(470, 165, 112, rpm, 7000, 1000, 2, (v) => String(v / 1000), 6200);
+    const maxKmh = (vehicle.params && vehicle.params.maxSpeedKmh && vehicle.params.maxSpeedKmh > 200) ? 280 : 180;
+    const kmhStep = maxKmh > 200 ? 40 : 20;
+    dial(185, 150, 140, kmh, maxKmh, kmhStep, 4, (v) => String(v), 0);
+    const redline = (vehicle.params && vehicle.params.engine && vehicle.params.engine.redlineRpm) || 6200;
+    const maxRpm = Math.max(7000, Math.ceil((redline + 800) / 1000) * 1000);
+    dial(470, 165, 112, rpm, maxRpm, 1000, 2, (v) => String(v / 1000), redline);
     // dijital hiz ve vites
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillStyle = '#ffffff'; ctx.font = '700 46px Consolas, monospace';
@@ -203,7 +207,7 @@ export class DriveHud {
     ctx.fillStyle = '#a99f8c'; ctx.font = '500 16px Segoe UI, sans-serif';
     ctx.fillText(auto ? 'OTOMATİK' : 'MANUEL', 470, 280);
     ctx.fillText('x1000 d/dk', 470, 104);
-    // uyari isiklari
+    // uyari isiklari ve telemetri
     const lamp = (x, y, on, color, txt) => {
       ctx.fillStyle = on ? color : 'rgba(255,255,255,0.08)';
       ctx.beginPath(); ctx.arc(x, y, 9, 0, Math.PI * 2); ctx.fill();
@@ -213,6 +217,8 @@ export class DriveHud {
     lamp(560, 40, vehicle.headlights, '#4aa3ff', 'FAR');
     lamp(608, 40, s.input.handbrake > 0 || s.holding, '#e0584f', 'FREN');
     if (s.assists.tcs) lamp(560, 92, s.tcsCut > 0.05, '#ffb84a', 'TCS');
+    if (s.draftFactor && s.draftFactor < 0.98) lamp(608, 92, true, '#38ef7d', 'DRAFT');
+    else if (s.boost !== undefined && s.boost > 0.1) lamp(608, 92, true, '#ff5252', `${s.boost.toFixed(1)}b`);
   }
 
   dispose() { this.root.remove(); }

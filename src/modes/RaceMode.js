@@ -23,6 +23,7 @@ import { RemoteCar, encodeState, SNAP_MS } from '../net/RemoteCar.js';
 // Takim modu (co-op): oyuncular botlara karsi; botlar yalniz oyunculara saldirir.
 
 const STEP = 1 / 240;
+const _fwdA = new THREE.Vector3(), _fwdB = new THREE.Vector3();
 export const VARIANT_POOL = ['kartal80', 'kartal90', 'hilux', 'f150', 'rs6', 'tank'];
 export const POINTS = [10, 8, 6, 5, 4, 3, 2, 1];
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -376,6 +377,39 @@ export class RaceMode extends RallyMode {
         car.vehicle.warpTo(wp.x, wp.z, wp.yaw, wp.yHint, wp.spd);
       }
     }
+    // Hava koridoru (Slipstream / Drafting):
+    // Öndeki aracı 2.0 - 28 m mesafeden takip eden aracın hava direnci %32'ye varan oranda düşer.
+    for (const car of phys) {
+      let bestDraft = 1.0;
+      const bA = car.sim.body;
+      const spdA = car.sim.forwardSpeed;
+      if (spdA > 12) {
+        car.sim.getForwardVector(_fwdA);
+        for (const other of phys) {
+          if (other === car || other.ghost) continue;
+          const bB = other.sim.body;
+          const dx = bB.pos.x - bA.pos.x;
+          const dz = bB.pos.z - bA.pos.z;
+          const longDist = dx * _fwdA.x + dz * _fwdA.z;
+          if (longDist > 2.0 && longDist < 28.0) {
+            const latDist = Math.abs(-dx * _fwdA.z + dz * _fwdA.x);
+            if (latDist < 2.2) {
+              other.sim.getForwardVector(_fwdB);
+              const align = _fwdA.x * _fwdB.x + _fwdA.z * _fwdB.z;
+              if (align > 0.75) {
+                const distFactor = 1.0 - (longDist - 2.0) / 26.0;
+                const latFactor = 1.0 - latDist / 2.2;
+                const reduction = 0.32 * distFactor * latFactor;
+                const draft = 1.0 - reduction;
+                if (draft < bestDraft) bestDraft = draft;
+              }
+            }
+          }
+        }
+      }
+      car.sim.draftFactor = bestDraft;
+    }
+
     this.acc += Math.min(dt, 0.1);
     let n = 0;
     while (this.acc >= STEP && n < 24) {

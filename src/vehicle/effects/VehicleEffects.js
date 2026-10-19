@@ -19,6 +19,7 @@ export class VehicleEffects {
     this.smoke = new ParticleSystem(scene, { max: 400, soft: 0.0 });
     this.sparks = new ParticleSystem(scene, { max: 240, additive: true, soft: 0.55 });
     this.shards = new ParticleSystem(scene, { max: 500, soft: 0.25 });
+    this.flames = new ParticleSystem(scene, { max: 140, additive: true, soft: 0.25 });
     this.skids = new SkidMarks(scene, { width: 0.16 });
     this.acc = [0, 0, 0, 0];
     this.smokeAcc = [0, 0, 0, 0];
@@ -28,7 +29,7 @@ export class VehicleEffects {
     const v = this.vehicle, sim = v.sim;
     const cam = this.app.camera;
     const h = this.app.renderer.getDrawingBufferSize(new THREE.Vector2()).y;
-    for (const ps of [this.dust, this.smoke, this.sparks]) ps.setViewport(h, cam.fov);
+    for (const ps of [this.dust, this.smoke, this.sparks, this.shards, this.flames]) ps.setViewport(h, cam.fov);
     const speed = v.velocity.length();
     _fwd.copy(v.forward);
     for (let i = 0; i < 4; i++) {
@@ -84,7 +85,47 @@ export class VehicleEffects {
       }
     }
     v.lastImpacts = null;
-    this.dust.update(dt); this.smoke.update(dt); this.sparks.update(dt); this.shards.update(dt); this.skids.update(dt);
+    this.dust.update(dt); this.smoke.update(dt); this.sparks.update(dt); this.shards.update(dt); this.skids.update(dt); this.flames.update(dt);
+  }
+
+  /** Egzoz patlamasi: gercekci mavi/turuncu alev patlamasi ve kivilcimlar. */
+  backfire(level = 0.8) {
+    const v = this.vehicle;
+    const P = v.params;
+    const exLocal = new THREE.Vector3(-P.dims.trackR * 0.42, -P.cgHeight + 0.18, P.axleRear + 0.82);
+    _p.copy(exLocal).applyMatrix4(v.root.matrixWorld);
+    const back = v.forward.clone().negate();
+    const count = Math.floor(5 + level * 9);
+    const speed = 5.0 + level * 4.0;
+    for (let k = 0; k < count; k++) {
+      const r = () => (Math.random() - 0.5) * 0.16;
+      const isCore = Math.random() < 0.45;
+      const col = isCore ? [0.22, 0.65, 1.0] : [1.0, 0.45, 0.08];
+      this.flames.emit(
+        _p.x + r(), _p.y + r(), _p.z + r(),
+        back.x * speed + (Math.random() - 0.5) * 1.6,
+        back.y * speed + Math.random() * 0.9,
+        back.z * speed + (Math.random() - 0.5) * 1.6,
+        {
+          life: 0.08 + Math.random() * 0.12,
+          size0: 0.12,
+          size1: 0.45 + level * 0.35,
+          color: col,
+          alpha: 0.95,
+          drag: 1.8,
+          gravity: -0.4,
+        }
+      );
+      if (Math.random() < 0.65) {
+        this.sparks.emit(
+          _p.x, _p.y, _p.z,
+          back.x * (speed * 1.6) + (Math.random() - 0.5) * 4.2,
+          Math.random() * 2.5,
+          back.z * (speed * 1.6) + (Math.random() - 0.5) * 4.2,
+          { life: 0.18 + Math.random() * 0.25, size0: 0.05, size1: 0.01, color: [1.0, 0.85, 0.4], alpha: 1, drag: 0.8, gravity: 6 }
+        );
+      }
+    }
   }
 
   /** Cam kirilmasi: parlak kucuk kiriklar etrafa sacilir. */
@@ -110,6 +151,6 @@ export class VehicleEffects {
 
   dispose() {
     const scene = this.app.scene;
-    this.dust.dispose(scene); this.smoke.dispose(scene); this.sparks.dispose(scene); this.shards.dispose(scene); this.skids.dispose(scene);
+    this.dust.dispose(scene); this.smoke.dispose(scene); this.sparks.dispose(scene); this.shards.dispose(scene); this.skids.dispose(scene); this.flames.dispose(scene);
   }
 }

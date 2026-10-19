@@ -85,6 +85,10 @@ export class VehicleSim {
     this.impacts = [];        // carpisma olaylari (oyun tarafi okur ve temizler)
     this.airTime = 0;
     this.speed = 0;
+    this.boost = 0;           // turbo bar basıncı (0.0 - 1.8)
+    this.backfirePending = 0; // egzoz patlama şiddeti
+    this.draftFactor = 1.0;   // hava koridoru (slipstream) çarpanı
+    this._prevLoad = 0;
     this.prevPos = new V3();
     this.prevQ = new Quat();
     this.input = { throttle: 0, brake: 0 };
@@ -99,6 +103,7 @@ export class VehicleSim {
     for (const w of this.wheels) { w.x = w.xPrev = 0.14; w.omega = 0; w.contact = false; }
     this.engine.omega = this.p.engine.idle / RPM;
     this.gear = 1; this.shiftTimer = 0; this.clutch = 1; this.locked = false;
+    this.boost = 0; this.backfirePending = 0; this.draftFactor = 1.0; this._prevLoad = 0;
     this.prevPos.copy(b.pos); this.prevQ.copy(b.q);
   }
 
@@ -111,6 +116,11 @@ export class VehicleSim {
   get forwardSpeed() {
     rotate(this.body.q, _f.set(0, 0, -1), _f);
     return this.body.vel.dot(_f);
+  }
+
+  /** Govdenin dunya uzayindaki ileri yon vektoru (x, y, z). */
+  getForwardVector(out = new V3()) {
+    return rotate(this.body.q, _f.set(0, 0, -1), out);
   }
 
   shift(dir) {
@@ -157,10 +167,20 @@ export class VehicleSim {
     this._controls(dt, c, vF);
     this._steering(dt, c.steer || 0, vF);
 
-    // 1) yercekimi + aerodinamik
+    // 1) yercekimi + aerodinamik (hava direnci + bastirma kuvveti)
     b.addForceAtCenter(_v.set(0, -9.81 * b.mass, 0));
     const sp = this.speed;
-    if (sp > 0.1) b.addForceAtCenter(_v.copy(b.vel).scale(-0.5 * P.aero.rho * P.aero.cdA * sp));
+    if (sp > 0.1) {
+      const dragFactor = this.draftFactor || 1.0;
+      b.addForceAtCenter(_v.copy(b.vel).scale(-0.5 * P.aero.rho * P.aero.cdA * dragFactor * sp));
+      // Downforce: yuksek hizda yere basma kuvveti (fren ve viraj stabilitesi)
+      const clA = P.aero.clA ?? (P.aero.cdA * 0.32);
+      const fDown = 0.5 * P.aero.rho * clA * sp * sp;
+      if (fDown > 0.1) {
+        _v.copy(_up).scale(-fDown);
+        b.addForceAtCenter(_v);
+      }
+    }
 
     // 2) suspansiyon
     this._suspension(dt, ground);
@@ -465,6 +485,19 @@ export class VehicleSim {
       this.reflectedInertia = 0;
     }
     e.torque = Te; e.load = thr;
+
+    // Turbo basinci ve egzoz patlama (backfire) tetikleyicisi
+    const isTurbo = P.engine?.turbo || P.id === 'rs6' || P.id === 'hilux' || P.name?.includes('Ralli');
+    const targetBoost = isTurbo ? Math.min(1.8, Math.max(0, (thr - 0.15) / 0.85) * Math.min(1.8, this.rpm / 3200)) : 0;
+    this.boost += (targetBoost - this.boost) * Math.min(1, dt * 5.0);
+
+    if (this._prevLoad > 0.6 && thr < 0.15 && this.rpm > 3600) {
+      this.backfirePending = Math.min(1.0, 0.4 + (this.rpm / 6500) * 0.6);
+    }
+    if (this.rpm >= E.redline - 80) {
+      this.backfirePending = Math.max(this.backfirePending, 0.75);
+    }
+    this._prevLoad = thr;
 
     // diferansiyeller (kilitlemeli): hizli tekerden yavasa tork aktar
     const D = P.diff;
