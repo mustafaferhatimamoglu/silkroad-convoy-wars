@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Silkroad 3D: Açık Dünya Kervan Simülatörü</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; user-select:none; }
+    body, html { width:100%; height:100%; overflow:hidden; background:#040711; font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    #canvas3d { width:100%; height:100%; display:block; cursor:crosshair; }
+    
+    /* 3D HUD OVERLAY */
+    #hud-overlay {
+      position: absolute; top:0; left:0; width:100%; height:100%; pointer-events:none;
+      display: flex; flex-direction: column; justify-content: space-between; padding: 20px;
+    }
+    .hud-top {
+      display: flex; justify-content: space-between; align-items: flex-start; gap: 15px;
+    }
+    .hud-card {
+      background: rgba(8, 14, 28, 0.85); border: 1px solid rgba(0, 240, 255, 0.35);
+      padding: 12px 18px; border-radius: 8px; backdrop-filter: blur(10px);
+      box-shadow: 0 0 25px rgba(0, 240, 255, 0.15); color: #fff;
+    }
+    .hud-title { font-size: 13px; font-weight: 800; letter-spacing: 2px; color: #00f0ff; margin-bottom: 4px; }
+    .bar-cont { width: 220px; height: 12px; background: #111; border-radius: 6px; overflow: hidden; border: 1px solid #333; margin-top: 4px; }
+    .bar-fill-hp { width: 100%; height: 100%; background: linear-gradient(90deg, #ff0055, #ff3366); transition: width 0.2s; }
+    .bar-fill-zerk { width: 65%; height: 100%; background: linear-gradient(90deg, #ffaa00, #ff0055); transition: width 0.2s; }
+    
+    .hud-center {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      width: 24px; height: 24px; pointer-events: none;
+    }
+    .crosshair-ring {
+      width: 100%; height: 100%; border: 2px solid rgba(0, 240, 255, 0.7); border-radius: 50%;
+      box-shadow: 0 0 10px rgba(0, 240, 255, 0.5);
+    }
+    .crosshair-dot {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      width: 4px; height: 4px; background: #ff0055; border-radius: 50%;
+    }
+    
+    .lock-banner {
+      position: absolute; top: 80px; left: 50%; transform: translateX(-50%);
+      background: rgba(0, 240, 255, 0.15); border: 1px solid rgba(0, 240, 255, 0.5);
+      color: #00f0ff; padding: 8px 24px; border-radius: 20px; font-size: 13px;
+      font-weight: bold; letter-spacing: 1px; backdrop-filter: blur(6px);
+      transition: opacity 0.3s;
+    }
+
+    .hud-bottom {
+      display: flex; justify-content: space-between; align-items: flex-end; gap: 15px;
+    }
+    .controls-hint {
+      background: rgba(8, 14, 28, 0.9); border: 1px solid rgba(255, 255, 255, 0.15);
+      padding: 12px 18px; border-radius: 8px; font-size: 12px; color: #a5b6d8; line-height: 1.6;
+    }
+    .controls-hint strong { color: #00f0ff; }
+    .controls-hint .highlight { color: #ffaa00; font-weight: bold; }
+
+    .action-buttons {
+      display: flex; gap: 10px; pointer-events: auto;
+    }
+    .btn-hud {
+      background: linear-gradient(135deg, #00f0ff, #0072ff); border: none; color: #000;
+      padding: 10px 18px; border-radius: 6px; font-weight: 800; cursor: pointer; font-size: 12px;
+      letter-spacing: 1px; box-shadow: 0 0 15px rgba(0,240,255,0.4); transition: transform 0.1s;
+    }
+    .btn-hud:active { transform: scale(0.97); }
+    .btn-secondary {
+      background: linear-gradient(135deg, #ff007f, #7928ca); color: #fff;
+      box-shadow: 0 0 15px rgba(255,0,127,0.4);
+    }
+  </style>
+  <!-- Three.js 3D Engine -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+  <div id="hud-overlay">
+    <div class="hud-top">
+      <div class="hud-card">
+        <div class="hud-title">🚛 3D ZIRHLI KERVAN GÖVDESİ</div>
+        <div style="font-size:12px; color:#8fa2c0;">Konvoy HP: <span id="hpText" style="color:#ff3366; font-weight:bold;">3200 / 3200</span></div>
+        <div class="bar-cont"><div class="bar-fill-hp" id="hpBar"></div></div>
+        <div style="margin-top:6px; font-size:11px; color:#00f0ff;">
+          Hız: <strong id="speedText">0</strong> km/h • Konum: X: <span id="posX">0</span>, Z: <span id="posZ">0</span>
+        </div>
+      </div>
+
+      <div class="hud-card" style="text-align:right;">
+        <div class="hud-title" style="color:#ffaa00;">⚡ BERSERKER (ZERK) MODU</div>
+        <div style="font-size:12px; color:#8fa2c0;">Durum: <strong id="zerkText" style="color:#ffaa00;">%70 Dolu [SPACE]</strong></div>
+        <div class="bar-cont" style="margin-left:auto;"><div class="bar-fill-zerk" id="zerkBar"></div></div>
+        <div style="margin-top:6px; font-size:11px; color:#a0b2d6;">
+          Korsan Avı: <strong id="killCount" style="color:#ff0055;">0</strong> • Kervan Altını: <strong id="goldCount" style="color:#ffaa00;">145,000</strong> G
+        </div>
+      </div>
+    </div>
+
+    <div class="lock-banner" id="lockBanner">
+      🖱️ FARE KİLİTLİ DEĞİL — Kilitlemek için ekrana tıklayın veya <strong>[F11]</strong> tuşuna basın.
+    </div>
+
+    <div class="hud-center"><div class="crosshair-ring"><div class="crosshair-dot"></div></div></div>
+
+    <div class="hud-bottom">
+      <div class="controls-hint">
+        <strong>[F11]:</strong> Fare Kilitle / Tam Ekran (Çıkmak için [ESC] veya [F11])<br>
+        <strong>[W / S]:</strong> İleri Gaz / Geri Fren • <strong>[A / D]:</strong> Serbest 360° Direksiyon<br>
+        <strong>[Fare Hareketi]:</strong> Serbest 360° Kamera Açısı • <strong>[Sol Tık]:</strong> Lazer Taret Ateşi<br>
+        <strong>[V]:</strong> 3. Şahıs (TPS) / 1. Şahıs (FPS) Kokpit • <strong>[SPACE]:</strong> Berserker Zerk
+      </div>
+      <div class="action-buttons">
+        <button class="btn-hud" id="btnLockMouse">🔒 Fareyi Kilitle [F11]</button>
+        <button class="btn-hud btn-secondary" id="btnToggleCam">📷 Kamera: TPS</button>
+      </div>
+    </div>
+  </div>
+
+  <canvas id="canvas3d"></canvas>
+
+  <script>
+    // ====================================================
+    // SES MOTORU (Web Audio API - Bağımsız Donanımsal Ses)
+    // ====================================================
+    let audioCtx = null;
+    function initAudio() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+    }
+
+    function playLaserSound() {
+      if (!audioCtx) return;
+      try {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = "sawtooth";
+        osc.frequency.setValueAtTime(850, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(120, audioCtx.currentTime + 0.15);
+        gain.gain.setValueAtTime(0.25, audioCtx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.15);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.15);
+      } catch(e) {}
+    }
+
+    function playExplosionSound() {
+      if (!audioCtx) return;
+      try {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = "triangle";
+        osc.frequency.setValueAtTime(140, audioCtx.currentTime);
+        osc.frequency.linearRampToValueAtTime(30, audioCtx.currentTime + 0.4);
+        gain.gain.setValueAtTime(0.4, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.4);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.4);
+      } catch(e) {}
+    }
+
+    function playZerkSound() {
+      if (!audioCtx) return;
+      try {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(200, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(900, audioCtx.currentTime + 0.6);
+        gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.6);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.6);
+      } catch(e) {}
+    }
+
+    // ====================================================
+    // THREE.JS AÇIK DÜNYA 3D MOTORU
+    // ====================================================
+    let scene, camera, renderer;
+    let truckGroup, turretMesh, barrelMesh, wheels = [];
+    let bullets = [], enemies = [], sceneryObjects = [];
+    let isFPS = false;
+    let isLocked = false;
+    let kills = 0, gold = 145000;
+
+    // Gerçek 3D Araç Fiziği
+    let vehiclePos = new THREE.Vector3(0, 0, 0);
+    let vehicleHeading = 0; // Radyan cinsinden açı
+    let currentSpeed = 0;
+    let maxSpeed = 1.1;
+    let acceleration = 0.035;
+    let friction = 0.96;
+    let steerAngle = 0;
+
+    // Serbest 3D Fare Bakış Açıları (Pitch & Yaw)
+    let camYaw = 0;
+    let camPitch = 0.25; // Hafif yukarıdan bakış
+    const PITCH_MIN = -Math.PI / 4;
+    const PITCH_MAX = Math.PI / 3;
+
+    // Tuş Takibi
+    const keys = { w: false, a: false, s: false, d: false };
+
+    window.addEventListener('keydown', e => {
+      initAudio();
+      const k = e.key.toLowerCase();
+      if (keys.hasOwnProperty(k)) keys[k] = true;
+      if (k === 'v') toggleCameraMode();
+      if (e.code === 'Space') activateZerk();
+      if (e.key === 'F11') {
+        e.preventDefault();
+        togglePointerLock();
+      }
+    });
+
+    window.addEventListener('keyup', e => {
+      const k = e.key.toLowerCase();
+      if (keys.hasOwnProperty(k)) keys[k] = false;
+    });
+
+    // POINTER LOCK KONTROLÜ (F11 VEYA TIKLAMA)
+    const canvas = document.getElementById('canvas3d');
+    const lockBanner = document.getElementById('lockBanner');
+    const btnLockMouse = document.getElementById('btnLockMouse');
+
+    function togglePointerLock() {
+      initAudio();
+      if (!isLocked) {
+        canvas.requestPointerLock = canvas.requestPointerLock || canvas.mozRequestPointerLock;
+        if (canvas.requestPointerLock) canvas.requestPointerLock();
+      } else {
+        if (document.exitPointerLock) document.exitPointerLock();
+      }
+    }
+
+    document.addEventListener('pointerlockchange', onPointerLockChange);
+    document.addEventListener('mozpointerlockchange', onPointerLockChange);
+
+    function onPointerLockChange() {
+      if (document.pointerLockElement === canvas || document.mozPointerLockElement === canvas) {
+        isLocked = true;
+        lockBanner.style.opacity = '0';
+        btnLockMouse.innerText = "🔓 Kilidi Bırak [ESC/F11]";
+      } else {
+        isLocked = false;
+        lockBanner.style.opacity = '1';
+        btnLockMouse.innerText = "🔒 Fareyi Kilitle [F11]";
+      }
+    }
+
+    canvas.addEventListener('click', () => {
+      if (!isLocked) togglePointerLock();
+      else shootBullet();
+    });
+
+    btnLockMouse.addEventListener('click', togglePointerLock);
+    document.getElementById('btnToggleCam').addEventListener('click', toggleCameraMode);
+
+    // Fare Hareketi ile 360° Kamera ve Taret Yönlendirme
+    document.addEventListener('mousemove', e => {
+      if (!isLocked) return;
+      const sensitivity = 0.0025;
+      camYaw -= e.movementX * sensitivity;
+      camPitch -= e.movementY * sensitivity;
+      camPitch = Math.max(PITCH_MIN, Math.min(PITCH_MAX, camPitch));
+
+      // Taret rotasyonu kameranın baktığı yöne baksın
+      if (turretMesh) {
+        turretMesh.rotation.y = camYaw - vehicleHeading;
+      }
+    });
+
+    function init() {
+      renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.shadowMap.enabled = true;
+
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x060a14);
+      scene.fog = new THREE.FogExp2(0x060a14, 0.004);
+
+      camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 2000);
+
+      // Aydınlatma
+      const hemiLight = new THREE.HemisphereLight(0xffeedd, 0x112233, 0.6);
+      scene.add(hemiLight);
+
+      const sunLight = new THREE.DirectionalLight(0x00f0ff, 1.4);
+      sunLight.position.set(80, 140, 60);
+      sunLight.castShadow = true;
+      sunLight.shadow.mapSize.width = 2048;
+      sunLight.shadow.mapSize.height = 2048;
+      scene.add(sunLight);
+
+      const ambientRed = new THREE.DirectionalLight(0xff0055, 0.6);
+      ambientRed.position.set(-60, 40, -60);
+      scene.add(ambientRed);
+
+      buildOpenWorld();
+      buildArmoredCaravan();
+      spawnBandits();
+
+      window.addEventListener('resize', onWindowResize);
+      animate();
+    }
+
+    // AÇIK DÜNYA VE ÇÖL ARAZİSİ (SERBEST GEZİNTİ)
+    function buildOpenWorld() {
+      // 2000x2000 metre geniş çöl arazisi
+      const groundGeo = new THREE.PlaneGeometry(2400, 2400, 64, 64);
+      const groundMat = new THREE.MeshStandardMaterial({
+        color: 0x0a101c,
+        roughness: 0.95,
+        metalness: 0.1
+      });
+      const ground = new THREE.Mesh(groundGeo, groundMat);
+      ground.rotation.x = -Math.PI / 2;
+      ground.receiveShadow = true;
+      scene.add(ground);
+
+      // Izgara Koordinat Çizgileri (Hafif Neon Cyber İpek Yolu)
+      const grid = new THREE.GridHelper(2400, 120, 0x00f0ff, 0x121b2f);
+      grid.position.y = 0.08;
+      scene.add(grid);
+
+      // Dünyaya Serpiştirilmiş Silkroad Gözetleme Kuleleri & Kaya Formasyonları
+      for (let i = 0; i < 40; i++) {
+        const x = (Math.random() - 0.5) * 1800;
+        const z = (Math.random() - 0.5) * 1800;
+        if (Math.abs(x) < 30 && Math.abs(z) < 30) continue;
+
+        const isTower = Math.random() > 0.5;
+        if (isTower) {
+          // İpek Yolu Gözetleme Kulesi
+          const towerGroup = new THREE.Group();
+          const baseGeo = new THREE.CylinderGeometry(4, 5, 24, 8);
+          const baseMat = new THREE.MeshStandardMaterial({ color: 0x162238, roughness: 0.8 });
+          const base = new THREE.Mesh(baseGeo, baseMat);
+          base.position.y = 12;
+          base.castShadow = true;
+          towerGroup.add(base);
+
+          const beaconGeo = new THREE.SphereGeometry(1.6, 12, 12);
+          const beaconMat = new THREE.MeshStandardMaterial({ color: 0x00f0ff, emissive: 0x00f0ff, emissiveIntensity: 0.9 });
+          const beacon = new THREE.Mesh(beaconGeo, beaconMat);
+          beacon.position.y = 25;
+          towerGroup.add(beacon);
+
+          towerGroup.position.set(x, 0, z);
+          scene.add(towerGroup);
+          sceneryObjects.push(towerGroup);
+        } else {
+          // Çöl Kayalıkları
+          const rockGeo = new THREE.DodecahedronGeometry(6 + Math.random() * 8, 1);
+          const rockMat = new THREE.MeshStandardMaterial({ color: 0x0f1828, roughness: 0.9 });
+          const rock = new THREE.Mesh(rockGeo, rockMat);
+          rock.position.set(x, 4, z);
+          rock.castShadow = true;
+          scene.add(rock);
+          sceneryObjects.push(rock);
+        }
+      }
+    }
+
+    // 3D ZIRHLI SİLKROAD KERVAN TIRI (OYUNCU ARACI)
+    function buildArmoredCaravan() {
+      truckGroup = new THREE.Group();
+
+      // Ana Zırh Gövdesi
+      const bodyGeo = new THREE.BoxGeometry(4.2, 2.6, 8.5);
+      const bodyMat = new THREE.MeshStandardMaterial({ color: 0x142036, metalness: 0.8, roughness: 0.25 });
+      const body = new THREE.Mesh(bodyGeo, bodyMat);
+      body.position.y = 2.1;
+      body.castShadow = true;
+      truckGroup.add(body);
+
+      // Kargo Bölmesi (Silkroad Malları)
+      const cargoGeo = new THREE.BoxGeometry(3.9, 2.4, 5.2);
+      const cargoMat = new THREE.MeshStandardMaterial({ color: 0x0d1727, roughness: 0.4 });
+      const cargo = new THREE.Mesh(cargoGeo, cargoMat);
+      cargo.position.set(0, 2.4, -1.2);
+      truckGroup.add(cargo);
+
+      // Kargo Neon Amblemleri
+      const glowGeo = new THREE.BoxGeometry(4.0, 0.2, 5.0);
+      const glowMat = new THREE.MeshStandardMaterial({ color: 0x00f0ff, emissive: 0x00f0ff, emissiveIntensity: 0.6 });
+      const glow = new THREE.Mesh(glowGeo, glowMat);
+      glow.position.set(0, 2.4, -1.2);
+      truckGroup.add(glow);
+
+      // Kokpit Camı
+      const glassGeo = new THREE.BoxGeometry(3.6, 1.2, 2.2);
+      const glassMat = new THREE.MeshStandardMaterial({ color: 0x00f0ff, transparent: true, opacity: 0.4 });
+      const glass = new THREE.Mesh(glassGeo, glassMat);
+      glass.position.set(0, 2.8, 2.4);
+      truckGroup.add(glass);
+
+      // Döner Taret Tabanı
+      const tBaseGeo = new THREE.CylinderGeometry(1.1, 1.2, 0.5, 16);
+      const tBaseMat = new THREE.MeshStandardMaterial({ color: 0x00f0ff, emissive: 0x00f0ff, emissiveIntensity: 0.4 });
+      turretMesh = new THREE.Mesh(tBaseGeo, tBaseMat);
+      turretMesh.position.set(0, 3.6, 1.0);
+
+      // Taret Çift Namlu
+      barrelMesh = new THREE.Group();
+      for (let bx of [-0.35, 0.35]) {
+        const bGeo = new THREE.CylinderGeometry(0.16, 0.16, 2.8, 12);
+        bGeo.rotateX(Math.PI / 2);
+        const bMat = new THREE.MeshStandardMaterial({ color: 0x222, metalness: 0.9, roughness: 0.2 });
+        const bMesh = new THREE.Mesh(bGeo, bMat);
+        bMesh.position.set(bx, 0.2, 1.5);
+        barrelMesh.add(bMesh);
+      }
+      turretMesh.add(barrelMesh);
+      truckGroup.add(turretMesh);
+
+      // 6 Ağır Hizmet Tekerleği
+      const wheelGeo = new THREE.CylinderGeometry(0.85, 0.85, 0.7, 16);
+      wheelGeo.rotateZ(Math.PI / 2);
+      const wheelMat = new THREE.MeshStandardMaterial({ color: 0x080c14, roughness: 0.9 });
+
+      const zOffsets = [-2.8, 0, 2.8];
+      for (let z of zOffsets) {
+        for (let x of [-2.2, 2.2]) {
+          const w = new THREE.Mesh(wheelGeo, wheelMat);
+          w.position.set(x, 0.85, z);
+          w.castShadow = true;
+          truckGroup.add(w);
+          wheels.push(w);
+        }
+      }
+
+      scene.add(truckGroup);
+    }
+
+    // 3D KORSANLAR (OTOYOL VE ÇÖL HAYDUTLARI)
+    function spawnBandits() {
+      for (let i = 0; i < 8; i++) {
+        const banditGroup = new THREE.Group();
+        const bGeo = new THREE.BoxGeometry(3.0, 1.6, 4.5);
+        const bMat = new THREE.MeshStandardMaterial({ color: 0xff0055, emissive: 0xff0055, emissiveIntensity: 0.3 });
+        const bMesh = new THREE.Mesh(bGeo, bMat);
+        bMesh.position.y = 1.0;
+        banditGroup.add(bMesh);
+
+        // Rastgele konum
+        const angle = Math.random() * Math.PI * 2;
+        const dist = 70 + Math.random() * 140;
+        banditGroup.position.set(Math.cos(angle) * dist, 0, Math.sin(angle) * dist);
+
+        scene.add(banditGroup);
+        enemies.push({
+          group: banditGroup,
+          hp: 120,
+          speed: 0.35 + Math.random() * 0.25,
+          alive: true
+        });
+      }
+    }
+
+    // ATEŞ ETME (LAZER VE PARTİKÜL)
+    function shootBullet() {
+      playLaserSound();
+      const bGeo = new THREE.SphereGeometry(0.35, 8, 8);
+      const bMat = new THREE.MeshBasicMaterial({ color: 0x00f0ff });
+      const bullet = new THREE.Mesh(bGeo, bMat);
+
+      // Taretin baktığı doğrultuyu al
+      const shootDir = new THREE.Vector3();
+      camera.getWorldDirection(shootDir);
+
+      const spawnPos = new THREE.Vector3();
+      turretMesh.getWorldPosition(spawnPos);
+      spawnPos.y += 0.4;
+      bullet.position.copy(spawnPos);
+
+      scene.add(bullet);
+      bullets.push({
+        mesh: bullet,
+        dir: shootDir.clone(),
+        life: 100,
+        speed: 3.5
+      });
+    }
+
+    function toggleCameraMode() {
+      isFPS = !isFPS;
+      document.getElementById('btnToggleCam').innerText = isFPS ? "📷 Kamera: 1. Şahıs (FPS)" : "📷 Kamera: 3. Şahıs (TPS)";
+    }
+
+    function activateZerk() {
+      playZerkSound();
+      const zText = document.getElementById('zerkText');
+      zText.innerText = "⚡ BERSERKER ZERK AKTİF!";
+      zText.style.color = "#ff0055";
+      maxSpeed = 2.4;
+      currentSpeed *= 1.8;
+      setTimeout(() => {
+        maxSpeed = 1.1;
+        zText.innerText = "%70 Dolu [SPACE]";
+        zText.style.color = "#ffaa00";
+      }, 7000);
+    }
+
+    function onWindowResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    // ANA OYUN DÖNGÜSÜ (FRAME UPDATE)
+    function animate() {
+      requestAnimationFrame(animate);
+
+      // Sürüş ve Direksiyon Mantığı (360 Derece Serbest Gezinti)
+      if (keys.w) currentSpeed = Math.min(maxSpeed, currentSpeed + acceleration);
+      else if (keys.s) currentSpeed = Math.max(-maxSpeed * 0.5, currentSpeed - acceleration);
+      else currentSpeed *= friction;
+
+      if (Math.abs(currentSpeed) > 0.01) {
+        const turnMult = currentSpeed > 0 ? 1 : -1;
+        if (keys.a) vehicleHeading += 0.035 * turnMult;
+        if (keys.d) vehicleHeading -= 0.035 * turnMult;
+      }
+
+      // Aracın konumu güncelle (Heading açısına göre trigonometrik hareket)
+      vehiclePos.x += Math.sin(vehicleHeading) * currentSpeed;
+      vehiclePos.z += Math.cos(vehicleHeading) * currentSpeed;
+
+      truckGroup.position.copy(vehiclePos);
+      truckGroup.rotation.y = vehicleHeading;
+
+      // Tekerlek Rotasyonu
+      wheels.forEach(w => w.rotation.x += currentSpeed * 0.35);
+
+      // HUD Verilerini Güncelle
+      document.getElementById('speedText').innerText = Math.round(Math.abs(currentSpeed) * 80);
+      document.getElementById('posX').innerText = Math.round(vehiclePos.x);
+      document.getElementById('posZ').innerText = Math.round(vehiclePos.z);
+
+      // SERBEST 3D KAMERA HESAPLAMASI (TPS / FPS)
+      if (isFPS) {
+        // FPS Kokpit Kamerası
+        camera.position.set(
+          vehiclePos.x + Math.sin(vehicleHeading) * 2.0,
+          vehiclePos.y + 3.4,
+          vehiclePos.z + Math.cos(vehicleHeading) * 2.0
+        );
+        camera.rotation.set(camPitch, camYaw, 0, 'YXZ');
+      } else {
+        // TPS 3. Şahıs Orbit Takip Kamerası
+        const camDist = 16.0;
+        const camHeight = 7.0 + Math.sin(camPitch) * 10.0;
+        const camX = vehiclePos.x - Math.sin(camYaw) * (camDist * Math.cos(camPitch));
+        const camZ = vehiclePos.z - Math.cos(camYaw) * (camDist * Math.cos(camPitch));
+
+        camera.position.set(camX, vehiclePos.y + camHeight, camZ);
+        camera.lookAt(vehiclePos.x, vehiclePos.y + 2.5, vehiclePos.z);
+      }
+
+      // Mermilerin İlerlemesi ve Çarpışma Testi
+      for (let i = bullets.length - 1; i >= 0; i--) {
+        const b = bullets[i];
+        b.mesh.position.addScaledVector(b.dir, b.speed);
+        b.life--;
+
+        // Düşman Vurma
+        for (let e of enemies) {
+          if (e.alive && b.mesh.position.distanceTo(e.group.position) < 3.2) {
+            e.hp -= 40;
+            b.life = 0;
+            if (e.hp <= 0) {
+              playExplosionSound();
+              e.alive = false;
+              scene.remove(e.group);
+              kills++;
+              gold += 2400;
+              document.getElementById('killCount').innerText = kills;
+              document.getElementById('goldCount').innerText = gold.toLocaleString();
+
+              // Yeni korsan doğur
+              setTimeout(() => {
+                const angle = Math.random() * Math.PI * 2;
+                const dist = 90 + Math.random() * 120;
+                e.group.position.set(vehiclePos.x + Math.cos(angle) * dist, 0, vehiclePos.z + Math.sin(angle) * dist);
+                e.hp = 120;
+                e.alive = true;
+                scene.add(e.group);
+              }, 4000);
+            }
+            break;
+          }
+        }
+
+        if (b.life <= 0) {
+          scene.remove(b.mesh);
+          bullets.splice(i, 1);
+        }
+      }
+
+      // Korsanların Kervana Doğru Saldırı Hareketi
+      enemies.forEach(e => {
+        if (!e.alive) return;
+        const dirToTruck = new THREE.Vector3().subVectors(vehiclePos, e.group.position).normalize();
+        e.group.position.addScaledVector(dirToTruck, e.speed);
+        e.group.lookAt(vehiclePos);
+
+        // Kervana Çok Yaklaşırsa Hasar
+        if (e.group.position.distanceTo(vehiclePos) < 5.0) {
+          // HP azaltımı
+          const hpBar = document.getElementById('hpBar');
+          const hpText = document.getElementById('hpText');
+          const curHP = parseInt(hpText.innerText);
+          if (curHP > 10) {
+            const nextHP = Math.max(0, curHP - 2);
+            hpText.innerText = `${nextHP} / 3200`;
+            hpBar.style.width = `${(nextHP / 3200) * 100}%`;
+          }
+        }
+      });
+
+      renderer.render(scene, camera);
+    }
+
+    window.onload = init;
+  </script>
+</body>
+</html>
